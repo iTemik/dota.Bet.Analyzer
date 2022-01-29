@@ -1,29 +1,69 @@
 <DOCTYPE html>
-<html>
-    <head>
-        <title>hello world</title>
-    </head>
-<body>
-    <script>
-        function check(){
+    <html>
+        <head>
+            <title>hello world</title>
+    
+          <link rel="stylesheet" href="123.css" >
+        </head>
+        
+    <div id="body">
+        <script>
+            function check(){
+    
+    var key="XXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    var url="https://api.opendota.com/api/proPlayers/?api_key="+key+"&="
+    var team=document.getElementById("input1").value;
+    var res=httpGet(url);
+    var textjson = JSON.parse(res);
+    var text="";
+    for (var i = 0; i < textjson.length; i++){
+        //если команда та которая нужно мы добавляем строчку текста 
+        if("Team Spirit"==textjson[i].team_name)
+            text=text+textjson[i].name+"<br />";
+        //text=text+textjson[i].team_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team_name из каждого элемента json, и добавляепт перенос строки дlya html
+        //textjson ПОЛУЧЕННЫЙ JSON
+        //[i] елеметн масива из полученого json'a
 
 
-var team=document.getElementById("input1").value;
-document.getElementById("output").innerHTML=""+team+"";
-
-
-        }
-    </script>
-</body>
-Tekst:<input type="text" id="input1"/><br />
-<input type="button" value="check" onclick="check()"/>
-
-
-<div id="output">
-</div>
 
 
 
-</html>
+
+    }
+           // for(var key in textjson) {
+              // console.log(key.team_name);
+              
+               // if (key.response.team_name=="Team Spirit")
+               // text=text+" "+key.response.name;
+        //}
 
 
+
+    
+
+    document.getElementById("output").innerHTML=""+text+"";
+
+    
+
+        
+    
+            }
+            function httpGet(theUrl)
+{
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.open( "GET", theUrl, false ); // false for synchronous request
+    xmlHttp.send( null );
+    return xmlHttp.responseText;
+}
+        </script>
+        
+        </div>
+    </body>
+    
+    
+    
+    <p class="main">Tekst:</p><input type="text" id="input1"/><br />
+    <input type="button" value="check" onclick="check()"/>
+    <div id="output">
+        </div>
+    </html>
