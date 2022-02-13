@@ -1,0 +1,139 @@
+<DOCTYPE html>
+    <html>
+
+    <head>
+        <title>hello world</title>
+
+        <link rel="stylesheet" href="123.css">
+    </head>
+
+    <div id="body">
+
+        <script>
+            function check() {
+                var team = document.getElementById("input1").value.toUpperCase();
+                var key = " CF9CB5602B9F5DA5AB35CA73D61541D3";
+                var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
+                var res = httpGet(url);
+                var textjson = JSON.parse(res);
+                var text = "";
+                var team_id = "";
+                var playerids = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
+                for (var i = 0; i < textjson.length; i++) {
+                    //если команда та которая нужно мы добавляем строчку текста 
+                    if (textjson[i].team_name != null && team == textjson[i].team_name.toUpperCase()) {
+                        text = text + textjson[i].name + "<br />";
+                        playerids.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
+
+                    }
+
+
+
+
+
+
+
+                    //text=text+textjson[i].team_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team_name из каждого элемента json, и добавляепт перенос строки дlya html
+                    //textjson ПОЛУЧЕННЫЙ JSON
+                    //[i] елеметн масива из полученого json'a
+                }
+                for (var i = 0; i < playerids.length; i++) {
+                    team_id = team_id + playerids[i] + "<br />";
+
+                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + playerids[i] + "/matches/?api_key=" + key + "&date=60";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    team_id = team_id + reslastmatches + "<br /> <br /> <br />";
+
+
+
+                }
+
+
+                //for(var key in textjson) {
+                // console.log(key.team_name);
+
+                // if (key.response.team_name=="Team Spirit")
+                // text=text+" "+key.response.name;
+                //  }
+
+
+
+
+
+
+                document.getElementById("Team_details_text").innerHTML = "" + text + "";
+                document.getElementById("Team_id").innerHTML = "" + team_id + "";
+
+
+
+            }
+            function httpGet(theUrl) {
+                var xmlHttp = new XMLHttpRequest();
+                xmlHttp.open("GET", theUrl, false); // false for synchronous request
+                xmlHttp.send(null);
+                return xmlHttp.responseText;
+            }
+
+            function showstatistics(jsontext) {
+
+
+                //     <table>
+                //         <tbody>
+                //             <tr>
+               html +="                 <td>Имя игрока</td>";
+                 //                <td>Команда</td>
+                //                 <td>Диапазон дней</td>
+                //                   <td>Позиция</td>
+                //             </tr>
+                //             <tr>
+                //                 <td>Кол-во официальных матчей</td>
+                //                 <td>Значение</td>
+                //                 <td>Кол-во побед </td>
+                //                 <td>Процент побед </td>
+                //             </tr>
+                //             <tr>
+                //                 <td>Кол-во рейтенговых матчей</td>
+                //                 <td>Значение</td>
+                //                 <td>Кол-во побед</td>
+                //                 <td>Процент побед</td>
+                //             </tr>
+                
+                //         </tbody>
+                //     </table>
+
+
+                var html = '<table>';
+                    html +="<tbody>";
+                html +="</table>";
+                return html;
+                
+            }
+
+
+
+
+
+        </script>
+
+    </div>
+    </body>
+
+
+
+    <p class="main">Team name:</p><input type="text" id="input1" /><br />
+    <input type="button" value="check" onclick="check()" />
+    <!-- <div id="output">
+    </div> -->
+    <div id="Team_details">
+        <h2>Team members:</h2>
+        <p id="Team_details_text">Unknown</p>
+    </div>
+    <div id="Match_results">
+        <h2>Last played matches</h2>
+        <p id="Team_id">No data</p>
+
+    </div>
+
+
+    </html>

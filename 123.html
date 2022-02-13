@@ -1,69 +1,251 @@
 <DOCTYPE html>
     <html>
-        <head>
-            <title>hello world</title>
-    
-          <link rel="stylesheet" href="123.css" >
-        </head>
-        
+
+    <head>
+        <title>hello world</title>
+
+        <link rel="stylesheet" href="123.css">
+    </head>
+
     <div id="body">
+
         <script>
-            function check(){
-    
-    var key="XXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-    var url="https://api.opendota.com/api/proPlayers/?api_key="+key+"&="
-    var team=document.getElementById("input1").value;
-    var res=httpGet(url);
-    var textjson = JSON.parse(res);
-    var text="";
-    for (var i = 0; i < textjson.length; i++){
-        //если команда та которая нужно мы добавляем строчку текста 
-        if("Team Spirit"==textjson[i].team_name)
-            text=text+textjson[i].name+"<br />";
-        //text=text+textjson[i].team_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team_name из каждого элемента json, и добавляепт перенос строки дlya html
-        //textjson ПОЛУЧЕННЫЙ JSON
-        //[i] елеметн масива из полученого json'a
+            function check() {
+                document.getElementById("my-table").innerHTML = "";
+                var team = document.getElementById("input1").value.toUpperCase();
+                var key = " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+                var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
+                var res = httpGet(url);
+                var textjson = JSON.parse(res);
+                var text = "";
+                var team_id = "";
+                var playerids = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
+                for (var i = 0; i < textjson.length; i++) {
+                    //если команда та которая нужно мы добавляем строчку текста 
+                    if (textjson[i].team_name != null && team == textjson[i].team_name.toUpperCase()) {
+                        text = text + textjson[i].name + "<br />";
+                        playerids.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
+
+                    }
 
 
 
 
 
 
-    }
-           // for(var key in textjson) {
-              // console.log(key.team_name);
-              
-               // if (key.response.team_name=="Team Spirit")
-               // text=text+" "+key.response.name;
-        //}
+
+                    //text=text+textjson[i].team_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team_name из каждого элемента json, и добавляепт перенос строки дlya html
+                    //textjson ПОЛУЧЕННЫЙ JSON
+                    //[i] елеметн масива из полученого json'a
+                }
+                for (var i = 0; i < playerids.length; i++) {
+                    team_id = team_id + playerids[i] + "<br />";
+
+                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + playerids[i] + "/matches/?api_key=" + key + "&date=60";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    team_id = team_id + reslastmatches + "<br /> <br /> <br />";
+                    var textjson = JSON.parse(reslastmatches);
+                    updatestats('my-table', playerids[i], team, textjson);
+
+
+                }
+
+
+                //for(var key in textjson) {
+                // console.log(key.team_name);
+
+                // if (key.response.team_name=="Team Spirit")
+                // text=text+" "+key.response.name;
+                //  }
 
 
 
-    
 
-    document.getElementById("output").innerHTML=""+text+"";
 
-    
+                document.getElementById("Team_details_text").innerHTML = "" + text + "";
+                
+                // document.getElementById("Team_id").innerHTML = "" + team_id + "";
+                // Call addRow() with the table's ID
 
-        
-    
+
             }
-            function httpGet(theUrl)
-{
-    var xmlHttp = new XMLHttpRequest();
-    xmlHttp.open( "GET", theUrl, false ); // false for synchronous request
-    xmlHttp.send( null );
-    return xmlHttp.responseText;
-}
+            function httpGet(theUrl) {
+                var xmlHttp = new XMLHttpRequest();
+                xmlHttp.open("GET", theUrl, false); // false for synchronous request
+                xmlHttp.send(null);
+                return xmlHttp.responseText;
+            }
+
+
+            function updatestats(tableID, name, team, jsontext) {
+
+
+
+
+
+                // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
+                // 1)В цикле изучаем каждый матч в отдельности
+                // 2)Если lobby type равен 2-это турнир, если 7- это рейтинговая игра. Накручяиваем соотвецтвующий счетчик
+                // 3)Вычесляем команду игрока, если позиция меньше 128- то это radiant, иначе dire
+                // 4)Смотрим какая команда победила по radiant, если это команда игрока, накручиваем счетчик побед  
+                let rankedgames = 0;
+                let publicgames = 0;
+                let rankedwins = 0;
+                let publicwins = 0;
+                for (var i = 0; i < jsontext.length; i++) {
+
+                    let isradiant = true;
+                    if (jsontext[i].player_slot > 128) {
+                        radiant = false;
+
+                    }
+
+                    if (jsontext[i].game_mode == "2") {//lobby_type равен двум(игры, доступные для публики, но созданые через кастомные лобби), увеличиваем счетчик турнира
+                        publicgames++;
+                        if (jsontext[i].radiant_win && isradiant) {
+
+                            //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
+                            //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
+                            publicwins++;
+                        }
+                        else if (!jsontext[i].radiant_win && !isradiant) {
+                            publicwins++;
+                        }
+                    }
+
+
+
+
+                    if (jsontext[i].game_mode == "22") {//lobby_type равен 22(рранекед), увеличиваем счетчик ранкеда
+
+                        rankedgames++;
+                        if (jsontext[i].radiant_win && isradiant) {
+
+                            //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
+                            //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
+                            rankedwins++;
+
+                        }
+                        else if (!jsontext[i].radiant_win && !isradiant) {
+                            rankedwins++;
+                        }
+                    }
+
+                }
+
+
+
+
+                // Get a reference to the table
+                let tableRef = document.getElementById(tableID);
+
+                // Insert a row at the end of the table
+                let newRow = tableRef.insertRow(-1);
+
+                // Insert a cell in the row at index 0
+                let newCell = newRow.insertCell(0);
+
+                // Append a text node to the cell
+                let newText = document.createTextNode(name);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(team);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode('Диапазон дней');
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode('Позиция');
+                newCell.appendChild(newText);
+
+                //заполнение второй стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode('Кол-во публичных матчей');
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(publicgames);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(publicwins);
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode(parseFloat(publicwins / publicgames).toFixed(2) * 100 + "%");
+                newCell.appendChild(newText);
+
+                //заполнение третьей стрчоки статистики
+
+
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode('Кол-во рейтенговых матчей');
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(rankedgames);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(rankedwins);
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode(parseFloat(rankedwins / rankedgames).toFixed(2) * 100 + "%");
+                newCell.appendChild(newText);
+
+
+                tableRef.insertRow();
+
+                tableRef.insertRow();
+
+                tableRef.insertRow();
+
+
+
+            }
+
+
+
+
+
+
+
+
         </script>
-        
-        </div>
+
+    </div>
     </body>
-    
-    
-    
-    <p class="main">Tekst:</p><input type="text" id="input1"/><br />
-    <input type="button" value="check" onclick="check()"/>
-    <div id="output">
-        </div>
+
+
+
+    <p class="main">Team name:</p><input type="text" id="input1" /><br />
+    <input type="button" value="check" onclick="check()" />
+    <!-- <div id="output">
+    </div> -->
+    <div id="Team_details">
+        <h2>Team members:</h2>
+        <p id="Team_details_text">Unknown</p>
+    </div>
+    <div id="Match_results">
+        <h2>Last played matches</h2>
+        <p id="Team_id">No data</p>
+        <p id="stats_id">Stats</p>
+    </div>
+    <div>
+
+        <table id="my-table">
+
+        </table>
+    </div>
+
     </html>
