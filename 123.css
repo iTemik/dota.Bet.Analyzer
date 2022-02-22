@@ -13,3 +13,31 @@ BODY{
 p.ces{
     text-align: center;
 }
+
+div.teamselect {
+     min-width: 500px;
+    height: 30px;
+    display: flex;
+    white-space: nowrap;
+    padding:10px 0;
+}
+
+div.teamselect p  {
+    padding:10px 0;
+    margin-top: auto;
+    margin-bottom: auto;
+} 
+div.teamselect input {
+    padding: 10px 0;
+
+}
+p.spacing{
+    min-width: 50px;
+
+}
+
+div.VersusTable table th,td{
+
+    border: 2px solid;
+    
+}

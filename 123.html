@@ -2,9 +2,15 @@
     <html>
 
     <head>
-        <title>hello world</title>
+        <title>Dota bet analyzer
+        </title>
 
         <link rel="stylesheet" href="123.css">
+
+
+        <style>
+
+        </style>
     </head>
 
     <div id="body">
@@ -12,50 +18,86 @@
         <script>
             function check() {
                 document.getElementById("my-table").innerHTML = "";
-                var team = document.getElementById("input1").value.toUpperCase();
+                document.getElementById("versus_table").innerHTML = "";
+                var team1 = document.getElementById("team1").value.toUpperCase();
+                var team2 = document.getElementById("team2").value.toUpperCase();
                 var key = " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
                 var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
                 var res = httpGet(url);
                 var textjson = JSON.parse(res);
-                var text = "";
-                var team_id = "";
-                var playerids = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
+                var team1players = "";
+                var team2players = "";
+                var team1_id = "";
+                var team2_id = "";
+                var teampids1 = [];
+                var teampids2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
                 for (var i = 0; i < textjson.length; i++) {
                     //если команда та которая нужно мы добавляем строчку текста 
-                    if (textjson[i].team_name != null && team == textjson[i].team_name.toUpperCase()) {
-                        text = text + textjson[i].name + "<br />";
-                        playerids.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
+                    if (team1 != "" && textjson[i].team_name != null && team1 == textjson[i].team_name.toUpperCase()) {
+                        team1players = team1players + textjson[i].name + "<br />";
+                        teampids1.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
 
                     }
 
+                    if (team2 != "" && textjson[i].team_name != null && team2 == textjson[i].team_name.toUpperCase()) {
+                        team2players = team2players + textjson[i].name + "<br />";
+                        teampids2.push(textjson[i].account_id);
+                    }
 
-
-
-
-
-
-                    //text=text+textjson[i].team_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team_name из каждого элемента json, и добавляепт перенос строки дlya html
+                    //text=text+textjson[i].team1_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team1_name из каждого элемента json, и добавляепт перенос строки дlya html
                     //textjson ПОЛУЧЕННЫЙ JSON
                     //[i] елеметн масива из полученого json'a
                 }
-                for (var i = 0; i < playerids.length; i++) {
-                    team_id = team_id + playerids[i] + "<br />";
+                var team1stat = {
+                    'ranked_games': 0,
+                    'public_games': 0,
+                    'team': team1,
+
+                };
+
+
+
+                var team2stat = {
+                    'ranked_games': 0,
+                    'public_games': 0,
+                    'team': team2,
+
+                };
+
+
+                var days = "15";
+                for (var i = 0; i < teampids1.length; i++) {
+                    team1_id = team1_id + teampids1[i] + "<br />";
 
                     //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + playerids[i] + "/matches/?api_key=" + key + "&date=60";//подготовка текста для отправки запроса
+                    var lastmatches = "https://api.opendota.com/api/players/" + teampids1[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
-                    team_id = team_id + reslastmatches + "<br /> <br /> <br />";
+                    team1_id = team1_id + reslastmatches + "<br /> <br /> <br />";
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', playerids[i], team, textjson);
+                    updatestats('my-table', teampids1[i], team1, textjson, team1stat);
 
 
                 }
 
 
-                //for(var key in textjson) {
-                // console.log(key.team_name);
+                for (var i = 0; i < teampids2.length; i++) {
+                    team2_id = team2_id + teampids2[i] + "<br />";
 
-                // if (key.response.team_name=="Team Spirit")
+                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + teampids2[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    team2_id = team2_id + reslastmatches + "<br /> <br /> <br />";
+                    var textjson = JSON.parse(reslastmatches);
+                    updatestats('my-table', teampids2[i], team2, textjson, team2stat);
+
+
+                }
+
+                CreateVersusTable('versus_table', team1stat, team2stat);
+                //for(var key in textjson) {
+                // console.log(key.team1_name);
+
+                // if (key.response.team1_name=="team1 Spirit")
                 // text=text+" "+key.response.name;
                 //  }
 
@@ -63,9 +105,9 @@
 
 
 
-                document.getElementById("Team_details_text").innerHTML = "" + text + "";
-                
-                // document.getElementById("Team_id").innerHTML = "" + team_id + "";
+                document.getElementById("team1_details_text").innerHTML = "" + team1players + "<br /><br /> " + team2players + "";
+
+                // document.getElementById("team1_id").innerHTML = "" + team1_id + "";
                 // Call addRow() with the table's ID
 
 
@@ -78,11 +120,7 @@
             }
 
 
-            function updatestats(tableID, name, team, jsontext) {
-
-
-
-
+            function updatestats(tableID, name, team, jsontext, stats) {
 
                 // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
                 // 1)В цикле изучаем каждый матч в отдельности
@@ -103,6 +141,8 @@
 
                     if (jsontext[i].game_mode == "2") {//lobby_type равен двум(игры, доступные для публики, но созданые через кастомные лобби), увеличиваем счетчик турнира
                         publicgames++;
+                        stats.public_games++;
+
                         if (jsontext[i].radiant_win && isradiant) {
 
                             //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
@@ -120,6 +160,7 @@
                     if (jsontext[i].game_mode == "22") {//lobby_type равен 22(рранекед), увеличиваем счетчик ранкеда
 
                         rankedgames++;
+                        stats.ranked_games++;
                         if (jsontext[i].radiant_win && isradiant) {
 
                             //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
@@ -215,6 +256,133 @@
             }
 
 
+            function CreateVersusTable(tableID, stats1, stats2) {
+
+
+                let tableRef = document.getElementById(tableID);
+
+                //вставляем новый элемент в конепц таблицы
+                let newRow = tableRef.insertRow(-1);
+                //заолняем нулевой стобец
+                let newCell = newRow.insertCell(0);
+                let newText = document.createTextNode("");//текст нулевого стобца(A1)
+                newCell.appendChild(newText);
+                //заполняем первый  стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.team);//текст первого стобца(B1)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.team);//текст второго стобца(С1)
+                newCell.appendChild(newText);
+
+                //newCell.bgColor = "darkblue";
+                //Если разница в играх у первой и второй команды велика, 
+                //то ячейку красим в зеленый цвет, а лузера в красный
+                //разница велика,когда игр больше 10 или больше 30%
+
+                var delta = stats1.ranked_games - stats2.ranked_games;
+                var deltapc = parseFloat("0");
+                if (stats1.ranked_games > 0 && stats2.ranked_games > 0) {
+                    if (stats1.ranked_games > stats2.ranked_games) {
+                        deltapc = parseFloat(stats1.ranked_games / stats2.ranked_games);
+
+                    }
+
+                    else {
+                        deltapc = parseFloat(stats2.ranked_games / stats1.ranked_games);
+                    }
+                }
+
+
+                //заполнение второй стрчоки 
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во рейтинговых игр суммарное");//текст нулевого стобца(A2)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.ranked_games);//текст первого стобца(B2)
+                if (Math.abs(delta) > 10) {
+                    if (delta > 0 && deltapc > 1.3) {//первая команда сыграла намного больше игр
+                        newCell.bgColor = "lightgreen";
+                    }
+                    else {
+
+                        newCell.bgColor = "lightsalmon";
+                    }
+                }
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.ranked_games);//текст второго стобца(С2)
+                if (Math.abs(delta) > 10) {
+                    if (delta < 0 && deltapc > 1.3) {//вторая  команда сыграла намного больше игр
+                        newCell.bgColor = "lightgreen";
+                    }
+                    else {
+
+                        newCell.bgColor = "lightsalmon";
+                    }
+                }
+                newCell.appendChild(newText);
+
+
+
+
+                //заполнение третьей стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во публичных игр суммарное");//текст нулевого стобца(A3)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.public_games);//текст первого стобца(B3)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.public_games);//текст второго стобца(С3)
+                newCell.appendChild(newText);
+
+
+
+                //заполнение четвертой стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Среднее кол-во игр на игрока");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode("Среднее ариф1");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode("Среднее ариф 2");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+
+
+
+
+                //заполнение четвертой стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во АФК игроков");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode("Номер 1");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode("Номер 2");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+
+
+            }
 
 
 
@@ -228,24 +396,37 @@
 
 
 
-    <p class="main">Team name:</p><input type="text" id="input1" /><br />
+
+
+
+
+    <div id="teamselect" class="teamselect">
+
+        <p>team 1 name:</p>
+        <input type="text" id="team1" />
+        <p class="spacing"></p>
+        <p>team 2 name:</p>
+        <input type="text" id="team2" /><br />
+    </div>
+
+
+
+
     <input type="button" value="check" onclick="check()" />
-    <!-- <div id="output">
-    </div> -->
-    <div id="Team_details">
-        <h2>Team members:</h2>
-        <p id="Team_details_text">Unknown</p>
+    <div class="VersusTable">
+        <table id="versus_table"></table>
+    </div>
+    <div id="team1_details">
+        <h2>members:</h2>
+        <p id="team1_details_text">Unknown</p>
     </div>
     <div id="Match_results">
         <h2>Last played matches</h2>
-        <p id="Team_id">No data</p>
-        <p id="stats_id">Stats</p>
     </div>
     <div>
 
-        <table id="my-table">
+        <table id="my-table"></table>
 
-        </table>
     </div>
 
     </html>
