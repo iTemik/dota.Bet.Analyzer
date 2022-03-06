@@ -65,7 +65,7 @@
                 };
 
 
-                var days = "15";
+                var days = document.getElementById("lastDays").value;
                 for (var i = 0; i < teampids1.length; i++) {
                     team1_id = team1_id + teampids1[i] + "<br />";
 
@@ -399,20 +399,34 @@
 
 
 
+	<h1>Team Select</h1>
 
-    <div id="teamselect" class="teamselect">
+	<section class="TeamSelect">
 
-        <p>team 1 name:</p>
-        <input type="text" id="team1" />
-        <p class="spacing"></p>
-        <p>team 2 name:</p>
-        <input type="text" id="team2" /><br />
-    </div>
+		<!-- <div id="teamselect" class="teamselect"> -->
+	
+			<!-- <p>team 1 name:</p> -->
+			<!-- <input type="text" id="team1" /> -->
+			<!-- <p class="spacing"></p> -->
+			<!-- <p>team 2 name:</p> -->
+			<!-- <input type="text" id="team2" /><br /> -->
+		<!-- </div> -->
+
+        <label for="team1">Team #1:</label>
+        <input type="text" name="team1" id="team1" value="Team Spirit">
+		 
+        <label for="team2">Team #2:</label>
+        <input type="text" name="team2" id="team2" value="Virtus.Pro">		
+
+		<label for="lastDays">Days to check:</label>
+		<input type="number" name="lastDays" id="lastDays" step="1" value="15" class="lastDays" >		
+
+		<input type="button" value="check" onclick="check()" />		 
+    </section>
 
 
 
 
-    <input type="button" value="check" onclick="check()" />
     <div class="VersusTable">
         <table id="versus_table"></table>
     </div>

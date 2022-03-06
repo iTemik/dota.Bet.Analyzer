@@ -1,43 +1,22 @@
 p.main{
 
-    background-color: 209, 186, 186;
+    background-color: silver;
     font-family: "Courier New", Times, serif;
     margin:1px;
 
 }
 BODY{
 
-    background-color: rgb(209, 186, 186);
+    background-color: silver;
 }
 
-p.ces{
-    text-align: center;
-}
-
-div.teamselect {
-     min-width: 500px;
-    height: 30px;
-    display: flex;
-    white-space: nowrap;
-    padding:10px 0;
-}
-
-div.teamselect p  {
-    padding:10px 0;
-    margin-top: auto;
-    margin-bottom: auto;
-} 
-div.teamselect input {
-    padding: 10px 0;
-
-}
-p.spacing{
-    min-width: 50px;
-
-}
 
 div.VersusTable table th,td{
 
     border: 2px solid;
     
+}
+
+input.lastDays {
+	max-width: 50px;
 }
