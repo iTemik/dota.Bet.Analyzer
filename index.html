@@ -2,15 +2,9 @@
     <html>
 
     <head>
-        <title>Dota bet analyzer
-        </title>
-
+        <title>Dota bet analyzer</title>
         <link rel="stylesheet" href="styles.css">
-
-
-        <style>
-
-        </style>
+		<link href="https://fonts.googleapis.com/css?family=Lato: 100,300,400,700|Luckiest+Guy|Oxygen:300,400" rel="stylesheet">
     </head>
 
     <div id="body">
@@ -256,13 +250,13 @@
             }
 
 
+
             function CreateVersusTable(tableID, stats1, stats2) {
 
-
                 let tableRef = document.getElementById(tableID);
-
-                //вставляем новый элемент в конепц таблицы
-                let newRow = tableRef.insertRow(-1);
+				//let header = tableRef.createTHead();
+				//let newRow = header.insertRow(0);  
+				let newRow = tableRef.insertRow(-1);  
                 //заолняем нулевой стобец
                 let newCell = newRow.insertCell(0);
                 let newText = document.createTextNode("");//текст нулевого стобца(A1)
@@ -276,61 +270,27 @@
                 newText = document.createTextNode(stats2.team);//текст второго стобца(С1)
                 newCell.appendChild(newText);
 
-                //newCell.bgColor = "darkblue";
-                //Если разница в играх у первой и второй команды велика, 
-                //то ячейку красим в зеленый цвет, а лузера в красный
-                //разница велика,когда игр больше 10 или больше 30%
-
-                var delta = stats1.ranked_games - stats2.ranked_games;
-                var deltapc = parseFloat("0");
-                if (stats1.ranked_games > 0 && stats2.ranked_games > 0) {
-                    if (stats1.ranked_games > stats2.ranked_games) {
-                        deltapc = parseFloat(stats1.ranked_games / stats2.ranked_games);
-
-                    }
-
-                    else {
-                        deltapc = parseFloat(stats2.ranked_games / stats1.ranked_games);
-                    }
-                }
-
-
-                //заполнение второй стрчоки 
-                newRow = tableRef.insertRow(-1);
+				var colors = getVersusColors(stats1.ranked_games, stats2.ranked_games); // get bg colors for ranked games.
+				newRow = tableRef.insertRow(-1);  
                 //заполняем нулевой стобец
                 newCell = newRow.insertCell(0);
                 newText = document.createTextNode("Кол-во рейтинговых игр суммарное");//текст нулевого стобца(A2)
                 newCell.appendChild(newText);
                 //заполняем первый стобец
                 newCell = newRow.insertCell(1);
-                newText = document.createTextNode(stats1.ranked_games);//текст первого стобца(B2)
-                if (Math.abs(delta) > 10) {
-                    if (delta > 0 && deltapc > 1.3) {//первая команда сыграла намного больше игр
-                        newCell.bgColor = "lightgreen";
-                    }
-                    else {
-
-                        newCell.bgColor = "lightsalmon";
-                    }
-                }
+                newText = document.createTextNode(stats1.ranked_games);//текст первого стобца(B2);
+				if (colors)
+					newCell.bgColor = colors[0]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
                 //заполняем второй стобец
                 newCell = newRow.insertCell(2);
                 newText = document.createTextNode(stats2.ranked_games);//текст второго стобца(С2)
-                if (Math.abs(delta) > 10) {
-                    if (delta < 0 && deltapc > 1.3) {//вторая  команда сыграла намного больше игр
-                        newCell.bgColor = "lightgreen";
-                    }
-                    else {
-
-                        newCell.bgColor = "lightsalmon";
-                    }
-                }
+				if (colors)
+					newCell.bgColor = colors[1];
                 newCell.appendChild(newText);
 
-
-
-
+				// считаем разницу но уже для публичных игр.
+				colors = getVersusColors(stats1.public_games, stats2.public_games); // get bg colors for public.
                 //заполнение третьей стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
@@ -340,10 +300,14 @@
                 //заполняем первый стобец
                 newCell = newRow.insertCell(1);
                 newText = document.createTextNode(stats1.public_games);//текст первого стобца(B3)
+				if (colors != null)
+					newCell.bgColor = colors[0]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
                 //заполняем второй стобец
                 newCell = newRow.insertCell(2);
                 newText = document.createTextNode(stats2.public_games);//текст второго стобца(С3)
+				if (colors)
+					newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
 
 
@@ -383,6 +347,50 @@
 
 
             }
+			
+			// get background colors for versus table. 
+			//Если разница в играх у первой и второй команды велика, 
+            //то ячейку красим в зеленый цвет, а лузера в красный
+            //разница велика,когда игр больше 10 или больше 30%
+			// Returns array with two elements. #0 - color for value1, #2 - color for value2
+			// if difference is not so much => retrun null.
+			function getVersusColors(value1, value2) {
+				let result = null;
+				let maxPercentage = 1.3; // 30% more than expected.
+				let minDiff = 10; 
+				if (Math.abs(value1 - value2) <= 10)
+				{
+					return null;// compare numbers if they are bigger than 10.
+				}	
+				
+				let delta = Math.abs(value1 - value2);
+				let BiggerValue = value1; 
+				let SmallerValue = value2;
+				if (value1 > value2) // hit with bigger and smaller.
+				{
+					result = ["lightgreen", "lightsalmon"];
+				}
+				else // miss with bigger and smaller.
+				{
+					BiggerValue = value2;
+					SmallerValue = value1;
+					result = ["lightsalmon", "lightgreen"];
+				}
+				// now we can check persentage.
+				
+                if (value1 == 0 || value2 == 0) { // if one of the values are 0 => highligh without calculation precentage.
+					return result;
+				}
+                
+				
+				let deltapc = parseFloat(BiggerValue / SmallerValue);
+				if (deltapc >= maxPercentage)
+					return result;
+				else
+					return null;
+		
+			}
+
 
 
 
@@ -395,22 +403,8 @@
     </body>
 
 
-
-
-
-
 	<h1>Team Select</h1>
-
 	<section class="TeamSelect">
-
-		<!-- <div id="teamselect" class="teamselect"> -->
-	
-			<!-- <p>team 1 name:</p> -->
-			<!-- <input type="text" id="team1" /> -->
-			<!-- <p class="spacing"></p> -->
-			<!-- <p>team 2 name:</p> -->
-			<!-- <input type="text" id="team2" /><br /> -->
-		<!-- </div> -->
 
         <label for="team1">Team #1:</label>
         <input type="text" name="team1" id="team1" value="Team Spirit">
@@ -425,22 +419,19 @@
     </section>
 
 
-
-
     <div class="VersusTable">
         <table id="versus_table"></table>
     </div>
     <div id="team1_details">
-        <h2>members:</h2>
+        <h2>Team members</h2>
         <p id="team1_details_text">Unknown</p>
     </div>
     <div id="Match_results">
         <h2>Last played matches</h2>
     </div>
     <div>
-
         <table id="my-table"></table>
-
     </div>
 
-    </html>
+
+</html>
