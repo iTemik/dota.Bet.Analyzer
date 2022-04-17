@@ -133,7 +133,7 @@
                 return xmlHttp.responseText;
             }
 
-           
+
 
 
 
@@ -366,12 +366,12 @@
 
 
 
-
+                colors = getVersusColors(median(stats1.games_array), median(stats2.games_array));
                 //заполнение четвертой стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
                 newCell = newRow.insertCell(0);
-                newText = document.createTextNode("Половина игроков сыграло менее: ");//текст нулевого стобца(A5)
+                newText = document.createTextNode("Половина игроков сыграло не более: ");//текст нулевого стобца(A5)
                 newCell.appendChild(newText);
                 //заполняем первый стобец
                 newCell = newRow.insertCell(1);
@@ -467,11 +467,28 @@
 
 
 
-            function median(medians) {
-                medians = medians.sort(function (a, b) { return a - b; });//TODO double check
-                var i = medians.length / 2;
-                return i % 1 == 0 ? (medians[i - 1] + arr[i]) / 2 : medians[Math.floor(i)];
+
+            //Вычесляем сред.ариф. для массива "values"
+            function median(values) {
+                if (values.length === 0) return 0;//Если игр не было(пустой массив) то мы считаем что игр было сыгранно 0 по медиане
+
+                values.sort(function (a, b) {
+                    return a - b;//Сортируем по возврастанию  
+                });
+
+                var half = Math.floor(values.length / 2);//узнаем где середина отсортированого массива 
+
+                if (values.length % 2)
+                    return values[half];//Если попали в середину, то выводим  полученый элемент                                                                    
+
+                return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов                    
             }
+
+
+
+
+
+
 
 
         </script>
