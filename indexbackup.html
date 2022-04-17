@@ -1,0 +1,437 @@
+<DOCTYPE html>
+    <html>
+
+    <head>
+        <title>Dota bet analyzer</title>
+        <link rel="stylesheet" href="styles.css">
+		<link href="https://fonts.googleapis.com/css?family=Lato: 100,300,400,700|Luckiest+Guy|Oxygen:300,400" rel="stylesheet">
+    </head>
+
+    <div id="body">
+
+        <script>
+            function check() {
+                document.getElementById("my-table").innerHTML = "";
+                document.getElementById("versus_table").innerHTML = "";
+                var team1 = document.getElementById("team1").value.toUpperCase();
+                var team2 = document.getElementById("team2").value.toUpperCase();
+                var key = " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+                var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
+                var res = httpGet(url);
+                var textjson = JSON.parse(res);
+                var team1players = "";
+                var team2players = "";
+                var team1_id = "";
+                var team2_id = "";
+                var teampids1 = [];
+                var teampids2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
+                for (var i = 0; i < textjson.length; i++) {
+                    //если команда та которая нужно мы добавляем строчку текста 
+                    if (team1 != "" && textjson[i].team_name != null && team1 == textjson[i].team_name.toUpperCase()) {
+                        team1players = team1players + textjson[i].name + "<br />";
+                        teampids1.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
+
+                    }
+
+                    if (team2 != "" && textjson[i].team_name != null && team2 == textjson[i].team_name.toUpperCase()) {
+                        team2players = team2players + textjson[i].name + "<br />";
+                        teampids2.push(textjson[i].account_id);
+                    }
+
+                    //text=text+textjson[i].team1_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team1_name из каждого элемента json, и добавляепт перенос строки дlya html
+                    //textjson ПОЛУЧЕННЫЙ JSON
+                    //[i] елеметн масива из полученого json'a
+                }
+                var team1stat = {
+                    'ranked_games': 0,
+                    'public_games': 0,
+                    'team': team1,
+
+                };
+
+
+
+                var team2stat = {
+                    'ranked_games': 0,
+                    'public_games': 0,
+                    'team': team2,
+
+                };
+
+
+                var days = document.getElementById("lastDays").value;
+                for (var i = 0; i < teampids1.length; i++) {
+                    team1_id = team1_id + teampids1[i] + "<br />";
+
+                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + teampids1[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    team1_id = team1_id + reslastmatches + "<br /> <br /> <br />";
+                    var textjson = JSON.parse(reslastmatches);
+                    updatestats('my-table', teampids1[i], team1, textjson, team1stat);
+
+
+                }
+
+
+                for (var i = 0; i < teampids2.length; i++) {
+                    team2_id = team2_id + teampids2[i] + "<br />";
+
+                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + teampids2[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    team2_id = team2_id + reslastmatches + "<br /> <br /> <br />";
+                    var textjson = JSON.parse(reslastmatches);
+                    updatestats('my-table', teampids2[i], team2, textjson, team2stat);
+
+
+                }
+
+                CreateVersusTable('versus_table', team1stat, team2stat);
+                //for(var key in textjson) {
+                // console.log(key.team1_name);
+
+                // if (key.response.team1_name=="team1 Spirit")
+                // text=text+" "+key.response.name;
+                //  }
+
+
+
+
+
+                document.getElementById("team1_details_text").innerHTML = "" + team1players + "<br /><br /> " + team2players + "";
+
+                // document.getElementById("team1_id").innerHTML = "" + team1_id + "";
+                // Call addRow() with the table's ID
+
+
+            }
+            function httpGet(theUrl) {
+                var xmlHttp = new XMLHttpRequest();
+                xmlHttp.open("GET", theUrl, false); // false for synchronous request
+                xmlHttp.send(null);
+                return xmlHttp.responseText;
+            }
+
+
+            function updatestats(tableID, name, team, jsontext, stats) {
+
+                // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
+                // 1)В цикле изучаем каждый матч в отдельности
+                // 2)Если lobby type равен 2-это турнир, если 7- это рейтинговая игра. Накручяиваем соотвецтвующий счетчик
+                // 3)Вычесляем команду игрока, если позиция меньше 128- то это radiant, иначе dire
+                // 4)Смотрим какая команда победила по radiant, если это команда игрока, накручиваем счетчик побед  
+                let rankedgames = 0;
+                let publicgames = 0;
+                let rankedwins = 0;
+                let publicwins = 0;
+                for (var i = 0; i < jsontext.length; i++) {
+
+                    let isradiant = true;
+                    if (jsontext[i].player_slot > 128) {
+                        radiant = false;
+
+                    }
+
+                    if (jsontext[i].game_mode == "2") {//lobby_type равен двум(игры, доступные для публики, но созданые через кастомные лобби), увеличиваем счетчик турнира
+                        publicgames++;
+                        stats.public_games++;
+
+                        if (jsontext[i].radiant_win && isradiant) {
+
+                            //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
+                            //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
+                            publicwins++;
+                        }
+                        else if (!jsontext[i].radiant_win && !isradiant) {
+                            publicwins++;
+                        }
+                    }
+
+
+
+
+                    if (jsontext[i].game_mode == "22") {//lobby_type равен 22(рранекед), увеличиваем счетчик ранкеда
+
+                        rankedgames++;
+                        stats.ranked_games++;
+                        if (jsontext[i].radiant_win && isradiant) {
+
+                            //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
+                            //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
+                            rankedwins++;
+
+                        }
+                        else if (!jsontext[i].radiant_win && !isradiant) {
+                            rankedwins++;
+                        }
+                    }
+
+                }
+
+
+
+
+                // Get a reference to the table
+                let tableRef = document.getElementById(tableID);
+
+                // Insert a row at the end of the table
+                let newRow = tableRef.insertRow(-1);
+
+                // Insert a cell in the row at index 0
+                let newCell = newRow.insertCell(0);
+
+                // Append a text node to the cell
+                let newText = document.createTextNode(name);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(team);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode('Диапазон дней');
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode('Позиция');
+                newCell.appendChild(newText);
+
+                //заполнение второй стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode('Кол-во публичных матчей');
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(publicgames);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(publicwins);
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode(parseFloat(publicwins / publicgames).toFixed(2) * 100 + "%");
+                newCell.appendChild(newText);
+
+                //заполнение третьей стрчоки статистики
+
+
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode('Кол-во рейтенговых матчей');
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(rankedgames);
+                newCell.appendChild(newText);
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(rankedwins);
+                newCell.appendChild(newText);
+
+
+                newCell = newRow.insertCell(3);
+                newText = document.createTextNode(parseFloat(rankedwins / rankedgames).toFixed(2) * 100 + "%");
+                newCell.appendChild(newText);
+
+
+                tableRef.insertRow();
+
+                tableRef.insertRow();
+
+                tableRef.insertRow();
+
+
+
+            }
+
+
+
+            function CreateVersusTable(tableID, stats1, stats2) {
+
+                let tableRef = document.getElementById(tableID);
+				//let header = tableRef.createTHead();
+				//let newRow = header.insertRow(0);  
+				let newRow = tableRef.insertRow(-1);  
+                //заолняем нулевой стобец
+                let newCell = newRow.insertCell(0);
+                let newText = document.createTextNode("");//текст нулевого стобца(A1)
+                newCell.appendChild(newText);
+                //заполняем первый  стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.team);//текст первого стобца(B1)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.team);//текст второго стобца(С1)
+                newCell.appendChild(newText);
+
+				var colors = getVersusColors(stats1.ranked_games, stats2.ranked_games); // get bg colors for ranked games.
+				newRow = tableRef.insertRow(-1);  
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во рейтинговых игр суммарное");//текст нулевого стобца(A2)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.ranked_games);//текст первого стобца(B2);
+				if (colors)
+					newCell.bgColor = colors[0]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.ranked_games);//текст второго стобца(С2)
+				if (colors)
+					newCell.bgColor = colors[1];
+                newCell.appendChild(newText);
+
+				// считаем разницу но уже для публичных игр.
+				colors = getVersusColors(stats1.public_games, stats2.public_games); // get bg colors for public.
+                //заполнение третьей стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во публичных игр суммарное");//текст нулевого стобца(A3)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.public_games);//текст первого стобца(B3)
+				if (colors != null)
+					newCell.bgColor = colors[0]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.public_games);//текст второго стобца(С3)
+				if (colors)
+					newCell.bgColor = colors[1]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+
+
+
+                //заполнение четвертой стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Среднее кол-во игр на игрока");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode("Среднее ариф1");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode("Среднее ариф 2");//текст нулевого стобца(A4)
+                newCell.appendChild(newText);
+
+
+
+
+                //заполнение четвертой стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Кол-во АФК игроков");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode("Номер 1");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode("Номер 2");//текст нулевого стобца(A5)
+                newCell.appendChild(newText);
+
+
+            }
+			
+			// get background colors for versus table. 
+			//Если разница в играх у первой и второй команды велика, 
+            //то ячейку красим в зеленый цвет, а лузера в красный
+            //разница велика,когда игр больше 10 или больше 30%
+			// Returns array with two elements. #0 - color for value1, #2 - color for value2
+			// if difference is not so much => retrun null.
+			function getVersusColors(value1, value2) {
+				let result = null;
+				let maxPercentage = 1.3; // 30% more than expected.
+				let minDiff = 10; 
+				if (Math.abs(value1 - value2) <= 10)
+				{
+					return null;// compare numbers if they are bigger than 10.
+				}	
+				
+				let delta = Math.abs(value1 - value2);
+				let BiggerValue = value1; 
+				let SmallerValue = value2;
+				if (value1 > value2) // hit with bigger and smaller.
+				{
+					result = ["lightgreen", "lightsalmon"];
+				}
+				else // miss with bigger and smaller.
+				{
+					BiggerValue = value2;
+					SmallerValue = value1;
+					result = ["lightsalmon", "lightgreen"];
+				}
+				// now we can check persentage.
+				
+                if (value1 == 0 || value2 == 0) { // if one of the values are 0 => highligh without calculation precentage.
+					return result;
+				}
+                
+				
+				let deltapc = parseFloat(BiggerValue / SmallerValue);
+				if (deltapc >= maxPercentage)
+					return result;
+				else
+					return null;
+		
+			}
+
+
+
+
+
+
+
+        </script>
+
+    </div>
+    </body>
+
+
+	<h1>Team Select</h1>
+	<section class="TeamSelect">
+
+        <label for="team1">Team #1:</label>
+        <input type="text" name="team1" id="team1" value="Team Spirit">
+		 
+        <label for="team2">Team #2:</label>
+        <input type="text" name="team2" id="team2" value="Virtus.Pro">		
+
+		<label for="lastDays">Days to check:</label>
+		<input type="number" name="lastDays" id="lastDays" step="1" value="15" class="lastDays" >		
+
+		<input type="button" value="check" onclick="check()" />		 
+    </section>
+
+
+    <div class="VersusTable">
+        <table id="versus_table"></table>
+    </div>
+    <div id="team1_details">
+        <h2>Team members</h2>
+        <p id="team1_details_text">Unknown</p>
+    </div>
+    <div id="Match_results">
+        <h2>Last played matches</h2>
+    </div>
+    <div>
+        <table id="my-table"></table>
+    </div>
+
+
+</html>
