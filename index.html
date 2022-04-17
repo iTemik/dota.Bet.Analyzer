@@ -24,8 +24,8 @@
                 var team2players = "";
                 var team1_id = "";
                 var team2_id = "";
-                var teampids1 = [];
-                var teampids2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
+                var teamPlayers1 = [];
+                var teamPlayers2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
                 for (var i = 0; i < textjson.length; i++) {
                     //если команда та которая нужно мы добавляем строчку текста.Проверяем значение "team_name" & "team_tag"
                     if (team1 != ""
@@ -34,8 +34,11 @@
                             || team1 == textjson[i].team_tag.toUpperCase().trim())
                     ) {
                         team1players = team1players + textjson[i].name + "<br />";
-                        teampids1.push(textjson[i].account_id);//если игрок в нужней нам команде мы довалем id для обработки 
-
+                        var player = {
+                            'name': textjson[i].name,
+                            'id': textjson[i].account_id,
+                        }
+                        teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки 
                     }
 
                     if (team2 != ""
@@ -43,8 +46,13 @@
                         && (team2 == textjson[i].team_name.toUpperCase().trim()
                             || team2 == textjson[i].team_tag.toUpperCase().trim())
                     ) {
+
                         team2players = team2players + textjson[i].name + "<br />";
-                        teampids2.push(textjson[i].account_id);
+                        var player = {
+                            'name': textjson[i].name,
+                            'id': textjson[i].account_id,
+                        }
+                        teamPlayers2.push(player);
                     }
 
                     //text=text+textjson[i].team1_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team1_name из каждого элемента json, и добавляепт перенос строки дlya html
@@ -73,25 +81,25 @@
 
 
                 var days = document.getElementById("lastDays").value;
-                for (var i = 0; i < teampids1.length; i++) {//Для каждого игрока из команды делает что то
+                for (var i = 0; i < teamPlayers1.length; i++) {//Для каждого игрока из команды делает что то
                     //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + teampids1[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers1[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
 
 
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teampids1[i], team1, textjson, team1stat);
+                    updatestats('my-table', teamPlayers1[i].name, team1, textjson, team1stat);
                 }
 
 
-                for (var i = 0; i < teampids2.length; i++) {
+                for (var i = 0; i < teamPlayers2.length; i++) {
 
 
                     //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + teampids2[i] + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers2[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teampids2[i], team2, textjson, team2stat);
+                    updatestats('my-table', teamPlayers2[i].name, team2, textjson, team2stat);
 
 
 
@@ -221,12 +229,12 @@
                 newCell.appendChild(newText);
 
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode('Диапазон дней');
+                newText = document.createTextNode("text1");
                 newCell.appendChild(newText);
 
 
                 newCell = newRow.insertCell(3);
-                newText = document.createTextNode('Позиция');
+                newText = document.createTextNode("text2");
                 newCell.appendChild(newText);
 
                 //заполнение второй стрчоки статистики
@@ -245,7 +253,7 @@
 
 
                 newCell = newRow.insertCell(3);
-                newText = document.createTextNode(parseFloat(publicwins / publicgames).toFixed(2) * 100 + "%");
+                newText = document.createTextNode((publicwins * 100 / publicgames).toFixed(1) + "%");
                 newCell.appendChild(newText);
 
                 //заполнение третьей стрчоки статистики
@@ -266,7 +274,7 @@
 
 
                 newCell = newRow.insertCell(3);
-                newText = document.createTextNode(parseFloat(rankedwins / rankedgames).toFixed(2) * 100 + "%");
+                newText = document.createTextNode((rankedwins * 100 / rankedgames).toFixed(1) + "%");
                 newCell.appendChild(newText);
 
 
