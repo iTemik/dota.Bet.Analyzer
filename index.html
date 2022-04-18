@@ -236,7 +236,7 @@
                 newCell.appendChild(newText);
 
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode(player.id);
+                newText = document.createTextNode(player.account_id);
                 newCell.appendChild(newText);
 
 
@@ -316,7 +316,7 @@
                 newText = document.createTextNode(stats2.team);//текст второго стобца(С1)
                 newCell.appendChild(newText);
 
-                var colors = getVersusColors(stats1.ranked_games, stats2.ranked_games); // get bg colors for ranked games.
+                var colors = getVersusColors(stats1.ranked_games, stats2.ranked_games, 10, 1.3); // get bg colors for ranked games. if difference > 10 games and 30%
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
                 newCell = newRow.insertCell(0);
@@ -336,7 +336,7 @@
                 newCell.appendChild(newText);
 
                 // считаем разницу но уже для публичных игр.
-                colors = getVersusColors(stats1.public_games, stats2.public_games); // get bg colors for public.
+                colors = getVersusColors(stats1.public_games, stats2.public_games, 10, 1.3); // get bg colors for public. if difference > 10 games and 30%
                 //заполнение третьей стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
@@ -356,7 +356,9 @@
                     newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
 
-                // colors = getVersusColors(stats1.public_games, stats2.public_games); // get bg colors for public.
+                var winrateTeam1 = stats1.public_games > 0 ? stats1.public_wins * 100 / stats1.public_games : 0;
+                var winrateTeam2 = stats2.public_games > 0 ? stats2.public_wins * 100 / stats2.public_games : 0;
+                colors = getVersusColors(winrateTeam1, winrateTeam2, 8, 1.2); // get bg colors for public. we assume that 8% winrate is significant.
                 //заполнение третьей стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
@@ -365,19 +367,19 @@
                 newCell.appendChild(newText);
                 //заполняем первый стобец
                 newCell = newRow.insertCell(1);
-                newText = document.createTextNode((stats1.public_wins * 100 / stats1.public_games).toFixed(1) + "%");//текст первого стобца(B3)
-                // if (colors != null)
-                //     newCell.bgColor = colors[0]; // get first bg color if it's relevant
+                newText = document.createTextNode(winrateTeam1.toFixed(1) + "%");//текст первого стобца(B3)
+                if (colors != null)
+                    newCell.bgColor = colors[0]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
                 //заполняем второй стобец
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode((stats2.public_wins * 100 / stats2.public_games).toFixed(1) + "%");//текст второго стобца(С3)
-                // if (colors)
-                //     newCell.bgColor = colors[1]; // get first bg color if it's relevant
+                newText = document.createTextNode(winrateTeam2.toFixed(1) + "%");//текст второго стобца(С3)
+                if (colors)
+                    newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
 
 
-                colors = getVersusColors(average(stats1.games_array), average(stats2.games_array));
+                colors = getVersusColors(average(stats1.games_array), average(stats2.games_array), 10, 1.2); // highlight if players played more than 10 games in average
                 //заполнение четвертой стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
@@ -401,7 +403,7 @@
 
 
 
-                colors = getVersusColors(median(stats1.games_array), median(stats2.games_array));
+                colors = getVersusColors(median(stats1.games_array), median(stats2.games_array), 10, 1.2); // highlight if players played more than 10 games in average
                 //заполнение четвертой стрчоки статистики
                 newRow = tableRef.insertRow(-1);
                 //заполняем нулевой стобец
@@ -427,16 +429,15 @@
             // get background colors for versus table. 
             //Если разница в играх у первой и второй команды велика, 
             //то ячейку красим в зеленый цвет, а лузера в красный
-            //разница велика,когда игр больше 10 или больше 30%
+            // mindiff - минимальная разница в единицах, для подсветки, например 10 игр (значение по умолчанию 10)
+            // minPercentage - минимальная разница в процентах для подстветки, например 1.3 = это 30 процентов (значение по умолчанию 30%),
             // Returns array with two elements. #0 - color for value1, #2 - color for value2
             // if difference is not so much => retrun null.
-            function getVersusColors(value1, value2) {
-                // console.log("определяем цвет " + value1 + " и " + value2);
+            function getVersusColors(value1, value2, mindiff = 10, minPercentage = 1.3) {
+                //console.log("определяем цвет " + value1 + " и " + value2);
                 let result = null;
-                let maxPercentage = 1.3; // 30% more than expected.
-                let minDiff = 10;
-                if (Math.abs(value1 - value2) <= 10) {
-                    return null;// compare numbers if they are bigger than 10.
+                if (Math.abs(value1 - value2) <= mindiff) {
+                    return null;// compare numbers if they are bigger than mindif.
                 }
 
                 let delta = Math.abs(value1 - value2);
@@ -453,14 +454,14 @@
                     result = ["lightsalmon", "lightgreen"];
                 }
                 // now we can check persentage.
-
+                //console.log("Now we can check persentage bigger=" + BiggerValue + ", smaller=" + SmallerValue);
                 if (value1 == 0 || value2 == 0) { // if one of the values are 0 => highligh without calculation precentage.
                     return result;
                 }
 
 
                 let deltapc = parseFloat(BiggerValue / SmallerValue);
-                if (deltapc >= maxPercentage)
+                if (deltapc >= minPercentage)
                     return result;
                 else
                     return null;
