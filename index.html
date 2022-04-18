@@ -16,7 +16,7 @@
                 document.getElementById("versus_table").innerHTML = "";
                 var team1 = document.getElementById("team1").value.toUpperCase().trim();
                 var team2 = document.getElementById("team2").value.toUpperCase().trim();
-                var key = " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+                var key = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
                 var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
                 var res = httpGet(url);
                 var textjson = JSON.parse(res);
@@ -29,6 +29,7 @@
                 for (var i = 0; i < textjson.length; i++) {
                     //если команда та которая нужно мы добавляем строчку текста.Проверяем значение "team_name" & "team_tag"
                     if (team1 != ""
+                        && 0 != textjson[i].team_id
                         && textjson[i].team_name != null
                         && (team1 == textjson[i].team_name.toUpperCase().trim()
                             || team1 == textjson[i].team_tag.toUpperCase().trim())
@@ -42,6 +43,7 @@
                     }
 
                     if (team2 != ""
+                        && 0 != textjson[i].team_id
                         && textjson[i].team_name != null
                         && (team2 == textjson[i].team_name.toUpperCase().trim()
                             || team2 == textjson[i].team_tag.toUpperCase().trim())
@@ -64,7 +66,7 @@
                     'public_games': 0,
                     'team': team1,
                     'games_array': [],//это элемент массива это кол-во сыграных игр, сыгранных одним игроком
-
+                    'public_wins': 0,
 
 
                 };
@@ -76,6 +78,7 @@
                     'public_games': 0,
                     'team': team2,
                     'games_array': [],
+                    'public_wins': 0,
 
                 };
 
@@ -88,7 +91,7 @@
 
 
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers1[i].name, team1, textjson, team1stat);
+                    updatestats('my-table', teamPlayers1[i], team1, textjson, team1stat);
                 }
 
 
@@ -99,7 +102,7 @@
                     var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers2[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers2[i].name, team2, textjson, team2stat);
+                    updatestats('my-table', teamPlayers2[i], team2, textjson, team2stat);
 
 
 
@@ -145,7 +148,7 @@
 
 
 
-            function updatestats(tableID, name, team, jsontext, stats) {
+            function updatestats(tableID, player, team, jsontext, stats) {
 
                 // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
                 // 1)В цикле изучаем каждый матч в отдельности
@@ -168,16 +171,20 @@
                         publicgames++;
                         stats.public_games++;
 
+
                         if (jsontext[i].radiant_win && isradiant) {
 
-                            //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
+                            //если победила radiant, и в этой команде был игркок, то накручиваем счетчик побед
                             //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
                             publicwins++;
+                            stats.public_wins++;
                         }
                         else if (!jsontext[i].radiant_win && !isradiant) {
                             publicwins++;
+                            stats.public_wins++;
                         }
                     }
+
 
 
 
@@ -206,7 +213,7 @@
                 // при отображении таблицы
 
                 stats.games_array.push(parseInt(rankedgames + publicgames));
-                console.log("Игрок: " + name + " Сыграл: " + parseInt(rankedgames + publicgames));
+                console.log("Игрок: " + player.name + " Сыграл: " + parseInt(rankedgames + publicgames));
 
 
 
@@ -221,7 +228,7 @@
                 let newCell = newRow.insertCell(0);
 
                 // Append a text node to the cell
-                let newText = document.createTextNode(name);
+                let newText = document.createTextNode(player.name);
                 newCell.appendChild(newText);
 
                 newCell = newRow.insertCell(1);
@@ -229,7 +236,7 @@
                 newCell.appendChild(newText);
 
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode("text1");
+                newText = document.createTextNode(player.id);
                 newCell.appendChild(newText);
 
 
@@ -347,6 +354,26 @@
                 newText = document.createTextNode(stats2.public_games);//текст второго стобца(С3)
                 if (colors)
                     newCell.bgColor = colors[1]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+
+                // colors = getVersusColors(stats1.public_games, stats2.public_games); // get bg colors for public.
+                //заполнение третьей стрчоки статистики
+                newRow = tableRef.insertRow(-1);
+                //заполняем нулевой стобец
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Процент побед публичных игр");//текст нулевого стобца(A3)
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode((stats1.public_wins * 100 / stats1.public_games).toFixed(1) + "%");//текст первого стобца(B3)
+                // if (colors != null)
+                //     newCell.bgColor = colors[0]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode((stats2.public_wins * 100 / stats2.public_games).toFixed(1) + "%");//текст второго стобца(С3)
+                // if (colors)
+                //     newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
 
 
