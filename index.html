@@ -260,8 +260,11 @@
 
 
                 newCell = newRow.insertCell(3);
-                newText = document.createTextNode((publicwins * 100 / publicgames).toFixed(1) + "%");
+
+                newText = document.createTextNode(publicgames == 0 ? "0%" : (publicwins * 100 / publicgames).toFixed(1) + "%");
                 newCell.appendChild(newText);
+
+
 
                 //заполнение третьей стрчоки статистики
 
@@ -281,7 +284,7 @@
 
 
                 newCell = newRow.insertCell(3);
-                newText = document.createTextNode((rankedwins * 100 / rankedgames).toFixed(1) + "%");
+                newText = document.createTextNode(rankedgames == 0 ? "0%" : (rankedwins * 100 / rankedgames).toFixed(1) + "%");
                 newCell.appendChild(newText);
 
 
