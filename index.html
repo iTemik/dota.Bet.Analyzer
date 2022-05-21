@@ -12,8 +12,8 @@
 
         <script>
             function check() {
-                document.getElementById("my-table").innerHTML = "";
-                document.getElementById("versus_table").innerHTML = "";
+                document.getElementById("my-table").innerHTML = ""//стираем таблицу, чтобы старая информация не смешивалась с новой 
+                document.getElementById("versus_table").innerHTML = "";//стираем таблицу, чтобы старая информация не смешивалась с новой 
                 var team1 = document.getElementById("team1").value.toUpperCase().trim();
                 var team2 = document.getElementById("team2").value.toUpperCase().trim();
                 var key = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
@@ -28,6 +28,8 @@
                 var teamPlayers2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
                 for (var i = 0; i < textjson.length; i++) {
                     //если команда та которая нужно мы добавляем строчку текста.Проверяем значение "team_name" & "team_tag"
+                    console.log("json элемент массива=" + JSON.stringify(textjson[i]) + " Возврастающая Переменная  i=" + i);
+                    //Фильтрация
                     if (team1 != ""
                         && 0 != textjson[i].team_id
                         && textjson[i].team_name != null
@@ -40,6 +42,7 @@
                             'id': textjson[i].account_id,
                         }
                         teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки 
+
                     }
 
                     if (team2 != ""
@@ -55,6 +58,8 @@
                             'id': textjson[i].account_id,
                         }
                         teamPlayers2.push(player);
+                        console.log("s" + res);
+
                     }
 
                     //text=text+textjson[i].team1_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team1_name из каждого элемента json, и добавляепт перенос строки дlya html
@@ -236,7 +241,7 @@
                 newCell.appendChild(newText);
 
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode(player.account_id);
+                newText = document.createTextNode(player.id);
                 newCell.appendChild(newText);
 
 
@@ -523,13 +528,18 @@
                 return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов                    
             }
 
+            function markTextLight(text) {
+                return '<span style="color:teal">' + text + "</span>";
+
+
+
+            }
 
 
 
 
 
 
-          
         </script>
 
     </div>
@@ -565,6 +575,7 @@
     <div>
         <table id="my-table"></table>
     </div>
+
 
 
     </html>
