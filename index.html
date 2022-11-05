@@ -28,7 +28,7 @@
                 var teamPlayers2 = [];//нам нужен список account_id у игроков  в команде, чтобы потом по нему узнать результаты последних игр
                 for (var i = 0; i < textjson.length; i++) {
                     //если команда та которая нужно мы добавляем строчку текста.Проверяем значение "team_name" & "team_tag"
-                    console.log("json элемент массива=" + JSON.stringify(textjson[i]) + " Возврастающая Переменная  i=" + i);
+                    //console.log("json элемент массива=" + JSON.stringify(textjson[i]) + " Возврастающая Переменная  i=" + i);
                     //Фильтрация
                     if (team1 != ""
                         && 0 != textjson[i].team_id
@@ -58,7 +58,6 @@
                             'id': textjson[i].account_id,
                         }
                         teamPlayers2.push(player);
-                        console.log("s" + res);
 
                     }
 
@@ -66,6 +65,7 @@
                     //textjson ПОЛУЧЕННЫЙ JSON
                     //[i] елеметн масива из полученого json'a
                 }
+
                 var team1stat = {
                     'ranked_games': 0,
                     'public_games': 0,
@@ -88,27 +88,60 @@
                 };
 
 
+
+
                 var days = document.getElementById("lastDays").value;
+                statsforbackup = [];// для отсеивания подозрительныз игроков мы будем 
+                //хранить кол-во публичных матчей в этом массиве
                 for (var i = 0; i < teamPlayers1.length; i++) {//Для каждого игрока из команды делает что то
                     //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
                     var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers1[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    //статистика для одного игрока
+                    var playerstat = {
+                        'team': team1,
+                        'name': teamPlayers1[i].name,
+                        'public_games': 0,
+                        'backup': 0,// 0 это флаг, обозначающий увереность в то, что игрок должен учитываться в статистике
+                        // 1 игрок может учитываться в статистике
+                        // 2 игрок не должен учитываться в статистике
+
+
+                    };
 
 
                     var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers1[i], team1, textjson, team1stat);
+                    updatestats('my-table', teamPlayers1[i], team1, textjson, team1stat, playerstat);
+                    //после этой функции у нас есть связка: игрок в команде и кол-во публичных матчей
+                    //и кол-во рейтинговых матчей
+                    colorBackUpPlayer(playerstat, statsforbackup, team1players);
+                    console.log("team1players поменялся на " + team1players + "");
+
                 }
 
 
+                statsforbackup = [];// для отсеивания подозрительныз игроков мы будем 
                 for (var i = 0; i < teamPlayers2.length; i++) {
+
 
 
                     //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
                     var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers2[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
-                    var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers2[i], team2, textjson, team2stat);
+                    var playerstat = {
+                        'team': team2,
+                        'name': teamPlayers2[i].name,
+                        'public_games': 0,
+                        'backup': 0,// 0 это флаг, обозначающий увереность в то, что игрок должен учитываться в статистике
+                        // 1 игрок может учитываться в статистике
+                        // 2 игрок не должен учитываться в статистике
 
+
+                    };
+                    var textjson = JSON.parse(reslastmatches);
+                    updatestats('my-table', teamPlayers2[i], team2, textjson, team2stat, playerstat);
+                    colorBackUpPlayer(playerstat, statsforbackup, team2players);
+                    console.log("team2players поменялся на " + team2players + "");
 
 
                 }
@@ -118,7 +151,6 @@
                 team2stat.games_array = simpleSort(team2stat.games_array);
                 // team1stat.games_array = team1stat.games_array.sort(compare);
                 // team2stat.games_array = team2stat.games_array.sort(compare);
-
 
 
 
@@ -153,7 +185,7 @@
 
 
 
-            function updatestats(tableID, player, team, jsontext, stats) {
+            function updatestats(tableID, player, team, jsontext, stats, playerstat) {
 
                 // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
                 // 1)В цикле изучаем каждый матч в отдельности
@@ -211,7 +243,8 @@
                     }
 
                 }
-
+                //Обновляем статистику у игрока
+                playerstat.public_games = publicgames;
 
                 //Когда мы узнает данные об игрока, кладем кол-во матчей(сумма матчей ранкед и публик) в специальный массив, как только мы 
                 //  закончили получать всю статистику, мы получиный массив сортируем и отсекаем  всю лишнее
@@ -298,6 +331,57 @@
                 tableRef.insertRow();
 
                 tableRef.insertRow();
+
+
+
+            }
+            // Функция принимает значение статистики игрока (playerstat) и
+            // историю ключевых значений из статистик других игроков (массив goodstats)
+            // для выявления
+            // является ли этот игрок важным для статиститки.
+            // Тоесть если статистика этого игра сильно отличнается от статистик
+            // других игроков, мы должны подсветить этого игрока как влияющего 
+            // на статистику.
+            function colorBackUpPlayer(playerstat, goodstats, teamtext) {
+                // console.log(" Временная заглушка. Мы пытаемся проверить игрока " + playerstat.name + " в команде " + playerstat.team + "");
+                //если у нас нет истории статистики (обрабатываем первого игрока),
+                //то текущая статистика явялется основой для сравнения.
+                if (goodstats.length == 0) {
+                    if (playerstat.public_games > 0) {
+                        goodstats.push(playerstat.public_games);
+                    }
+                    //для первого игрока сравнивать нечего, идем дальше (выходим из функции)
+                    //console.log("для первого игрока сравнивать нечего, идем дальше (выходим из функции)");
+                    return;
+                }
+                // На данном этапе у нас есть статистика игрока и с чем ее сравнивать
+                if (goodstats.indexOf(playerstat.public_games) == -1) {
+                    //кол-во игр не совпало
+                    playerstat.backup = 1;
+                    console.log("Игрок " + playerstat.name + " может негативно повлиять на статистику ");
+                    if (playerstat.public_games == 0) {
+                        playerstat.backup = 2;
+                        console.log("Игрок " + playerstat.name + " не должен использоваться в статистике ");
+                    }
+                    goodstats.push(playerstat.public_games);
+                    if (playerstat.backup > 0) {
+                        // var  = /яблоки/gi;
+                        // var str = 'Яблоки круглые и яблоки сочные.';
+                        // var newstr = str.replace(re, 'апельсины');
+                        //меняем цвет для игроков, влияющих на статистику
+                        coloredname = "<span class=\"red\">" + playerstat.name + "</span>";
+                        teamtext = teamtext.replace(playerstat.name, coloredname);
+                        console.log("Список команд после подсветки: " + teamtext + "");
+                        return;
+                    }
+
+                }
+                else {
+                    //игрок сыграл столько же, сколько его игрок в команде, значит его не отмечаем.
+                    return;
+
+                }
+
 
 
 
@@ -550,10 +634,10 @@
     <section class="TeamSelect">
 
         <label for="team1">Team #1:</label>
-        <input type="text" name="team1" id="team1" value="TSM FTX">
+        <input type="text" name="team1" id="team1" value="OG">
 
         <label for="team2">Team #2:</label>
-        <input type="text" name="team2" id="team2" value="OG">
+        <input type="text" name="team2" id="team2" value="TSM FTX">
 
         <label for="lastDays">Days to check:</label>
         <input type="number" name="lastDays" id="lastDays" step="1" value="22" class="lastDays">
