@@ -61,117 +61,23 @@
 
                     }
 
-                    //text=text+textjson[i].team1_name+"<br />";//расширяет то что уже сохранено в переменую текст значением ключа team1_name из каждого элемента json, и добавляепт перенос строки дlya html
-                    //textjson ПОЛУЧЕННЫЙ JSON
-                    //[i] елеметн масива из полученого json'a
                 }
-
-                var team1stat = {
-                    'ranked_games': 0,
-                    'public_games': 0,
-                    'team': team1,
-                    'games_array': [],//это элемент массива это кол-во сыграных игр, сыгранных одним игроком
-                    'public_wins': 0,
-
-
-                };
-
-
-
-                var team2stat = {
-                    'ranked_games': 0,
-                    'public_games': 0,
-                    'team': team2,
-                    'games_array': [],
-                    'public_wins': 0,
-
-                };
-
-
 
 
                 var days = document.getElementById("lastDays").value;
-                statsforbackup = [];// для отсеивания подозрительныз игроков мы будем 
-                //хранить кол-во публичных матчей в этом массиве
-                for (var i = 0; i < teamPlayers1.length; i++) {//Для каждого игрока из команды делает что то
-                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers1[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
-                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
-                    //статистика для одного игрока
-                    var playerstat = {
-                        'team': team1,
-                        'name': teamPlayers1[i].name,
-                        'public_games': 0,
-                        'backup': 0,// 0 это флаг, обозначающий увереность в то, что игрок должен учитываться в статистике
-                        // 1 игрок может учитываться в статистике
-                        // 2 игрок не должен учитываться в статистике
+
+                team1Stats = prepareTeamStats(teamPlayers1, team1, key, days);
+                updateStatsTable('my-table', team1Stats);
+
+                team2Stats = prepareTeamStats(teamPlayers2, team2, key, days);
+                updateStatsTable('my-table', team2Stats);
 
 
-                    };
+                team1StatsSummary = getStatsSummary(team1, team1Stats);
+                team2StatsSummary = getStatsSummary(team2, team2Stats);
+                CreateVersusTable('versus_table', team1StatsSummary, team2StatsSummary);
 
-
-                    var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers1[i], team1, textjson, team1stat, playerstat);
-                    //после этой функции у нас есть связка: игрок в команде и кол-во публичных матчей
-                    //и кол-во рейтинговых матчей
-                    colorBackUpPlayer(playerstat, statsforbackup, team1players);
-                    console.log("team1players поменялся на " + team1players + "");
-
-                }
-
-
-                statsforbackup = [];// для отсеивания подозрительныз игроков мы будем 
-                for (var i = 0; i < teamPlayers2.length; i++) {
-
-
-
-                    //https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers2[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
-                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
-                    var playerstat = {
-                        'team': team2,
-                        'name': teamPlayers2[i].name,
-                        'public_games': 0,
-                        'backup': 0,// 0 это флаг, обозначающий увереность в то, что игрок должен учитываться в статистике
-                        // 1 игрок может учитываться в статистике
-                        // 2 игрок не должен учитываться в статистике
-
-
-                    };
-                    var textjson = JSON.parse(reslastmatches);
-                    updatestats('my-table', teamPlayers2[i], team2, textjson, team2stat, playerstat);
-                    colorBackUpPlayer(playerstat, statsforbackup, team2players);
-                    console.log("team2players поменялся на " + team2players + "");
-
-
-                }
-
-                //исключаем не продуктивных игкров из списка, оставляем только 5 наилучших игроков
-                team1stat.games_array = simpleSort(team1stat.games_array);
-                team2stat.games_array = simpleSort(team2stat.games_array);
-                // team1stat.games_array = team1stat.games_array.sort(compare);
-                // team2stat.games_array = team2stat.games_array.sort(compare);
-
-
-
-
-                CreateVersusTable('versus_table', team1stat, team2stat);
-                //for(var key in textjson) {
-                // console.log(key.team1_name);
-
-                // if (key.response.team1_name=="team1 Spirit")
-                // text=text+" "+key.response.name;
-                //  }
-
-
-
-
-
-                document.getElementById("team1_details_text").innerHTML = "" + team1players + "<br /><br /> " + team2players + "";
-
-                // document.getElementById("team1_id").innerHTML = "" + team1_id + "";
-                // Call addRow() with the table's ID
-
+                document.getElementById("team1_details_text").innerHTML = getTeamListText(team1Stats) + "<br /><br /> " + getTeamListText(team2Stats);
 
             }
             function httpGet(theUrl) {
@@ -181,213 +87,227 @@
                 return xmlHttp.responseText;
             }
 
+            // The function makes requests for matches played by a team player to open dota API
+            // And @return an array with team statistic of ranked and public games played and winned per each player
+            // The funtion is also marks some players to be ignored in the statistic summary
+            // 
+            // @teamPlayers - a list of the players in the team.
+            // @team - name of the team
+            
+            function prepareTeamStats(teamPlayers, team, key, days) {
 
+                teamStats = [];
+                for (var i = 0; i < teamPlayers.length; i++) {
+                    // https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
+                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
+                    var textjson = JSON.parse(reslastmatches); 
 
+                    var playerStats = getStats(teamPlayers[i], team, textjson);
+                    teamStats.push( playerStats );
+                }
+                updateIgnoreFlags(teamStats);
+                return teamStats;
+            }
 
+            // returns a structre with information about games played
+            function getStats(player, team, jsontext) {
+                var stats = {
+                    'team': team,
+                    'name': player.name,
+                    'id': player.id,
+                    'public_games': 0,
+                    'public_wins': 0,
+                    'ranked_games': 0,
+                    'ranked_wins': 0,
+                    'ignore_flag': 0, // Flags shows if we should ignore this player in statistic. 0 - don't ignore, 1 - questionable, 2 - must ignore
+                };
 
-            function updatestats(tableID, player, team, jsontext, stats, playerstat) {
-
-                // 0)Создаем четыре счетчика, кол-во рейтинговых игр -0, кол-во турнирных игр - 0.
-                // 1)В цикле изучаем каждый матч в отдельности
-                // 2)Если lobby type равен 2-это турнир, если 7- это рейтинговая игра. Накручяиваем соотвецтвующий счетчик
-                // 3)Вычесляем команду игрока, если позиция меньше 128- то это radiant, иначе dire
-                // 4)Смотрим какая команда победила по radiant, если это команда игрока, накручиваем счетчик побед  
-                let rankedgames = 0;
-                let publicgames = 0;
-                let rankedwins = 0;
-                let publicwins = 0;
                 for (var i = 0; i < jsontext.length; i++) {
 
                     let isradiant = true;
                     if (jsontext[i].player_slot > 128) {
                         radiant = false;
-
                     }
 
                     if (jsontext[i].game_mode == "2") {//lobby_type равен двум(игры, доступные для публики, но созданые через кастомные лобби), увеличиваем счетчик турнира
-                        publicgames++;
                         stats.public_games++;
 
-
                         if (jsontext[i].radiant_win && isradiant) {
-
                             //если победила radiant, и в этой команде был игркок, то накручиваем счетчик побед
                             //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
-                            publicwins++;
                             stats.public_wins++;
                         }
                         else if (!jsontext[i].radiant_win && !isradiant) {
-                            publicwins++;
                             stats.public_wins++;
                         }
                     }
 
-
-
-
-
                     if (jsontext[i].game_mode == "22") {//lobby_type равен 22(рранекед), увеличиваем счетчик ранкеда
 
-                        rankedgames++;//счетчик по игроку
-                        stats.ranked_games++;//счетчик по команде
+                        stats.ranked_games++;
                         if (jsontext[i].radiant_win && isradiant) {
 
                             //если победила radiant, и в этой команде был игркок, то накрчиваем счетчик побед
                             //если radiant проиграли и и игрок не был в команде, то тоже накрчиваем счетчик
-                            rankedwins++;
+                            stats.ranked_wins++;
 
                         }
                         else if (!jsontext[i].radiant_win && !isradiant) {
-                            rankedwins++;
+                            stats.ranked_wins++;
                         }
                     }
 
                 }
-                //Обновляем статистику у игрока
-                playerstat.public_games = publicgames;
 
-                //Когда мы узнает данные об игрока, кладем кол-во матчей(сумма матчей ранкед и публик) в специальный массив, как только мы 
-                //  закончили получать всю статистику, мы получиный массив сортируем и отсекаем  всю лишнее
-                // при отображении таблицы
-
-                stats.games_array.push(parseInt(rankedgames + publicgames));
-                console.log("Игрок: " + player.name + " Сыграл: " + parseInt(rankedgames + publicgames));
+                console.log("Игрок: " + player.name + " Сыграл: " + parseInt(stats.ranked_games + stats.public_games));
+                return stats;
+            }
 
 
-
+            // Adds players statisticts to a table
+            function updateStatsTable(tableID, teamStatsArray) {
 
                 // Get a reference to the table
                 let tableRef = document.getElementById(tableID);
 
-                // Insert a row at the end of the table
-                let newRow = tableRef.insertRow(-1);
+                for (var i = 0; i < teamStatsArray.length; i++) {
 
-                // Insert a cell in the row at index 0
-                let newCell = newRow.insertCell(0);
+                    // Insert a row at the end of the table
+                    let newRow = tableRef.insertRow(-1);
 
-                // Append a text node to the cell
-                let newText = document.createTextNode(player.name);
-                newCell.appendChild(newText);
+                    // Insert a cell in the row at index 0
+                    let newCell = newRow.insertCell(0);
 
-                newCell = newRow.insertCell(1);
-                newText = document.createTextNode(team);
-                newCell.appendChild(newText);
+                    // Append a text node to the cell
+                    let newText = document.createTextNode(teamStatsArray[i].name);
+                    newCell.appendChild(newText);
 
-                newCell = newRow.insertCell(2);
-                newText = document.createTextNode(player.id);
-                newCell.appendChild(newText);
+                    newCell = newRow.insertCell(1);
+                    newText = document.createTextNode(teamStatsArray[i].team);
+                    newCell.appendChild(newText);
 
-
-                newCell = newRow.insertCell(3);
-                newText = document.createTextNode("text2");
-                newCell.appendChild(newText);
-
-                //заполнение второй стрчоки статистики
-                newRow = tableRef.insertRow(-1);
-                newCell = newRow.insertCell(0);
-                newText = document.createTextNode('Кол-во публичных матчей');
-                newCell.appendChild(newText);
-
-                newCell = newRow.insertCell(1);
-                newText = document.createTextNode(publicgames);
-                newCell.appendChild(newText);
-
-                newCell = newRow.insertCell(2);
-                newText = document.createTextNode(publicwins);
-                newCell.appendChild(newText);
+                    newCell = newRow.insertCell(2);
+                    newText = document.createTextNode(teamStatsArray[i].id);
+                    newCell.appendChild(newText);
 
 
-                newCell = newRow.insertCell(3);
+                    newCell = newRow.insertCell(3);
+                    newText = document.createTextNode("text2");
+                    newCell.appendChild(newText);
 
-                newText = document.createTextNode(publicgames == 0 ? "0%" : (publicwins * 100 / publicgames).toFixed(1) + "%");
-                newCell.appendChild(newText);
+                    //заполнение второй стрчоки статистики
+                    newRow = tableRef.insertRow(-1);
+                    newCell = newRow.insertCell(0);
+                    newText = document.createTextNode('Кол-во публичных матчей');
+                    newCell.appendChild(newText);
 
+                    newCell = newRow.insertCell(1);
+                    newText = document.createTextNode(teamStatsArray[i].public_games);
+                    newCell.appendChild(newText);
 
-
-                //заполнение третьей стрчоки статистики
-
-
-                newRow = tableRef.insertRow(-1);
-                newCell = newRow.insertCell(0);
-                newText = document.createTextNode('Кол-во рейтенговых матчей');
-                newCell.appendChild(newText);
-
-                newCell = newRow.insertCell(1);
-                newText = document.createTextNode(rankedgames);
-                newCell.appendChild(newText);
-
-                newCell = newRow.insertCell(2);
-                newText = document.createTextNode(rankedwins);
-                newCell.appendChild(newText);
+                    newCell = newRow.insertCell(2);
+                    newText = document.createTextNode(teamStatsArray[i].public_wins);
+                    newCell.appendChild(newText);
 
 
-                newCell = newRow.insertCell(3);
-                newText = document.createTextNode(rankedgames == 0 ? "0%" : (rankedwins * 100 / rankedgames).toFixed(1) + "%");
-                newCell.appendChild(newText);
+                    newCell = newRow.insertCell(3);
+
+                    newText = document.createTextNode(teamStatsArray[i].public_games == 0 ? "0%" : (teamStatsArray[i].public_wins * 100 / teamStatsArray[i].public_games).toFixed(1) + "%");
+                    newCell.appendChild(newText);
+
+                    //заполнение третьей стрчоки статистики
+                    newRow = tableRef.insertRow(-1);
+                    newCell = newRow.insertCell(0);
+                    newText = document.createTextNode('Кол-во рейтенговых матчей');
+                    newCell.appendChild(newText);
+
+                    newCell = newRow.insertCell(1);
+                    newText = document.createTextNode(teamStatsArray[i].ranked_games);
+                    newCell.appendChild(newText);
+
+                    newCell = newRow.insertCell(2);
+                    newText = document.createTextNode(teamStatsArray[i].ranked_wins);
+                    newCell.appendChild(newText);
 
 
-                tableRef.insertRow();
+                    newCell = newRow.insertCell(3);
+                    newText = document.createTextNode(teamStatsArray[i].ranked_games == 0 ? "0%" : (teamStatsArray[i].ranked_wins * 100 / teamStatsArray[i].ranked_games).toFixed(1) + "%");
+                    newCell.appendChild(newText);
 
-                tableRef.insertRow();
-
-                tableRef.insertRow();
-
-
-
-            }
-            // Функция принимает значение статистики игрока (playerstat) и
-            // историю ключевых значений из статистик других игроков (массив goodstats)
-            // для выявления
-            // является ли этот игрок важным для статиститки.
-            // Тоесть если статистика этого игра сильно отличнается от статистик
-            // других игроков, мы должны подсветить этого игрока как влияющего 
-            // на статистику.
-            function colorBackUpPlayer(playerstat, goodstats, teamtext) {
-                // console.log(" Временная заглушка. Мы пытаемся проверить игрока " + playerstat.name + " в команде " + playerstat.team + "");
-                //если у нас нет истории статистики (обрабатываем первого игрока),
-                //то текущая статистика явялется основой для сравнения.
-                if (goodstats.length == 0) {
-                    if (playerstat.public_games > 0) {
-                        goodstats.push(playerstat.public_games);
-                    }
-                    //для первого игрока сравнивать нечего, идем дальше (выходим из функции)
-                    //console.log("для первого игрока сравнивать нечего, идем дальше (выходим из функции)");
-                    return;
+                    tableRef.insertRow();
+                    tableRef.insertRow();
+                    tableRef.insertRow();
                 }
-                // На данном этапе у нас есть статистика игрока и с чем ее сравнивать
-                if (goodstats.indexOf(playerstat.public_games) == -1) {
-                    //кол-во игр не совпало
-                    playerstat.backup = 1;
-                    console.log("Игрок " + playerstat.name + " может негативно повлиять на статистику ");
-                    if (playerstat.public_games == 0) {
-                        playerstat.backup = 2;
-                        console.log("Игрок " + playerstat.name + " не должен использоваться в статистике ");
-                    }
-                    goodstats.push(playerstat.public_games);
-                    if (playerstat.backup > 0) {
-                        // var  = /яблоки/gi;
-                        // var str = 'Яблоки круглые и яблоки сочные.';
-                        // var newstr = str.replace(re, 'апельсины');
-                        //меняем цвет для игроков, влияющих на статистику
-                        coloredname = "<span class=\"red\">" + playerstat.name + "</span>";
-                        teamtext = teamtext.replace(playerstat.name, coloredname);
-                        console.log("Список команд после подсветки: " + teamtext + "");
-                        return;
-                    }
-
-                }
-                else {
-                    //игрок сыграл столько же, сколько его игрок в команде, значит его не отмечаем.
-                    return;
-
-                }
-
-
-
-
             }
 
+            // the function should update ignore_flag for passed array of team stats (teamStatsArray)
+            // Is some players in the team played the same number of public games but other not we should know this during stats calculation
+            // It's important to distinguish a coach from active players and newcomers
+            //
+            // TODO: The algorithm indentifying coaches may be improved in the future
+            function updateIgnoreFlags(teamStatsArray) {
+                if (teamStatsArray.length == 0)
+                    return;
 
+                goodValues = [];
+                for (var i = 0; i < teamStatsArray.length; i++) {
+                    if (teamStatsArray[i].public_games > 0) {
+                        goodValues.push(teamStatsArray[i].public_games);
+                    }
+                }
+
+                // a code from stackoverflow searching the first duplicate index.
+                const firstDupeIndex = list => list.findIndex(
+                    (item, index) => list.lastIndexOf(item) !== index
+                );
+
+                goodValueIndex = firstDupeIndex(goodValues);
+                if (goodValueIndex != -1) {
+                    // some players played the same number of games => so we can use them a reference point
+                    // of players which statistic we can use to compare with other players in the team.
+                    goodValue = goodValues[goodValueIndex];
+                    for (var i = 0; i < teamStatsArray.length; i++) {
+                        if (teamStatsArray[i].public_games == 0) {
+                            teamStatsArray[i].ignore_flag = 2;
+                            console.log("The player " + teamStatsArray[i].name + " should be ignored in statistic calculation");
+                            continue;
+                        }
+
+                        if (teamStatsArray[i].public_games != goodValue) {
+                            teamStatsArray[i].ignore_flag = 1;
+                            console.log("The player " + teamStatsArray[i].name + " may corrupt team statistic");
+                        }
+                    }
+                }
+            }
+
+            function getTeamListText(teamStatsArray) {
+                text = "";
+                for (var i = 0; i < teamStatsArray.length; i++) {
+                    text += highlightText(teamStatsArray[i].name, teamStatsArray[i].ignore_flag) + "<br />";
+                }
+                return text;
+            }
+
+            function getStatsSummary(team, teamStatsArray) {
+                var statsSummary = {
+                    'team': team,
+                    'ranked_games': 0,
+                    'public_games': 0,
+                    'public_wins': 0,
+                    'games_array': [], // for comparation the number of games played by avg and median
+                };
+                for (var i = 0; i < teamStatsArray.length; i++) {
+                    if (teamStatsArray.ignore_flag == 2)
+                        continue;
+                    statsSummary.ranked_games += teamStatsArray[i].ranked_games;
+                    statsSummary.public_games += teamStatsArray[i].public_games;
+                    statsSummary.public_wins += teamStatsArray[i].public_wins;
+                    statsSummary.games_array.push(parseInt(teamStatsArray[i].ranked_games + teamStatsArray[i].public_games));
+                }
+                return statsSummary;
+            }
 
             function CreateVersusTable(tableID, stats1, stats2) {
 
@@ -612,14 +532,17 @@
                 return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов                    
             }
 
-            function markTextLight(text) {
-                return '<span style="color:teal">' + text + "</span>";
-
-
-
+            function highlightText(text, ignoreFlag) {
+                switch (ignoreFlag) {
+                    case 1:
+                        text = '<span style="color:teal">' + text + "</span>";
+                        break;
+                    case 2:
+                        text = '<strong><span style="color:red">' + text + "</span></strong>";
+                        break;
+                }
+                return text;
             }
-
-
 
 
 
@@ -634,13 +557,13 @@
     <section class="TeamSelect">
 
         <label for="team1">Team #1:</label>
-        <input type="text" name="team1" id="team1" value="OG">
+        <input type="text" name="team1" id="team1" value="OG" required>
 
         <label for="team2">Team #2:</label>
-        <input type="text" name="team2" id="team2" value="TSM FTX">
+        <input type="text" name="team2" id="team2" value="TSM FTX" required>
 
         <label for="lastDays">Days to check:</label>
-        <input type="number" name="lastDays" id="lastDays" step="1" value="22" class="lastDays">
+        <input type="number" name="lastDays" id="lastDays" step="1" value="22" class="lastDays" min="1">
 
         <input type="button" value="check" onclick="check()" />
     </section>
