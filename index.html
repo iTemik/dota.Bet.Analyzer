@@ -93,7 +93,7 @@
             // 
             // @teamPlayers - a list of the players in the team.
             // @team - name of the team
-            
+
             function prepareTeamStats(teamPlayers, team, key, days) {
 
                 teamStats = [];
@@ -101,10 +101,10 @@
                     // https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
                     var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
-                    var textjson = JSON.parse(reslastmatches); 
+                    var textjson = JSON.parse(reslastmatches);
 
                     var playerStats = getStats(teamPlayers[i], team, textjson);
-                    teamStats.push( playerStats );
+                    teamStats.push(playerStats);
                 }
                 updateIgnoreFlags(teamStats);
                 return teamStats;
@@ -179,10 +179,16 @@
                     // Insert a cell in the row at index 0
                     let newCell = newRow.insertCell(0);
 
-                    // Append a text node to the cell
+                    // Append a text node to the  cell
                     let newText = document.createTextNode(teamStatsArray[i].name);
+                    if (teamStatsArray[i].ignore_flag == 2) {
+                        newCell.style.color = "red";
+                        newCell.style.fontWeight = "bold";
+                    }
+                    else if (teamStatsArray[i].ignore_flag == 1) {
+                        newCell.style.color = "teal";
+                    }
                     newCell.appendChild(newText);
-
                     newCell = newRow.insertCell(1);
                     newText = document.createTextNode(teamStatsArray[i].team);
                     newCell.appendChild(newText);
@@ -256,18 +262,20 @@
                         goodValues.push(teamStatsArray[i].public_games);
                     }
                 }
-
                 // a code from stackoverflow searching the first duplicate index.
+
+                //TODO: Fix bag when first index is 0 then we can't find dublicate
                 const firstDupeIndex = list => list.findIndex(
                     (item, index) => list.lastIndexOf(item) !== index
                 );
 
                 goodValueIndex = firstDupeIndex(goodValues);
+                console.log("goodvalues index = " + goodValueIndex);
                 if (goodValueIndex != -1) {
                     // some players played the same number of games => so we can use them a reference point
                     // of players which statistic we can use to compare with other players in the team.
                     goodValue = goodValues[goodValueIndex];
-                    for (var i = 0; i < teamStatsArray.length; i++) {
+                    for (var i = 0; i < teamStatsArray.length; i++) {       
                         if (teamStatsArray[i].public_games == 0) {
                             teamStatsArray[i].ignore_flag = 2;
                             console.log("The player " + teamStatsArray[i].name + " should be ignored in statistic calculation");
@@ -557,10 +565,10 @@
     <section class="TeamSelect">
 
         <label for="team1">Team #1:</label>
-        <input type="text" name="team1" id="team1" value="OG" required>
+        <input type="text" name="team1" id="team1" value="Mind Games" required>
 
         <label for="team2">Team #2:</label>
-        <input type="text" name="team2" id="team2" value="TSM FTX" required>
+        <input type="text" name="team2" id="team2" value="Ravens" required>
 
         <label for="lastDays">Days to check:</label>
         <input type="number" name="lastDays" id="lastDays" step="1" value="22" class="lastDays" min="1">
