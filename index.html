@@ -205,7 +205,7 @@
                     //заполнение второй стрчоки статистики
                     newRow = tableRef.insertRow(-1);
                     newCell = newRow.insertCell(0);
-                    newText = document.createTextNode('Кол-во публичных матчей');
+                    newText = document.createTextNode('Публичные матчи: Всего/Победы');
                     newCell.appendChild(newText);
 
                     newCell = newRow.insertCell(1);
@@ -225,7 +225,7 @@
                     //заполнение третьей стрчоки статистики
                     newRow = tableRef.insertRow(-1);
                     newCell = newRow.insertCell(0);
-                    newText = document.createTextNode('Кол-во рейтенговых матчей');
+                    newText = document.createTextNode('Рейтинговые матчи: Всего/Победы');
                     newCell.appendChild(newText);
 
                     newCell = newRow.insertCell(1);
@@ -262,15 +262,8 @@
                         goodValues.push(teamStatsArray[i].public_games);
                     }
                 }
-                // a code from stackoverflow searching the first duplicate index.
 
-                //TODO: Fix bag when first index is 0 then we can't find dublicate
-                const firstDupeIndex = list => list.findIndex(
-                    (item, index) => list.lastIndexOf(item) !== index
-                );
-
-                goodValueIndex = firstDupeIndex(goodValues);
-                console.log("goodvalues index = " + goodValueIndex);
+                goodValueIndex = getFirstDupeIndex(goodValues);
                 if (goodValueIndex != -1) {
                     // some players played the same number of games => so we can use them a reference point
                     // of players which statistic we can use to compare with other players in the team.
@@ -288,6 +281,24 @@
                         }
                     }
                 }
+            }
+
+            // The function searches for the duplicate values in the array @arr
+            // @return index of the first dulpicate or -1 in there is no dupes
+            function getFirstDupeIndex (arr) {
+                result = -1;
+                arr.forEach( (element, index) => 
+                    {
+                        if (element === 0) 
+                            return -1; // this is how we can skip elements in forEach
+                        if(arr.lastIndexOf(element) !== index) 
+                        {
+                            result = index;
+                            return index;
+                        }
+                    } 
+				)
+                return result;
             }
 
             function getTeamListText(teamStatsArray) {
@@ -408,13 +419,13 @@
                 newCell.appendChild(newText);
                 //заполняем первый стобец
                 newCell = newRow.insertCell(1);
-                newText = document.createTextNode(average(stats1.games_array));//текст нулевого стобца(A4)
+                newText = document.createTextNode(average(stats1.games_array).toFixed(1));//текст нулевого стобца(A4)
                 if (colors)
                     newCell.bgColor = colors[0]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
                 //заполняем второй стобец
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode(average(stats2.games_array));//текст нулевого стобца(A4)
+                newText = document.createTextNode(average(stats2.games_array).toFixed(1));//текст нулевого стобца(A4)
                 if (colors)
                     newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
@@ -479,7 +490,6 @@
                     return result;
                 }
 
-
                 let deltapc = parseFloat(BiggerValue / SmallerValue);
                 if (deltapc >= minPercentage)
                     return result;
@@ -487,29 +497,7 @@
                     return null;
 
             }
-            //Функция сортирует кол-во матчей игрока от большего к меньшему
-            ///Функция выплевывает отсортированый массив
-            function simpleSort(matchesByTeam) {
-                // console.log("сортируем массив:" + matchesByTeam);
-                for (var i = 0, endI = matchesByTeam.length - 1; i < endI; i++) {
-
-                    for (var j = 0, endJ = endI - i; j < endJ; j++) {
-                        if (matchesByTeam[j] < matchesByTeam[j + 1]) {
-                            var swap = matchesByTeam[j];
-                            matchesByTeam[j] = matchesByTeam[j + 1];
-                            matchesByTeam[j + 1] = swap;
-                        }
-                    }
-                }
-                // console.log("Выводим массив "+matchesByTeam);
-                var result = matchesByTeam.slice(0, 5);
-                console.log("Выводим массив " + result);
-                return result;//Возвращем первые пять значений, больше пяти игроков не имеет смысла, использховать в рассчете
-
-
-
-
-            }
+			
 
             //Вычесляем сред.ариф. для массива "nums"
             function average(nums) {
