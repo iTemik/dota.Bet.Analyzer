@@ -264,21 +264,20 @@
                 }
 
                 goodValueIndex = getFirstDupeIndex(goodValues);
-                if (goodValueIndex != -1) {
+
+                for (var i = 0; i < teamStatsArray.length; i++) {
+                    if (teamStatsArray[i].public_games == 0) {
+                        teamStatsArray[i].ignore_flag = 2;
+                        console.log("The player " + teamStatsArray[i].name + " should be ignored in statistic calculation");
+                        continue;
+                    }
+
                     // some players played the same number of games => so we can use them a reference point
                     // of players which statistic we can use to compare with other players in the team.
-                    goodValue = goodValues[goodValueIndex];
-                    for (var i = 0; i < teamStatsArray.length; i++) {       
-                        if (teamStatsArray[i].public_games == 0) {
-                            teamStatsArray[i].ignore_flag = 2;
-                            console.log("The player " + teamStatsArray[i].name + " should be ignored in statistic calculation");
-                            continue;
-                        }
-
-                        if (teamStatsArray[i].public_games != goodValue) {
-                            teamStatsArray[i].ignore_flag = 1;
-                            console.log("The player " + teamStatsArray[i].name + " may corrupt team statistic");
-                        }
+                    if (goodValueIndex == -1 
+                            || teamStatsArray[i].public_games != goodValues[goodValueIndex]) {
+                        teamStatsArray[i].ignore_flag = 1;
+                        console.log("The player " + teamStatsArray[i].name + " may corrupt team statistic");
                     }
                 }
             }
