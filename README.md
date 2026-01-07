@@ -39,7 +39,7 @@ Tip: install the extensions above from the Extensions Marketplace in VS Code.
 
 ## 📦 Setup (venv & dependencies)
 
-__TODO: add info how to confiure venv in the vscode__
+<em style="color:red">TODO: add info how to configure venv in VS Code</em>
 
 From the project root:
 
@@ -64,7 +64,7 @@ pip install -r requirements.txt
 
 ## 🧪 Running Tests
 
-__TODO: add info how to confiure launch.json and launch options for running tests in the vscode__
+<em style="color:red">TODO: add info how to configure launch.json and launch options for running tests in VS Code</em>
 
 Run the test suite using pytest:
 
