@@ -5,8 +5,8 @@ The web application provides analytic services and highlights about the Dota 2 t
 ---
 
 ## Reference docs
-  
-- [Design document](https://docs.google.com/document/d/1cZAYBXYHw53i2RaiGt1aULUnfeAEof5mljG1PHHO99Q/edit?usp=sharing) 
+
+- [Design document](https://docs.google.com/document/d/1cZAYBXYHw53i2RaiGt1aULUnfeAEof5mljG1PHHO99Q/edit?usp=sharing)
 
 ---
 
@@ -33,7 +33,36 @@ The web application provides analytic services and highlights about the Dota 2 t
 - **JSON Tools** (eriklynd.json-tools) or any **JSON formatter** ✅
 - **SQLite** (alexcvzz.vscode-sqlite) — view and edit SQLite DBs ✅
 
+
 Tip: install the extensions above from the Extensions Marketplace in VS Code.
+
+---
+
+## 🧰 Development tools & pre-commit
+
+Enable and run pre-commit hooks (once per machine):
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+Update hooked repositories to latest pinned revisions:
+
+```bash
+pre-commit autoupdate
+```
+
+Recommended VS Code settings (add to workspace `settings.json`):
+
+```json
+{
+  "python.formatting.provider": "black",
+  "editor.formatOnSave": true,
+  "python.linting.enabled": true,
+  "python.linting.mypyEnabled": true
+}
+```
 
 ---
 
@@ -125,6 +154,3 @@ The server will be available at http://127.0.0.1:5000 by default.
 - `app.config['DATABASE_FILENAME']` controls the DB filename (defaults to `dba.sqlite`). The full path used is `app.instance_path / DATABASE_FILENAME`.
 - The repository contains tests that verify schema correctness and a script to regenerate schema; prefer updating `schema.txt` and running the script rather than editing `schema.sql` manually.
 - Add CI checks to ensure `scripts/generate_schema.py --check` runs on push (CI can fail when auto-generated files are out of date).
-
-
-

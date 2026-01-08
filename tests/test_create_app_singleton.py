@@ -1,8 +1,10 @@
 import threading
+
+import pytest
+
 import backend as backend_mod
 from backend import create_app
 
-import pytest
 
 @pytest.fixture(autouse=True)
 def reset_app():

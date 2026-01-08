@@ -3,10 +3,12 @@ Flask>=2.0.0
 celery>=5.2.0
 redis>=4.0.0
 
-# Optional / recommended
-# gunicorn>=20.0.4  # for production WSGI server
-
-# Install with: pip install -r requirements.txt
-
 # Test / development dependencies
 pytest>=7.0.0
+
+pre-commit
+ruff
+black
+isort
+mypy
+pydantic>=1.10.0

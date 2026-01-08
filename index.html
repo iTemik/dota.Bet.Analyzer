@@ -12,8 +12,8 @@
 
         <script>
             function check() {
-                document.getElementById("my-table").innerHTML = ""//стираем таблицу, чтобы старая информация не смешивалась с новой 
-                document.getElementById("versus_table").innerHTML = "";//стираем таблицу, чтобы старая информация не смешивалась с новой 
+                document.getElementById("my-table").innerHTML = ""//стираем таблицу, чтобы старая информация не смешивалась с новой
+                document.getElementById("versus_table").innerHTML = "";//стираем таблицу, чтобы старая информация не смешивалась с новой
                 var team1 = document.getElementById("team1").value.toUpperCase().trim();
                 var team2 = document.getElementById("team2").value.toUpperCase().trim();
                 var key = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
@@ -42,7 +42,7 @@
                             'name': textjson[i].name,
                             'id': textjson[i].account_id,
                         }
-                        teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки 
+                        teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки
                         team1_id = textjson[i].team_id;
                     }
 
@@ -91,7 +91,7 @@
             // The function makes requests for matches played by a team player to open dota API
             // And @return an array with team statistic of ranked and public games played and winned per each player
             // The funtion is also marks some players to be ignored in the statistic summary
-            // 
+            //
             // @teamPlayers - a list of the players in the team.
             // @team - name of the team
 
@@ -100,7 +100,7 @@
                 teamStats = [];
                 for (var i = 0; i < teamPlayers.length; i++) {
                     // https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    
+
                     // It looks like key is not longer needed in the request
                     //var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
                     var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?date=" + days;
@@ -282,7 +282,7 @@
 
                     // some players played the same number of games => so we can use them a reference point
                     // of players which statistic we can use to compare with other players in the team.
-                    if (goodValueIndex == -1 
+                    if (goodValueIndex == -1
                             || teamStatsArray[i].public_games != goodValues[goodValueIndex]) {
                         teamStatsArray[i].ignore_flag = 1;
                         console.log("The player " + teamStatsArray[i].name + " may corrupt team statistic");
@@ -294,16 +294,16 @@
             // @return index of the first dulpicate or -1 in there is no dupes
             function getFirstDupeIndex (arr) {
                 result = -1;
-                arr.forEach( (element, index) => 
+                arr.forEach( (element, index) =>
                     {
-                        if (element === 0) 
+                        if (element === 0)
                             return -1; // this is how we can skip elements in forEach
-                        if(arr.lastIndexOf(element) !== index) 
+                        if(arr.lastIndexOf(element) !== index)
                         {
                             result = index;
                             return index;
                         }
-                    } 
+                    }
 				)
                 return result;
             }
@@ -363,7 +363,7 @@
 
                 let tableRef = document.getElementById(tableID);
                 //let header = tableRef.createTHead();
-                //let newRow = header.insertRow(0);  
+                //let newRow = header.insertRow(0);
                 let newRow = tableRef.insertRow(-1);
                 //заолняем нулевой стобец
                 let newCell = newRow.insertCell(0);
@@ -487,7 +487,7 @@
 
                 // TODO: add Team Rankings comparison
                 // highlight raiting difference. I guess 100 points difference is significant. 100 Point Difference: ~64% vs. ~36%.
-                colors = getVersusColors(stats1.rating, stats2.rating, 100); 
+                colors = getVersusColors(stats1.rating, stats2.rating, 100);
                 newRow = tableRef.insertRow(-1);
                 newCell = newRow.insertCell(0);
                 newText = document.createTextNode("Elo Rating: ");
@@ -504,8 +504,8 @@
                 if (colors)
                     newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
-                
-                // Show Elo rating delta. 
+
+                // Show Elo rating delta.
                 // If it's more than 15 then the team is in the PRIME mode. If it's less than -15 then the team is in the RUINERS mode.
                 newRow = tableRef.insertRow(-1);
                 newCell = newRow.insertCell(0);
@@ -545,7 +545,7 @@
                 }
 
                 newCell = newRow.insertCell(2);
-                newText = document.createTextNode(primeText2); 
+                newText = document.createTextNode(primeText2);
                 if (stats2.delta >= 15)
                     newCell.bgColor = "lightgreen";
                 else if (stats2.delta <= -15)
@@ -555,8 +555,8 @@
 
             }
 
-            // get background colors for versus table. 
-            //Если разница в играх у первой и второй команды велика, 
+            // get background colors for versus table.
+            //Если разница в играх у первой и второй команды велика,
             //то ячейку красим в зеленый цвет, а лузера в красный
             // mindiff - минимальная разница в единицах, для подсветки, например 10 игр (значение по умолчанию 10)
             // minPercentage - минимальная разница в процентах для подстветки, например 1.3 = это 30 процентов (значение по умолчанию 30%),
@@ -595,7 +595,7 @@
                     return null;
 
             }
-			
+
 
             //Вычесляем сред.ариф. для массива "nums"
             function average(nums) {
@@ -615,15 +615,15 @@
                 if (values.length === 0) return 0;//Если игр не было(пустой массив) то мы считаем что игр было сыгранно 0 по медиане
 
                 values.sort(function (a, b) {
-                    return a - b;//Сортируем по возврастанию  
+                    return a - b;//Сортируем по возврастанию
                 });
 
-                var half = Math.floor(values.length / 2);//узнаем где середина отсортированого массива 
+                var half = Math.floor(values.length / 2);//узнаем где середина отсортированого массива
 
                 if (values.length % 2)
-                    return values[half];//Если попали в середину, то выводим  полученый элемент                                                                    
+                    return values[half];//Если попали в середину, то выводим  полученый элемент
 
-                return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов                    
+                return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов
             }
 
             function highlightText(text, ignoreFlag) {
