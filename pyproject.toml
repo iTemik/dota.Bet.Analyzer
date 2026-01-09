@@ -7,5 +7,5 @@ profile = "black"
 
 [tool.ruff]
 line-length = 120
-select = ["E", "F", "W", "I", "B", "C", "RUF"]
+lint.select = ["E", "F", "W", "I", "B", "C", "RUF"]
 # you can add ignore or extend-select based on project preference

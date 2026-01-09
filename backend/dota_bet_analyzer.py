@@ -6,6 +6,7 @@ from celery import Celery
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend.config import Config
+from backend.stats import compute_statistics
 
 from . import __version__
 
@@ -122,9 +123,6 @@ def statistics():
         return jsonify({"error": "no teams provided"}), 400
     if len(teams) > 10:
         return jsonify({"error": "too many teams (max 10)"}), 400
-
-    # Compute statistics and return a model dump
-    from .stats import compute_statistics
 
     stats = compute_statistics(teams)
     return jsonify(stats.model_dump())
