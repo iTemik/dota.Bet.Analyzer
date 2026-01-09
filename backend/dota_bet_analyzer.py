@@ -8,8 +8,6 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from backend.config import Config
 from backend.stats import compute_statistics
 
-from . import __version__
-
 bp = Blueprint("dota", __name__)
 
 # Initialize Celery without app-specific config; the app factory will update it
@@ -67,6 +65,11 @@ def stream_progress(task_id):
     """Stream progress updates"""
 
     def generate():
+        """Yield Server-Sent Events with progress updates for a task.
+
+        Reads progress snapshots from Redis and emits them as SSE messages
+        until the task reaches completion or an error state.
+        """
         last_step = 0
 
         while True:
@@ -126,11 +129,6 @@ def statistics():
 
     stats = compute_statistics(teams)
     return jsonify(stats.model_dump())
-
-
-@bp.route("/")
-def hello():
-    return jsonify({"message": "Hello, World!", "version": __version__})
 
 
 if __name__ == "__main__":

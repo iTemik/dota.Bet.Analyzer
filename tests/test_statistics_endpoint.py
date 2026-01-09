@@ -87,7 +87,7 @@ def test_post_trims_and_filters_teams(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr("backend.stats.compute_statistics", fake_compute)
+    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
 
     app = create_app(test_config={})
     client = app.test_client()

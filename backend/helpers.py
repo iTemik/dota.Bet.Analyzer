@@ -50,13 +50,15 @@ def get_team_id_from_explore_response(response_json: dict[str, Any]) -> tuple[in
     {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a"}],
         "fields": [ { "name": "team_id",..., "format": "text"} ], }
     """
+    response_preview = str(response_json)[:300]
+
     if "command" not in response_json or response_json["command"] != "SELECT":
-        raise ValueError("Unexpected command in response")
+        raise ValueError(f"Unexpected command in response. Response preview: {response_preview}")
 
     if "rows" not in response_json or not response_json["rows"]:
-        raise ValueError("No rows in response")
+        raise ValueError(f"No rows in response. Response preview: {response_preview}")
     if len(response_json["rows"]) != 1:
-        raise ValueError("Unexpected number of rows in response")
+        raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
     row = response_json["rows"][0]
 
     if (
@@ -67,6 +69,8 @@ def get_team_id_from_explore_response(response_json: dict[str, Any]) -> tuple[in
         or "tag" not in row
         or not isinstance(row["tag"], str)
     ):
-        raise ValueError(f"team_id, name, or tag cannot be found in the row {row}")
+        raise ValueError(
+            f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
+        )
 
     return row["team_id"], row["name"], row["tag"]

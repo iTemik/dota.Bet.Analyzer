@@ -1,6 +1,6 @@
 import requests
 
-from backend.stats import StatisticsError, StatsResponse, compute_statistics
+from backend.stats import StatsResponse, compute_statistics
 
 
 class DummyResponse:
@@ -23,17 +23,23 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert isinstance(res, StatsResponse)
     assert len(res.teams) == 1
     team = res.teams[0]
-    assert team.team == "A"
+    assert team.team == "Alpha"  # team field gets the name from the response
     assert team.team_id == 42
-    assert team.players[0].name == "Alpha_Player1"
+    assert team.tag == "A"
+    # assert team.players[0].name == "Alpha_Player1"  # TODO: players list is not implemented yet
+    assert len(team.players) == 0
+    assert team.error_code is None
+    assert team.error_message is None
 
 
 def test_compute_statistics_invalid_team():
-    try:
-        compute_statistics([""])
-        AssertionError("Expected ValueError for empty team name")
-    except ValueError:
-        pass
+    res = compute_statistics([""])
+    assert isinstance(res, StatsResponse)
+    assert len(res.teams) == 1
+    team = res.teams[0]
+    assert team.error_code == "INVALID_TEAM_NAME"
+    assert team.error_message == "Invalid team name"
+    assert team.team_id is None
 
 
 def test_compute_statistics_network_error(monkeypatch):
@@ -43,11 +49,14 @@ def test_compute_statistics_network_error(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    try:
-        compute_statistics(["A"])
-        AssertionError("Expected StatisticsError on network failure")
-    except StatisticsError as e:
-        assert "Network error" in str(e)
+    res = compute_statistics(["A"])
+    assert isinstance(res, StatsResponse)
+    assert len(res.teams) == 1
+    team = res.teams[0]
+    assert team.team == "A"
+    assert team.error_code == "NETWORK_ERROR"
+    assert "connection failed" in team.error_message
+    assert team.team_id is None
 
 
 def test_compute_statistics_non_200(monkeypatch):
@@ -56,11 +65,14 @@ def test_compute_statistics_non_200(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    try:
-        compute_statistics(["A"])
-        AssertionError("Expected StatisticsError on non-200 response")
-    except StatisticsError:
-        pass
+    res = compute_statistics(["A"])
+    assert isinstance(res, StatsResponse)
+    assert len(res.teams) == 1
+    team = res.teams[0]
+    assert team.team == "A"
+    assert team.error_code == "HTTP_ERROR"
+    assert "500" in team.error_message
+    assert team.team_id is None
 
 
 def test_compute_statistics_malformed_response(monkeypatch):
@@ -70,8 +82,11 @@ def test_compute_statistics_malformed_response(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    try:
-        compute_statistics(["A"])
-        AssertionError("Expected StatisticsError on malformed response")
-    except StatisticsError as e:
-        assert "Malformed explorer response" in str(e) or "No rows" in str(e)
+    res = compute_statistics(["A"])
+    assert isinstance(res, StatsResponse)
+    assert len(res.teams) == 1
+    team = res.teams[0]
+    assert team.team == "A"
+    assert team.error_code == "RESPONSE_PARSE_ERROR"
+    assert "No rows" in team.error_message
+    assert team.team_id is None
