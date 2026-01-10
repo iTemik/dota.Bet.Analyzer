@@ -30,6 +30,7 @@ def prepare_sql_for_team_explore(team: str) -> str:
     #   WHERE ( name ILIKE '<team>' ESCAPE '\' OR tag  ILIKE '<team>' ESCAPE '\' )
     #   AND tag <> '' LIMIT 1;
 
+    # TODO: make it safer against SQL injection. For example use only predefined values from the cache.
     sql = (
         f"SELECT team_id, name, tag FROM teams "
         f"WHERE ( name ILIKE '{sanitized_team}' ESCAPE '\\'"

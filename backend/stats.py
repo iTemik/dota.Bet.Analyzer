@@ -25,8 +25,9 @@ class TeamStats(BaseModel):
         team_id: Unique team identifier (None if error occurred)
         team: Team name
         tag: Team tag/abbreviation
-        leaderboard_rank: Team's leaderboard ranking
+        rating: Team's Elo ranking
         delta: Recent rating change
+        logo_url: URL to team's logo image
         players: List of active team players
         other_players: List of inactive/substitute players
         error_code: Error code if team data fetch failed (e.g., NETWORK_ERROR, HTTP_ERROR)
@@ -36,8 +37,9 @@ class TeamStats(BaseModel):
     team_id: Optional[int] = None
     team: str
     tag: Optional[str] = None
-    leaderboard_rank: Optional[float] = None
+    rating: Optional[float] = None
     delta: Optional[float] = None
+    logo_url: Optional[str] = None
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     error_code: Optional[str] = None
@@ -56,6 +58,83 @@ class StatsResponse(BaseModel):
 
 class StatisticsError(Exception):
     """Raised when fetching or parsing statistics for a team fails."""
+
+
+def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional[tuple[str, str]]]:
+    """Safely perform GET request and parse JSON response.
+
+    Args:
+        url: URL to fetch
+        timeout: Request timeout in seconds
+
+    Returns:
+        Tuple of (json_data, error) where:
+        - json_data is the parsed JSON response (None if error)
+        - error is (error_code, error_message) tuple (None if success)
+    """
+    try:
+        resp = requests.get(url, timeout=timeout)
+    except Exception as exc:
+        return None, ("NETWORK_ERROR", f"Network error fetching data: {exc}")
+
+    if resp.status_code != 200:
+        return None, ("HTTP_ERROR", f"HTTP {resp.status_code}")
+
+    try:
+        payload = resp.json()
+        print(f"Url: {url} Payload: {payload}")
+        return payload, None
+    except Exception as exc:
+        return None, ("JSON_DECODE_ERROR", f"Invalid JSON response: {exc}")
+
+
+def _fetch_team_info(team: str) -> tuple[Optional[tuple[int, str, str]], Optional[tuple[str, str]]]:
+    """Fetch team ID, name, and tag from OpenDota explorer API.
+
+    Args:
+        team: Team name or tag to search for
+
+    Returns:
+        Tuple of (team_info, error) where:
+        - team_info is (team_id, team_name, tag) tuple (None if error)
+        - error is (error_code, error_message) tuple (None if success)
+    """
+    from backend.helpers import (
+        get_percent_encoded_str,
+        get_team_id_from_explore_response,
+        prepare_sql_for_team_explore,
+    )
+
+    sql = prepare_sql_for_team_explore(team)
+    team_request = get_percent_encoded_str(sql)
+    explore_team_url = f"https://api.opendota.com/api/explorer?sql={team_request}"
+
+    payload, error = _safe_get_json(explore_team_url)
+    if error:
+        return None, error
+
+    assert payload is not None
+
+    try:
+        team_id, team_name, tag = get_team_id_from_explore_response(payload)
+        return (team_id, team_name, tag), None
+    except ValueError as exc:
+        return None, ("RESPONSE_PARSE_ERROR", f"Malformed response: {exc}")
+
+
+def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, str]]]:
+    """Fetch team statistics from OpenDota teams API.
+
+    Args:
+        team_id: Team ID to fetch statistics for
+
+    Returns:
+        Tuple of (stats_data, error) where:
+        - stats_data is dict with team stats (None if error)
+        - error is (error_code, error_message) tuple (None if success)
+    """
+    team_stats_url = f"https://api.opendota.com/api/teams/{team_id}"
+    return _safe_get_json(team_stats_url)
 
 
 # Implement compute_statistics here for testability and reuse
@@ -86,12 +165,6 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
         - RESPONSE_PARSE_ERROR: Response JSON structure is malformed
         - UNEXPECTED_ERROR: Any other unexpected error
     """
-    from backend.helpers import (
-        get_percent_encoded_str,
-        get_team_id_from_explore_response,
-        prepare_sql_for_team_explore,
-    )
-
     if not isinstance(teams, list):
         raise ValueError("teams must be a list of strings")
 
@@ -109,62 +182,35 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             continue
 
         try:
-            sql = prepare_sql_for_team_explore(team)
-            team_request = get_percent_encoded_str(sql)
-            explore_team_url = f"https://api.opendota.com/api/explorer?sql={team_request}"
-
-            try:
-                resp = requests.get(explore_team_url, timeout=5)
-            except Exception as exc:
-                result.append(
-                    TeamStats(
-                        team=team,
-                        error_code="NETWORK_ERROR",
-                        error_message=f"Network error fetching data: {exc}",
-                    )
-                )
+            # Fetch team info from explorer API
+            team_info, error = _fetch_team_info(team)
+            if error:
+                error_code, error_message = error
+                result.append(TeamStats(team=team, error_code=error_code, error_message=error_message))
                 continue
 
-            if resp.status_code != 200:
-                result.append(
-                    TeamStats(
-                        team=team,
-                        error_code="HTTP_ERROR",
-                        error_message=f"HTTP {resp.status_code}",
-                    )
-                )
+            if team_info is None:
                 continue
 
-            try:
-                payload = resp.json()
-            except Exception as exc:
-                result.append(
-                    TeamStats(
-                        team=team,
-                        error_code="JSON_DECODE_ERROR",
-                        error_message=f"Invalid JSON response: {exc}",
-                    )
-                )
+            team_id, team_name, tag = team_info
+
+            # Fetch team statistics
+            stats_data, error = _fetch_team_stats(team_id)
+            if error:
+                error_code, error_message = error
+                result.append(TeamStats(team=team, error_code=error_code, error_message=error_message))
                 continue
 
-            try:
-                team_id, team_name, tag = get_team_id_from_explore_response(payload)
-            except ValueError as exc:
-                result.append(
-                    TeamStats(
-                        team=team,
-                        error_code="RESPONSE_PARSE_ERROR",
-                        error_message=f"Malformed response: {exc}",
-                    )
-                )
+            if stats_data is None:
                 continue
 
             stats = TeamStats(
                 team_id=team_id,
                 team=team_name,
                 tag=tag,
-                leaderboard_rank=0.0,
-                delta=0.0,
+                rating=stats_data.get("rating"),
+                delta=stats_data.get("delta"),
+                logo_url=stats_data.get("logo_url"),
                 players=[],
                 other_players=[],
             )
