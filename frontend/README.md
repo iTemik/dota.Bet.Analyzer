@@ -100,28 +100,35 @@ frontend/
 - Check the browser console for any errors
 - Ensure the Flask backend is running on port 5000 for API calls to work
 - TypeScript provides real-time type checking in your editor
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### ESLint Configuration
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
+For enhanced TypeScript linting with type-aware rules, you can configure ESLint with type checking enabled:
+
+```js
+// eslint.config.js
+{
+  files: ['**/*.{ts,tsx}'],
+  extends: [
+    // Other configs...
+
+    // Remove tseslint.configs.recommended and replace with this
+    tseslint.configs.recommendedTypeChecked,
+    // Alternatively, use this for stricter rules
+    tseslint.configs.strictTypeChecked,
+    // Optionally, add this for stylistic rules
+    tseslint.configs.stylisticTypeChecked,
+
+    // Other configs...
+  ],
+  languageOptions: {
+    parserOptions: {
+      project: ['./tsconfig.node.json', './tsconfig.app.json'],
+      tsconfigRootDir: import.meta.dirname,
     },
+    // other options...
   },
+},
 ])
 ```
 
