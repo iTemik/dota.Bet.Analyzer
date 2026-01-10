@@ -72,7 +72,7 @@ Recommended VS Code settings (add to workspace `settings.json`):
 
 ## 📦 Setup (venv & dependencies)
 
-<em style="color:red">TODO: add info how to configure venv in VS Code</em>
+> **TODO:** add info how to configure venv in VS Code
 
 ### Windows PowerShell - Initial Setup
 
@@ -109,7 +109,7 @@ pip install -r requirements.txt
 
 ## 🧪 Running Tests
 
-<em style="color:red">TODO: add info how to configure launch.json and launch options for running tests in VS Code</em>
+> **TODO:** add info how to configure launch.json and launch options for running tests in VS Code
 
 Run the test suite using pytest:
 
