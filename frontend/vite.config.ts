@@ -8,8 +8,7 @@ export default defineConfig({
     proxy: {
       '/statistics': {
         target: 'http://localhost:5000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/statistics/, '/statistics')
+        changeOrigin: true
       }
     }
   }
