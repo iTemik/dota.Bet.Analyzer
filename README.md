@@ -20,7 +20,11 @@ The web application provides analytic services and highlights about the Dota 2 t
    - Download from https://www.python.org/downloads/ or use your package manager.
    - Verify: `python --version` (or `python3 --version`).
 
-3. Install Visual Studio Code (optional but recommended)
+3. Install Node.js and npm
+   - Download from https://nodejs.org/ (LTS version recommended).
+   - Verify: `npm --version` and `node --version`.
+
+4. Install Visual Studio Code (optional but recommended)
    - Download from https://code.visualstudio.com/
 
 ---
@@ -69,6 +73,18 @@ Recommended VS Code settings (add to workspace `settings.json`):
 ## 📦 Setup (venv & dependencies)
 
 <em style="color:red">TODO: add info how to configure venv in VS Code</em>
+
+### Windows PowerShell - Initial Setup
+
+If you encounter a PowerShell execution policy error when running commands, run this once per machine:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+This allows locally created scripts to run while maintaining security. You'll need to confirm the policy change when prompted.
+
+### Setup Instructions
 
 From the project root:
 
@@ -146,6 +162,53 @@ flask --app backend
 ```
 
 The server will be available at http://127.0.0.1:5000 by default.
+
+---
+
+## 🎨 Frontend (React + Vite + TypeScript)
+
+The frontend is a modern React application for displaying team statistics and comparisons.
+
+### Quick Start
+
+From the `frontend` directory:
+
+```bash
+npm install       # Install dependencies
+npm run dev       # Start development server (http://localhost:5173)
+npm run build     # Build for production
+npm test          # Run tests
+```
+
+### Features
+
+- **Team Statistics Form**: Compare two Dota 2 teams side-by-side
+- **Real-time Results**: Display team ratings, tags, IDs, and deltas
+- **Conditional Highlighting**: Color-coded backgrounds for performance indicators
+- **Team Logos**: Displays team logos from backend data
+- **Responsive Design**: Works on desktop and mobile
+
+### Development
+
+The development server includes a proxy for API requests:
+- `/statistics` requests are automatically forwarded to `http://localhost:5000` (Flask backend)
+
+### Testing
+
+Comprehensive test suite with 21 tests covering:
+- Component rendering
+- Input validation
+- API integration and error handling
+- Results display logic
+- Conditional styling
+
+Run tests:
+```bash
+npm test          # Watch mode
+npm test -- --run # Single run
+```
+
+For more details, see [frontend/README.md](frontend/README.md) and [frontend/TEST_GUIDE.md](frontend/TEST_GUIDE.md)
 
 ---
 
