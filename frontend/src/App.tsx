@@ -67,13 +67,6 @@ function App() {
     return 'transparent'
   }
 
-  const getDeltaLabel = (delta: number | undefined): string => {
-    if (!delta) return ''
-    if (delta < -15) return ' (RUINERS)'
-    if (delta > 15) return ' (IN PRIME)'
-    return ''
-  }
-
   const getRatingBackgroundColors = (
     rating1: number | null | undefined,
     rating2: number | null | undefined
@@ -174,12 +167,12 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">Delta</td>
+                <td className="row-label">Last match rating</td>
                 <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[0]?.delta) }}>
-                  {statistics.teams?.[0]?.delta ? `${statistics.teams[0].delta.toFixed(1)}${getDeltaLabel(statistics.teams[0].delta)}` : '-'}
+                  {statistics.teams?.[0]?.delta ? statistics.teams[0].delta.toFixed(1) : '-'}
                 </td>
                 <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[1]?.delta) }}>
-                  {statistics.teams?.[1]?.delta ? `${statistics.teams[1].delta.toFixed(1)}${getDeltaLabel(statistics.teams[1].delta)}` : '-'}
+                  {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
                 </td>
               </tr>
             </tbody>

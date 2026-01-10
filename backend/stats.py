@@ -82,7 +82,7 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
 
     try:
         payload = resp.json()
-        print(f"Url: {url} Payload: {payload}")
+        # print(f"Url: {url} Payload: {payload}")
         return payload, None
     except Exception as exc:
         return None, ("JSON_DECODE_ERROR", f"Invalid JSON response: {exc}")

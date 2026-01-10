@@ -36,8 +36,6 @@ The tests are organized in `src/App.test.tsx` and cover:
 
 ### 6. Delta Display Tests
 - Delta values are formatted with one decimal place
-- "IN PRIME" label shown for delta > 15
-- "RUINERS" label shown for delta < -15
 
 ## Running Tests
 
