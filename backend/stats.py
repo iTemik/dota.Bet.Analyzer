@@ -5,6 +5,8 @@ from typing import List, Optional
 import requests
 from pydantic import BaseModel, Field
 
+from backend.pro_players import get_players_by_team
+
 
 class Player(BaseModel):
     """Represents a Dota 2 player.
@@ -88,15 +90,17 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
         return None, ("JSON_DECODE_ERROR", f"Invalid JSON response: {exc}")
 
 
-def _fetch_team_info(team: str) -> tuple[Optional[tuple[int, str, str]], Optional[tuple[str, str]]]:
-    """Fetch team ID, name, and tag from OpenDota explorer API.
+def _fetch_team_info(
+    team: str,
+) -> tuple[Optional[tuple[int, str, str, float | None, float | None]], Optional[tuple[str, str]]]:
+    """Fetch team info including rating and delta from OpenDota explorer API.
 
     Args:
         team: Team name or tag to search for
 
     Returns:
         Tuple of (team_info, error) where:
-        - team_info is (team_id, team_name, tag) tuple (None if error)
+        - team_info is (team_id, team_name, tag, rating, delta) tuple (None if error)
         - error is (error_code, error_message) tuple (None if success)
     """
     from backend.helpers import (
@@ -116,8 +120,8 @@ def _fetch_team_info(team: str) -> tuple[Optional[tuple[int, str, str]], Optiona
     assert payload is not None
 
     try:
-        team_id, team_name, tag = get_team_id_from_explore_response(payload)
-        return (team_id, team_name, tag), None
+        team_id, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
+        return (team_id, team_name, tag, rating, delta), None
     except ValueError as exc:
         return None, ("RESPONSE_PARSE_ERROR", f"Malformed response: {exc}")
 
@@ -182,7 +186,7 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             continue
 
         try:
-            # Fetch team info from explorer API
+            # Fetch team info from explorer API (now includes rating and delta)
             team_info, error = _fetch_team_info(team)
             if error:
                 error_code, error_message = error
@@ -192,26 +196,16 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             if team_info is None:
                 continue
 
-            team_id, team_name, tag = team_info
-
-            # Fetch team statistics
-            stats_data, error = _fetch_team_stats(team_id)
-            if error:
-                error_code, error_message = error
-                result.append(TeamStats(team=team, error_code=error_code, error_message=error_message))
-                continue
-
-            if stats_data is None:
-                continue
+            team_id, team_name, tag, rating, delta = team_info
 
             stats = TeamStats(
                 team_id=team_id,
                 team=team_name,
                 tag=tag,
-                rating=stats_data.get("rating"),
-                delta=stats_data.get("delta"),
-                logo_url=stats_data.get("logo_url"),
-                players=[],
+                rating=rating,
+                delta=delta,
+                logo_url=None,  # Will need separate query if logo_url needed
+                players=get_players_by_team(team_id=team_id),
                 other_players=[],
             )
             result.append(stats)

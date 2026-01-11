@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 // Mock fetch globally
-global.fetch = vi.fn()
+globalThis.fetch = vi.fn()
 
 describe('App Component', () => {
     beforeEach(() => {
@@ -90,7 +90,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -121,7 +121,7 @@ describe('App Component', () => {
                     )
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -143,7 +143,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -164,7 +164,7 @@ describe('App Component', () => {
                 Promise.reject(new Error('Network error'))
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -219,7 +219,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -272,7 +272,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -324,7 +324,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -376,7 +376,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -403,7 +403,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -426,7 +426,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)
@@ -478,7 +478,7 @@ describe('App Component', () => {
                 })
             ) as any
 
-            global.fetch = mockFetch
+            globalThis.fetch = mockFetch
 
             render(<App />)
             const team1Input = screen.getByLabelText(/Team #1/i)

@@ -1,7 +1,7 @@
-"""Regenerate SQLite schema (backend/schema.sql) from backend/schema.txt.
+"""Regenerate SQLite schema (backend/opendota_schema.sql) from backend/schema.txt.
 
 Usage:
-    python scripts/generate_schema.py [--input backend/schema.txt] [--output backend/schema.sql] [--check]
+    python scripts/generate_schema.py [--input backend/schema.txt] [--output backend/opendota_schema.sql] [--check]
 
 If --check is provided the script will compare generated SQL to the existing output file and
 return non-zero exit code on mismatch (useful in CI).
@@ -118,7 +118,7 @@ def generate_sql_from_json_text(json_text: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", default="backend/schema.txt")
-    parser.add_argument("--output", "-o", default="backend/schema.sql")
+    parser.add_argument("--output", "-o", default="backend/opendota_schema.sql")
     parser.add_argument(
         "--check", action="store_true", help="Compare generated output to existing file and exit non-zero on mismatch"
     )

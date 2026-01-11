@@ -3,7 +3,7 @@ import threading
 
 from flask import Flask
 
-__version__ = "0.2"
+__version__ = "0.3"
 
 # Module-level singleton and a lock to make creation thread-safe
 _app = None
@@ -53,7 +53,7 @@ def _configure_app(app, test_config=None):
     # Default configuration
     app.config.from_mapping(
         SECRET_KEY="dev",
-        DATABASE_FILENAME="dba.sqlite",
+        DATABASE_FILENAME="opendota.sqlite",
     )
 
     # Load environment-aware config
@@ -67,7 +67,7 @@ def _configure_app(app, test_config=None):
 
     # Setup database path
     os.makedirs(app.instance_path, exist_ok=True)
-    db_filename = app.config.get("DATABASE_FILENAME", "dba.sqlite")
+    db_filename = app.config.get("DATABASE_FILENAME", "opendota.sqlite")
     app.config["DATABASE"] = os.path.join(app.instance_path, db_filename)
 
 
@@ -78,9 +78,18 @@ def _init_extensions(app):
 
     db.init_app(app)
 
+    # Initialize d2ba database
+    from .pro_players import init_d2ba_app, sync_pro_players_on_startup
+
+    init_d2ba_app(app)
+
     # Register blueprints
     from .dota_bet_analyzer import bp as dota_bp
     from .dota_bet_analyzer import celery as celery_app
 
     app.register_blueprint(dota_bp)
     celery_app.conf.update(app.config or {})
+
+    # Sync pro players on app startup (only in production, not in test mode)
+    if app.config.get("TESTING") is not True:
+        sync_pro_players_on_startup(app)

@@ -6,4 +6,4 @@ class Config:
     CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    DATABASE_FILENAME = os.getenv("DATABASE_FILENAME", "dba.sqlite")
+    DATABASE_FILENAME = os.getenv("DATABASE_FILENAME", "d2ba.sqlite")

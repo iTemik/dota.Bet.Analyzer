@@ -2,10 +2,11 @@
 import time
 
 import redis
-from celery import Celery
+from celery import Celery  # type: ignore[import-untyped]
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend.config import Config
+from backend.pro_players import fetch_pro_players_from_api, store_pro_players
 from backend.stats import compute_statistics
 
 bp = Blueprint("dota", __name__)
@@ -129,6 +130,30 @@ def statistics():
 
     stats = compute_statistics(teams)
     return jsonify(stats.model_dump())
+
+
+@bp.route("/ProPlayers", methods=["GET"])
+def pro_players():
+    """Fetch pro players from OpenDota API and store in database.
+
+    Returns:
+        JSON response with status and count of players stored.
+    """
+    # Fetch data from OpenDota API
+    players_data = fetch_pro_players_from_api()
+
+    if players_data is None:
+        return jsonify({"error": "Failed to fetch pro players from OpenDota API"}), 500
+
+    if not players_data:
+        return jsonify({"status": "ok", "count": 0, "message": "No pro players data available"}), 200
+
+    # Store to database
+    try:
+        count = store_pro_players(players_data)
+        return jsonify({"status": "ok", "count": count, "message": f"Stored {count} pro players"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to store pro players: {e!s}"}), 500
 
 
 if __name__ == "__main__":

@@ -127,7 +127,14 @@ python -m pytest tests/test_schema_valid.py -q
 
 ## 🗂️ Database initialization
 
-This project uses SQLite for local development. The DB schema is generated from `backend/schema.txt` (which is opendota response for [api/schema](https://api.opendota.com/api/schema) ) into `backend/schema.sql` by the script `scripts/generate_schema.py`.
+This project uses SQLite for local development with **two separate databases**:
+
+1. **opendota.sqlite** - Main OpenDota schema database
+2. **d2ba.sqlite** - Statistics database
+
+### Main Database (opendota.sqlite)
+
+The DB schema is generated from `backend/schema.txt` (which is opendota response for [api/schema](https://api.opendota.com/api/schema)) into `backend/opendota_schema.sql` by the script `scripts/generate_schema.py`.
 
 - Regenerate schema:
 
@@ -148,6 +155,28 @@ Set the Flask app to use the application factory and run the CLI command:
 ```
 flask --app backend init-db
 ```
+
+### Pro Players Database (d2ba.sqlite)
+
+Initialize the pro players database:
+
+```bash
+python scripts/init_d2ba_db.py
+```
+
+This creates `instance/d2ba.sqlite` with a `pro_players` table for storing Dota 2 professional player data.
+
+**Fetch Pro Players Data:**
+
+Once the backend is running, populate the database:
+
+```bash
+curl http://localhost:5000/ProPlayers
+```
+
+Or visit http://localhost:5000/ProPlayers in your browser.
+
+See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
 
 ---
 
@@ -214,6 +243,6 @@ For more details, see [frontend/README.md](frontend/README.md) and [frontend/TES
 
 ## 💡 Notes & Tips
 
-- `app.config['DATABASE_FILENAME']` controls the DB filename (defaults to `dba.sqlite`). The full path used is `app.instance_path / DATABASE_FILENAME`.
-- The repository contains tests that verify schema correctness and a script to regenerate schema; prefer updating `schema.txt` and running the script rather than editing `schema.sql` manually.
+- `app.config['DATABASE_FILENAME']` controls the DB filename (defaults to `opendota.sqlite`). The full path used is `app.instance_path / DATABASE_FILENAME`.
+- The repository contains tests that verify schema correctness and a script to regenerate schema; prefer updating `schema.txt` and running the script rather than editing `opendota_schema.sql` manually.
 - Add CI checks to ensure `scripts/generate_schema.py --check` runs on push (CI can fail when auto-generated files are out of date).

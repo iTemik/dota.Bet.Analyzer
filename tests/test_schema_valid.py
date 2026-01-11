@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-SQL_PATH = Path("backend/schema.sql")
+SQL_PATH = Path("backend/opendota_schema.sql")
 
 
 @pytest.fixture(scope="module")

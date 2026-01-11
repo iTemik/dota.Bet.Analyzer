@@ -34,7 +34,7 @@ def test_module_app_points_to_singleton():
 def test_concurrent_creation_is_thread_safe():
     # Attempt concurrent calls to create_app and ensure all callers get the same instance
     n = 12
-    results = [None] * n
+    results: list = [None] * n
 
     def worker(idx):
         results[idx] = create_app()

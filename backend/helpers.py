@@ -3,7 +3,7 @@ from urllib import parse
 
 
 def prepare_sql_for_team_explore(team: str) -> str:
-    """Prepare SQL query to find team by name or tag.
+    """Prepare SQL query to find team by name or tag with rating info.
 
     Args:
         team: Team name or tag to search for
@@ -25,16 +25,14 @@ def prepare_sql_for_team_explore(team: str) -> str:
         .replace("'", "''")  # escape single quote for SQL string literal
     )
 
-    # SQL query example:
-    #   SELECT team_id, name, tag FROM teams
-    #   WHERE ( name ILIKE '<team>' ESCAPE '\' OR tag  ILIKE '<team>' ESCAPE '\' )
-    #   AND tag <> '' LIMIT 1;
-
-    # TODO: make it safer against SQL injection. For example use only predefined values from the cache.
     sql = (
-        f"SELECT team_id, name, tag FROM teams "
-        f"WHERE ( name ILIKE '{sanitized_team}' ESCAPE '\\'"
-        f" OR tag  ILIKE '{sanitized_team}' ESCAPE '\\' ) AND tag <> '' LIMIT 1;"
+        f"SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
+        f"FROM teams t "
+        f"LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
+        f"WHERE t.name ILIKE '{sanitized_team}' ESCAPE '\\' "
+        f"OR t.tag ILIKE '{sanitized_team}' ESCAPE '\\' "
+        f"ORDER BY tr.rating DESC "
+        f"LIMIT 1"
     )
     return sql
 
@@ -44,12 +42,17 @@ def get_percent_encoded_str(s: str) -> str:
     return parse.quote(s, safe="")
 
 
-def get_team_id_from_explore_response(response_json: dict[str, Any]) -> tuple[int, str, str]:
-    """Extract team_id from OpenDota explorer response JSON.
+def get_team_id_from_explore_response(
+    response_json: dict[str, Any],
+) -> tuple[int, str, str, float | None, float | None]:
+    """Extract team info from OpenDota explorer response JSON.
 
     Example response JSON:
-    {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a"}],
+    {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a", "rating": 2500.5, "delta": 25.3}],
         "fields": [ { "name": "team_id",..., "format": "text"} ], }
+
+    Returns:
+        Tuple of (team_id, name, tag, rating, delta)
     """
     response_preview = str(response_json)[:300]
 
@@ -74,4 +77,13 @@ def get_team_id_from_explore_response(response_json: dict[str, Any]) -> tuple[in
             f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
         )
 
-    return row["team_id"], row["name"], row["tag"]
+    rating = row.get("rating")
+    delta = row.get("delta")
+
+    # Ensure rating and delta are floats or None
+    if rating is not None and not isinstance(rating, (int, float)):
+        rating = None
+    if delta is not None and not isinstance(delta, (int, float)):
+        delta = None
+
+    return row["team_id"], row["name"], row["tag"], rating, delta
