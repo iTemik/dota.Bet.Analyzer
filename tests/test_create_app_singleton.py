@@ -3,7 +3,6 @@ import threading
 import pytest
 
 import backend as backend_mod
-from backend import create_app
 
 
 @pytest.fixture(autouse=True)
@@ -15,19 +14,19 @@ def reset_app():
 
 
 def test_singleton_returns_same_instance():
-    a1 = create_app()
-    a2 = create_app()
+    a1 = backend_mod.create_app()
+    a2 = backend_mod.create_app()
     assert a1 is a2
 
 
 def test_test_config_creates_fresh_instance():
-    a1 = create_app()
-    a_test = create_app(test_config={"TESTING": True})
+    a1 = backend_mod.create_app()
+    a_test = backend_mod.create_app(test_config={"TESTING": True})
     assert a_test is not a1
 
 
 def test_module_app_points_to_singleton():
-    a = create_app()
+    a = backend_mod.create_app()
     assert backend_mod._app is a
 
 
@@ -37,7 +36,7 @@ def test_concurrent_creation_is_thread_safe():
     results = [None] * n
 
     def worker(idx):
-        results[idx] = create_app()
+        results[idx] = backend_mod.create_app()
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
 
