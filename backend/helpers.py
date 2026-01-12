@@ -3,36 +3,31 @@ from urllib import parse
 
 
 def prepare_sql_for_team_explore(team: str) -> str:
-    """Prepare SQL query to find team by name or tag with rating info.
+    """Prepare parameterized SQL query to find team by name or tag with rating info.
 
     Args:
         team: Team name or tag to search for
 
     Returns:
-        SQL query string with sanitized team name
+        SQL query string using a parameter placeholder for the team value.
+        The caller is responsible for binding the actual team parameter.
 
     Raises:
         ValueError: If team name is invalid
     """
     if not team or not isinstance(team, str):
         raise ValueError("Invalid team name")
-    team = team.strip()
-    # Sanitize team name for SQL usage: escape backslashes, wildcard characters, and single quotes
-    sanitized_team = (
-        team.replace("\\", "\\\\")  # escape backslash itself
-        .replace("%", "\\%")  # escape SQL wildcard %
-        .replace("_", "\\_")  # escape SQL wildcard _
-        .replace("'", "''")  # escape single quote for SQL string literal
-    )
 
+    # The team value must be supplied as a bound parameter when executing this query.
+    # This SQL uses $1 as the placeholder for the team name/tag.
     sql = (
-        f"SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
-        f"FROM teams t "
-        f"LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
-        f"WHERE t.name ILIKE '{sanitized_team}' ESCAPE '\\' "
-        f"OR t.tag ILIKE '{sanitized_team}' ESCAPE '\\' "
-        f"ORDER BY tr.rating DESC "
-        f"LIMIT 1"
+        "SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
+        "FROM teams t "
+        "LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
+        "WHERE t.name ILIKE $1 ESCAPE '\\' "
+        "OR t.tag ILIKE $1 ESCAPE '\\' "
+        "ORDER BY tr.rating DESC "
+        "LIMIT 1"
     )
     return sql
 
