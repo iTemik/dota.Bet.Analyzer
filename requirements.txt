@@ -1,0 +1,18 @@
+# Project dependencies
+Flask>=2.0.0
+celery>=5.2.0
+redis>=4.0.0
+types-redis
+requests>=2.32.0
+types-requests>=2.32.0
+pydantic>=1.10.0
+python-dotenv
+
+# Test / development dependencies
+pytest>=7.0.0
+
+pre-commit
+ruff
+black
+isort
+mypy>=1.18.2

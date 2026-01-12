@@ -12,12 +12,13 @@
 
         <script>
             function check() {
-                document.getElementById("my-table").innerHTML = ""//стираем таблицу, чтобы старая информация не смешивалась с новой 
-                document.getElementById("versus_table").innerHTML = "";//стираем таблицу, чтобы старая информация не смешивалась с новой 
+                document.getElementById("my-table").innerHTML = ""; //стираем таблицу, чтобы старая информация не смешивалась с новой
+                document.getElementById("versus_table").innerHTML = "";//стираем таблицу, чтобы старая информация не смешивалась с новой
                 var team1 = document.getElementById("team1").value.toUpperCase().trim();
                 var team2 = document.getElementById("team2").value.toUpperCase().trim();
                 var key = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-                var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";
+                //var url = "https://api.opendota.com/api/proPlayers/?api_key=" + key + "&=";  // it looks like api was updated and key is not needed any more
+                var url = "https://api.opendota.com/api/proPlayers"; // updated api url
                 var res = httpGet(url);
                 var textjson = JSON.parse(res);
                 var team1players = "";
@@ -41,8 +42,8 @@
                             'name': textjson[i].name,
                             'id': textjson[i].account_id,
                         }
-                        teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки 
-
+                        teamPlayers1.push(player);//если игрок в нужней нам команде мы довалем id для обработки
+                        team1_id = textjson[i].team_id;
                     }
 
                     if (team2 != ""
@@ -58,7 +59,7 @@
                             'id': textjson[i].account_id,
                         }
                         teamPlayers2.push(player);
-
+                        team2_id = textjson[i].team_id;
                     }
 
                 }
@@ -72,9 +73,9 @@
                 team2Stats = prepareTeamStats(teamPlayers2, team2, key, days);
                 updateStatsTable('my-table', team2Stats);
 
-
-                team1StatsSummary = getStatsSummary(team1, team1Stats);
-                team2StatsSummary = getStatsSummary(team2, team2Stats);
+                // TODO: rework how data is passed. it's better to pass json object as is.
+                team1StatsSummary = getStatsSummary(team1, team1_id, team1Stats);
+                team2StatsSummary = getStatsSummary(team2, team2_id, team2Stats);
                 CreateVersusTable('versus_table', team1StatsSummary, team2StatsSummary);
 
                 document.getElementById("team1_details_text").innerHTML = getTeamListText(team1Stats) + "<br /><br /> " + getTeamListText(team2Stats);
@@ -83,14 +84,14 @@
             function httpGet(theUrl) {
                 var xmlHttp = new XMLHttpRequest();
                 xmlHttp.open("GET", theUrl, false); // false for synchronous request
-                xmlHttp.send(null);
+                xmlHttp.send();
                 return xmlHttp.responseText;
             }
 
             // The function makes requests for matches played by a team player to open dota API
             // And @return an array with team statistic of ranked and public games played and winned per each player
             // The funtion is also marks some players to be ignored in the statistic summary
-            // 
+            //
             // @teamPlayers - a list of the players in the team.
             // @team - name of the team
 
@@ -99,7 +100,10 @@
                 teamStats = [];
                 for (var i = 0; i < teamPlayers.length; i++) {
                     // https://api.opendota.com/api/players/[ID]/matches/?api_key=[KEY]&date=60
-                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+
+                    // It looks like key is not longer needed in the request
+                    //var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?api_key=" + key + "&date=" + days + "";//подготовка текста для отправки запроса
+                    var lastmatches = "https://api.opendota.com/api/players/" + teamPlayers[i].id + "/matches/?date=" + days;
                     var reslastmatches = httpGet(lastmatches);//отправка запроса на сервера и ответ
                     var textjson = JSON.parse(reslastmatches);
 
@@ -116,6 +120,7 @@
                     'team': team,
                     'name': player.name,
                     'id': player.id,
+                    'leaderboard_rank': player.leaderboard_rank,
                     'public_games': 0,
                     'public_wins': 0,
                     'ranked_games': 0,
@@ -145,6 +150,7 @@
 
                     if (jsontext[i].game_mode == "22") {//lobby_type равен 22(рранекед), увеличиваем счетчик ранкеда
 
+                        // TODO: it's needed to increment ranked games only for main players and exclude coaches and former players.
                         stats.ranked_games++;
                         if (jsontext[i].radiant_win && isradiant) {
 
@@ -199,7 +205,7 @@
 
 
                     newCell = newRow.insertCell(3);
-                    newText = document.createTextNode("<Raiting>");
+                    newText = document.createTextNode(teamStatsArray[i].leaderboard_rank ? teamStatsArray[i].leaderboard_rank : "unknown");
                     newCell.appendChild(newText);
 
                     //заполнение второй стрчоки статистики
@@ -244,6 +250,8 @@
                     tableRef.insertRow();
                     tableRef.insertRow();
                     tableRef.insertRow();
+
+
                 }
             }
 
@@ -274,7 +282,7 @@
 
                     // some players played the same number of games => so we can use them a reference point
                     // of players which statistic we can use to compare with other players in the team.
-                    if (goodValueIndex == -1 
+                    if (goodValueIndex == -1
                             || teamStatsArray[i].public_games != goodValues[goodValueIndex]) {
                         teamStatsArray[i].ignore_flag = 1;
                         console.log("The player " + teamStatsArray[i].name + " may corrupt team statistic");
@@ -286,34 +294,49 @@
             // @return index of the first dulpicate or -1 in there is no dupes
             function getFirstDupeIndex (arr) {
                 result = -1;
-                arr.forEach( (element, index) => 
+                arr.forEach( (element, index) =>
                     {
-                        if (element === 0) 
+                        if (element === 0)
                             return -1; // this is how we can skip elements in forEach
-                        if(arr.lastIndexOf(element) !== index) 
+                        if(arr.lastIndexOf(element) !== index)
                         {
                             result = index;
                             return index;
                         }
-                    } 
+                    }
 				)
                 return result;
             }
 
             function getTeamListText(teamStatsArray) {
-                text = "";
+                if (teamStatsArray.length == 0)
+                    return "<h3>Cannot find team info</h3>";
+                text = "<h3>Team: " + teamStatsArray[0].team + "</h3>"
+                text += "<br />";
                 for (var i = 0; i < teamStatsArray.length; i++) {
                     text += highlightText(teamStatsArray[i].name, teamStatsArray[i].ignore_flag) + "<br />";
                 }
                 return text;
             }
 
-            function getStatsSummary(team, teamStatsArray) {
+            function getTeamRating(team_id) {
+                var teamInfoUrl = "https://api.opendota.com/api/teams/" + team_id; // updated api url
+                var res = httpGet(teamInfoUrl);
+                var textjson = JSON.parse(res);
+                return {
+                    'rating': textjson.rating,
+                    'delta': textjson.delta,
+                };
+            }
+
+            function getStatsSummary(team, team_id, teamStatsArray) {
                 var statsSummary = {
                     'team': team,
                     'ranked_games': 0,
                     'public_games': 0,
                     'public_wins': 0,
+                    'rating' : 0,
+                    'delta' : 0,
                     'games_array': [], // for comparation the number of games played by avg and median
                 };
                 for (var i = 0; i < teamStatsArray.length; i++) {
@@ -324,14 +347,23 @@
                     statsSummary.public_wins += teamStatsArray[i].public_wins;
                     statsSummary.games_array.push(parseInt(teamStatsArray[i].ranked_games + teamStatsArray[i].public_games));
                 }
+
+                // get team rating and delta from /teams/<team_id> request
+                var teamRating = getTeamRating(team_id);
+                statsSummary.rating = teamRating.rating;
+                statsSummary.delta = teamRating.delta;
+
                 return statsSummary;
             }
 
             function CreateVersusTable(tableID, stats1, stats2) {
 
+                // TODO: add Team Rankings comparison
+                // the  /teams/<team_id> request returns the rating, wins, loses, and delta
+
                 let tableRef = document.getElementById(tableID);
                 //let header = tableRef.createTHead();
-                //let newRow = header.insertRow(0);  
+                //let newRow = header.insertRow(0);
                 let newRow = tableRef.insertRow(-1);
                 //заолняем нулевой стобец
                 let newCell = newRow.insertCell(0);
@@ -453,11 +485,78 @@
                     newCell.bgColor = colors[1]; // get first bg color if it's relevant
                 newCell.appendChild(newText);
 
+                // TODO: add Team Rankings comparison
+                // highlight raiting difference. I guess 100 points difference is significant. 100 Point Difference: ~64% vs. ~36%.
+                colors = getVersusColors(stats1.rating, stats2.rating, 100);
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Elo Rating: ");
+                newCell.appendChild(newText);
+                //заполняем первый стобец
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(stats1.rating);
+                if (colors)
+                    newCell.bgColor = colors[0]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+                //заполняем второй стобец
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(stats2.rating);
+                if (colors)
+                    newCell.bgColor = colors[1]; // get first bg color if it's relevant
+                newCell.appendChild(newText);
+
+                // Show Elo rating delta.
+                // If it's more than 15 then the team is in the PRIME mode. If it's less than -15 then the team is in the RUINERS mode.
+                newRow = tableRef.insertRow(-1);
+                newCell = newRow.insertCell(0);
+                newText = document.createTextNode("Prime mode: ");
+                newCell.appendChild(newText);
+
+                var primeText1 = "unknown";
+                if (stats1.delta >= 15) {
+                    primeText1 = "PRIME (+" + stats1.delta.toFixed(1) + ")";
+                }
+                else if (stats1.delta <= -15) {
+                    primeText1 = "RUINERS (" + stats1.delta.toFixed(1) + ")";
+                }
+                else {
+                    if (stats1.delta)
+                        primeText1 = "NORMAL (+" + stats1.delta.toFixed(1) + ")";
+                }
+
+                newCell = newRow.insertCell(1);
+                newText = document.createTextNode(primeText1);
+                if (stats1.delta >= 15)
+                    newCell.bgColor = "lightgreen";
+                else if (stats1.delta <= -15)
+                    newCell.bgColor = "lightsalmon";
+                newCell.appendChild(newText);
+
+                var primeText2 = "unknown";
+                if (stats2.delta >= 15) {
+                    primeText2 = "PRIME (+" + stats2.delta.toFixed(1) + ")";
+                }
+                else if (stats2.delta <= -15) {
+                    primeText2 = "RUINERS (" + stats2.delta.toFixed(1) + ")";
+                }
+                else {
+                    if (stats2.delta)
+                        primeText2 = "NORMAL (+" + stats2.delta.toFixed(1) + ")";
+                }
+
+                newCell = newRow.insertCell(2);
+                newText = document.createTextNode(primeText2);
+                if (stats2.delta >= 15)
+                    newCell.bgColor = "lightgreen";
+                else if (stats2.delta <= -15)
+                    newCell.bgColor = "lightsalmon";
+                newCell.appendChild(newText);
+
 
             }
 
-            // get background colors for versus table. 
-            //Если разница в играх у первой и второй команды велика, 
+            // get background colors for versus table.
+            //Если разница в играх у первой и второй команды велика,
             //то ячейку красим в зеленый цвет, а лузера в красный
             // mindiff - минимальная разница в единицах, для подсветки, например 10 игр (значение по умолчанию 10)
             // minPercentage - минимальная разница в процентах для подстветки, например 1.3 = это 30 процентов (значение по умолчанию 30%),
@@ -470,9 +569,9 @@
                     return null;// compare numbers if they are bigger than mindif.
                 }
 
-                let delta = Math.abs(value1 - value2);
-                let BiggerValue = value1;
-                let SmallerValue = value2;
+                let delta = Math.abs(parseFloat(value1) - parseFloat(value2));
+                let BiggerValue = parseFloat(value1);
+                let SmallerValue = parseFloat(value2);
                 if (value1 > value2) // hit with bigger and smaller.
                 {
                     result = ["lightgreen", "lightsalmon"];
@@ -496,7 +595,7 @@
                     return null;
 
             }
-			
+
 
             //Вычесляем сред.ариф. для массива "nums"
             function average(nums) {
@@ -516,15 +615,15 @@
                 if (values.length === 0) return 0;//Если игр не было(пустой массив) то мы считаем что игр было сыгранно 0 по медиане
 
                 values.sort(function (a, b) {
-                    return a - b;//Сортируем по возврастанию  
+                    return a - b;//Сортируем по возврастанию
                 });
 
-                var half = Math.floor(values.length / 2);//узнаем где середина отсортированого массива 
+                var half = Math.floor(values.length / 2);//узнаем где середина отсортированого массива
 
                 if (values.length % 2)
-                    return values[half];//Если попали в середину, то выводим  полученый элемент                                                                    
+                    return values[half];//Если попали в середину, то выводим  полученый элемент
 
-                return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов                    
+                return (values[half - 1] + values[half]) / 2.0;//если не попали в середину, выводим сред, ариф. двух ближних к середине элементов
             }
 
             function highlightText(text, ignoreFlag) {
@@ -552,10 +651,10 @@
     <section class="TeamSelect">
 
         <label for="team1">Team #1:</label>
-        <input type="text" name="team1" id="team1" value="Mind Games" required>
+        <input type="text" name="team1" id="team1" value="Nigma Galaxy" required>
 
         <label for="team2">Team #2:</label>
-        <input type="text" name="team2" id="team2" value="Ravens" required>
+        <input type="text" name="team2" id="team2" value="Tundra" required>
 
         <label for="lastDays">Days to check:</label>
         <input type="number" name="lastDays" id="lastDays" step="1" value="22" class="lastDays" min="1">

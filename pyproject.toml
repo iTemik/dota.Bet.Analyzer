@@ -1,0 +1,11 @@
+[tool.black]
+line-length = 120
+target-version = ["py314"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "F", "W", "I", "B", "C", "RUF"]
+# you can add ignore or extend-select based on project preference
