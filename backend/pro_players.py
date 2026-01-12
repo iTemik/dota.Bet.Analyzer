@@ -40,7 +40,7 @@ def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
 
         return data
 
-    except (requests.RequestException, Exception):
+    except requests.RequestException:
         return None
 
 
