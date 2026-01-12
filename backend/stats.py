@@ -5,19 +5,7 @@ from typing import List, Optional
 import requests
 from pydantic import BaseModel, Field
 
-from backend.pro_players import get_players_by_team
-
-
-class Player(BaseModel):
-    """Represents a Dota 2 player.
-
-    Attributes:
-        name: Player name
-        id: Unique player ID
-    """
-
-    name: str
-    id: int
+from backend.pro_players import Player, get_players_by_team
 
 
 class TeamStats(BaseModel):
@@ -48,6 +36,28 @@ class TeamStats(BaseModel):
     error_message: Optional[str] = None
 
 
+class MatchStats(BaseModel):
+    """Statistics for a single Dota 2 match.
+
+    Attributes:
+        match_id: Unique match identifier
+        player_slot: Player slot number (0-127)
+        radiant_win: Whether the radiant team won
+        game_mode: Game mode ID
+        lobby_type: Lobby type ID
+        hero_id: Hero ID played in the match
+        average_rank: Average rank tier of the match
+    """
+
+    match_id: int
+    player_slot: int
+    radiant_win: bool
+    game_mode: int
+    lobby_type: int
+    hero_id: int
+    average_rank: Optional[int] = None
+
+
 class StatsResponse(BaseModel):
     """Response containing statistics for multiple teams.
 
@@ -56,6 +66,24 @@ class StatsResponse(BaseModel):
     """
 
     teams: List[TeamStats]
+
+
+class MatchesSummary(BaseModel):
+    """Summary statistics for a collection of matches.
+
+    Attributes:
+        rating_matches: TODO - calculation to be implemented
+        tournament_matches: Number of matches in the dataset
+        matches_median: TODO - calculation to be implemented
+        matches_avg: TODO - calculation to be implemented
+        win_percentage: TODO - calculation to be implemented
+    """
+
+    rating_matches: Optional[float] = None
+    tournament_matches: int
+    matches_median: Optional[float] = None
+    matches_avg: Optional[float] = None
+    win_percentage: Optional[float] = None
 
 
 class StatisticsError(Exception):
@@ -90,7 +118,7 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
         return None, ("JSON_DECODE_ERROR", f"Invalid JSON response: {exc}")
 
 
-def _fetch_team_info(
+def _fetch_team_info_from_explorer(
     team: str,
 ) -> tuple[Optional[tuple[int, str, str, float | None, float | None]], Optional[tuple[str, str]]]:
     """Fetch team info including rating and delta from OpenDota explorer API.
@@ -126,19 +154,24 @@ def _fetch_team_info(
         return None, ("RESPONSE_PARSE_ERROR", f"Malformed response: {exc}")
 
 
-def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, str]]]:
+def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, str]]]:
     """Fetch team statistics from OpenDota teams API.
 
     Args:
         team_id: Team ID to fetch statistics for
 
     Returns:
-        Tuple of (stats_data, error) where:
-        - stats_data is dict with team stats (None if error)
+        Tuple of (data, error) where:
+        - data is the team information (None if error or not available)
         - error is (error_code, error_message) tuple (None if success)
     """
-    team_stats_url = f"https://api.opendota.com/api/teams/{team_id}"
-    return _safe_get_json(team_stats_url)
+    team_info_url = f"https://api.opendota.com/api/teams/{team_id}"
+    data, error = _safe_get_json(team_info_url)
+
+    if error or data is None:
+        return None, error
+
+    return data, None
 
 
 # Implement compute_statistics here for testability and reuse
@@ -187,16 +220,23 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
 
         try:
             # Fetch team info from explorer API (now includes rating and delta)
-            team_info, error = _fetch_team_info(team)
+            team_info1, error = _fetch_team_info_from_explorer(team)
             if error:
                 error_code, error_message = error
                 result.append(TeamStats(team=team, error_code=error_code, error_message=error_message))
                 continue
 
-            if team_info is None:
+            if team_info1 is None:
                 continue
 
-            team_id, team_name, tag, rating, delta = team_info
+            team_id, team_name, tag, rating, delta = team_info1
+            players = get_players_by_team(team_id=team_id)
+
+            # Fetch team logo URL
+            team_info2, error = _fetch_team_info(team_id)
+            if error:
+                error_code, error_message = error
+                result.append(TeamStats(team=team, error_code=error_code, error_message=error_message))
 
             stats = TeamStats(
                 team_id=team_id,
@@ -204,8 +244,8 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
                 tag=tag,
                 rating=rating,
                 delta=delta,
-                logo_url=None,  # Will need separate query if logo_url needed
-                players=get_players_by_team(team_id=team_id),
+                logo_url=team_info2.get("logo_url") if team_info2 else None,
+                players=players,
                 other_players=[],
             )
             result.append(stats)
@@ -221,3 +261,78 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             )
 
     return StatsResponse(teams=result)
+
+
+def get_matches(account_id: int, days: int = 90) -> list[MatchStats]:
+    """Fetch matches for a player from OpenDota API.
+
+    Args:
+        account_id: Player account ID
+        days: Number of days of match history to fetch (default 90)
+
+    Returns:
+        List of MatchStats objects representing the player's recent matches
+
+    Raises:
+        ValueError: If account_id is invalid
+        requests.RequestException: If API request fails
+    """
+    if not isinstance(account_id, int) or account_id < 0:
+        raise ValueError("account_id must be a non-negative integer")
+
+    url = f"https://api.opendota.com/api/players/{account_id}/matches?date={days}"
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        try:
+            data = response.json()
+        except (ValueError, requests.JSONDecodeError) as exc:
+            raise requests.RequestException(f"Failed to fetch matches for account {account_id}: Invalid JSON - {exc}")
+
+        if not isinstance(data, list):
+            return []
+
+        matches = []
+        for match_data in data:
+            try:
+                match = MatchStats(
+                    match_id=match_data.get("match_id"),
+                    player_slot=match_data.get("player_slot"),
+                    radiant_win=match_data.get("radiant_win"),
+                    game_mode=match_data.get("game_mode"),
+                    lobby_type=match_data.get("lobby_type"),
+                    hero_id=match_data.get("hero_id"),
+                    average_rank=match_data.get("average_rank"),
+                )
+                matches.append(match)
+            except Exception:
+                # Skip malformed match entries
+                continue
+
+        return matches
+
+    except requests.RequestException as exc:
+        raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}")
+
+
+def get_team_matches_summary(matches: list[MatchStats]) -> MatchesSummary:
+    """Generate summary statistics from a list of matches.
+
+    Args:
+        matches: List of MatchStats objects to summarize
+
+    Returns:
+        MatchesSummary containing:
+        - tournament_matches: Count of matches
+        - rating_matches, matches_median, matches_avg, win_percentage: TODO calculations
+    """
+    return MatchesSummary(
+        rating_matches=None,  # TODO: Implement calculation
+        tournament_matches=len(matches),
+        matches_median=None,  # TODO: Implement calculation
+        matches_avg=None,  # TODO: Implement calculation
+        win_percentage=None,  # TODO: Implement calculation
+    )
+

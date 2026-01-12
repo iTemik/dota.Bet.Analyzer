@@ -24,7 +24,14 @@ The web application provides analytic services and highlights about the Dota 2 t
    - Download from https://nodejs.org/ (LTS version recommended).
    - Verify: `npm --version` and `node --version`.
 
-4. Install Visual Studio Code (optional but recommended)
+4. Install Docker (for running Redis)
+   - **Windows/macOS:** Download [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+     - After install, restart your computer
+     - Verify: `docker --version` in terminal
+   - **Linux:** `sudo apt install docker.io` and enable with `sudo systemctl start docker`
+   - **Alternative (no Docker):** Install Redis locally from https://redis.io/download
+
+5. Install Visual Studio Code (optional but recommended)
    - Download from https://code.visualstudio.com/
 
 ---
@@ -42,7 +49,50 @@ Tip: install the extensions above from the Extensions Marketplace in VS Code.
 
 ---
 
-## 🧰 Development tools & pre-commit
+## 🐳 Docker & Redis Setup
+
+### Quick Start (Docker)
+
+**Windows/macOS:**
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. Start Docker Desktop (or `sudo systemctl start docker` on Linux)
+3. Run Redis:
+```bash
+docker run -d --name redis-dota -p 6379:6379 redis:latest
+```
+
+**Verify Redis is running:**
+```bash
+docker ps  # Should list the redis-dota container
+```
+
+**Stop Redis:**
+```bash
+docker stop redis-dota
+docker rm redis-dota
+```
+
+### Alternative: Install Redis Locally
+
+**Windows (via Chocolatey):**
+```powershell
+choco install redis
+redis-server
+```
+
+**macOS:**
+```bash
+brew install redis
+redis-server
+```
+
+**Linux:**
+```bash
+sudo apt install redis-server
+redis-server
+```
+
+---
 
 Enable and run pre-commit hooks (once per machine):
 
@@ -109,18 +159,30 @@ pip install -r requirements.txt
 
 ## 🧪 Running Tests
 
-> **TODO:** add info how to configure launch.json and launch options for running tests in VS Code
+Run the full test suite:
 
-Run the test suite using pytest:
-
+**Using npm (recommended - cross-platform):**
+```bash
+npm test
 ```
+
+This runs:
+- Backend tests: `pytest` (56 tests)
+- Frontend tests: `vitest` (19 tests)
+
+**Using pytest directly (backend only):**
+```bash
 python -m pytest -q
 ```
 
 If you only want a single test file:
-
-```
+```bash
 python -m pytest tests/test_schema_valid.py -q
+```
+
+**Using vitest (frontend only):**
+```bash
+cd frontend && npm test -- --run
 ```
 
 ---
@@ -180,17 +242,106 @@ See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed 
 
 ---
 
-## ▶️ Starting the backend (development)
+## ▶️ Starting All Services (One Click)
 
-You can run the backend directly or use Flask CLI with the application factory.
+### Option 1: PowerShell (Windows)
 
-Run directly (quick):
-
-```
-flask --app backend
+```powershell
+.\start-dev.ps1
 ```
 
-The server will be available at http://127.0.0.1:5000 by default.
+This launches:
+- **Backend** (Flask) → http://localhost:5000
+- **Frontend** (Vite + React) → http://localhost:5173
+- **Celery Worker** (for async tasks)
+- Checks for **Redis** connection
+
+### Option 2: npm/Node.js (Cross-platform) ⭐ Recommended
+
+Install frontend dependencies first:
+```bash
+npm install
+```
+
+**Windows PowerShell - First Time Setup:**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**macOS/Linux - First Time Setup:**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Then run all services:
+```bash
+npm run dev
+```
+
+> **Note:** npm scripts automatically use the virtual environment's Python (via `scripts/run-with-venv.js`). No manual venv activation needed for npm commands.
+
+This uses `concurrently` to start all services in the same terminal:
+- Backend (Flask) → http://localhost:5000
+- Frontend (Vite) → http://localhost:5173  
+- Celery Worker → processing async tasks
+
+### Option 3: Bash/Shell (macOS/Linux)
+
+```bash
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+---
+
+## ▶️ Starting Individual Services
+
+**Backend only (Flask):**
+```bash
+# Using npm:
+npm run backend
+
+# Or direct Flask:
+flask --app backend --debug run
+```
+
+**Frontend only (Vite):**
+```bash
+cd frontend && npm run dev
+```
+
+**Celery Worker:**
+```bash
+# Using npm:
+npm run celery
+
+# Or direct celery command:
+# Development (uses solo pool for Windows compatibility):
+python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo
+
+# Production (uses process pool):
+python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=prefork
+```
+
+**Redis** (required for Celery message broker):
+```bash
+# Using Docker (recommended):
+docker run -d -p 6379:6379 redis:latest
+
+# Or if installed locally:
+redis-server
+```
+
+The app uses Redis for:
+- Celery task queue (message broker)
+- Progress tracking (SSE updates)
+- Task result backend
 
 ---
 

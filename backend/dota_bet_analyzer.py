@@ -7,22 +7,34 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend.config import Config
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
-from backend.stats import compute_statistics
+from backend.stats import compute_statistics, get_matches
 
 bp = Blueprint("dota", __name__)
 
 # Initialize Celery without app-specific config; the app factory will update it
 celery = Celery(__name__)
 
+# Configure Celery to use Redis as message broker (development)
+# Redis connection: redis://localhost:6379/0
+celery.conf.update(
+    broker_url=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
+    result_backend=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
+)
+
 # Redis for progress storage
 redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
 
-
-@celery.task(bind=True)
-def heavy_calculation_task(self, task_id):
-    """Celery task for heavy calculation"""
-
-    def update_progress(step, message, progress, data=None):
+def update_progress(task_id, step, message, progress, data=None):
+    """Update task progress in Redis.
+    
+    Args:
+        task_id: Unique task identifier
+        step: Current step number
+        message: Progress message
+        progress: Progress percentage (0-100) or -1 for error
+        data: Additional data to store (optional)
+    """
+    try:
         progress_data = {
             "step": step,
             "message": message,
@@ -31,34 +43,126 @@ def heavy_calculation_task(self, task_id):
             "timestamp": time.time(),
         }
         redis_client.setex(f"progress:{task_id}", 3600, json.dumps(progress_data))  # Expire after 1 hour
+    except Exception as e:
+        # Log error but don't fail the task if Redis is unavailable
+        print(f"Warning: Failed to update progress for task {task_id}: {e}")
 
+@celery.task(bind=True)
+def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
+    """Celery task to fetch match statistics for multiple players.
+    
+    Args:
+        task_id: Unique task identifier for progress tracking
+        accounts: List of account IDs to fetch statistics for
+        days: Number of days of match history to fetch
+    """
     try:
-        # First update - almost instant
-        update_progress(1, "Initial processing complete", 10, {"initial_result": "Quick calculation done"})
+        steps: int = 2 + len(accounts)  # Initial + per-account + final
+        step_num: int = 0
 
-        # Simulate your heavy calculations
-        calculations = [
-            (2, "Processing data chunk 1...", 30, {"chunk1": "result1"}),
-            (3, "Processing data chunk 2...", 50, {"chunk2": "result2"}),
-            (4, "Finalizing calculations...", 75, {"chunk3": "result3"}),
-            (5, "Calculation complete!", 100, {"final": "all_results"}),
-        ]
+        update_progress(
+            task_id,
+            step_num,
+            f"Initializing match history fetch for {len(accounts)} players",
+            100 * (step_num / steps),
+        )
 
-        for step, message, progress, data in calculations:
-            # Your actual heavy calculation here
-            time.sleep(0.01)  # Short sleep for tests
-            update_progress(step, message, progress, data)
+        results = []
+        matches_stats = []
+        for account_id in accounts:
+            step_num += 1
+            try:
+                # Fetch match data for this account
+                players_statistics = get_matches(account_id=account_id, days=days)
+
+                # Convert MatchStats objects to dicts for JSON serialization
+                stats_data = [stat.model_dump() for stat in players_statistics]
+                matches_stats.append(stats_data)
+
+                results.append({
+                    "account_id": account_id,
+                    "match_count": len(stats_data),
+                    "matches": stats_data,
+                })
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Fetched {len(stats_data)} matches for account {account_id}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "match_count": len(stats_data)},
+                )
+            except Exception as e:
+                # Handle per-account errors gracefully
+                results.append({
+                    "account_id": account_id,
+                    "error": str(e),
+                })
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Error fetching data for account {account_id}: {e!s}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "error": str(e)},
+                )
+
+            time.sleep(0.01)  # Short sleep to prevent overwhelming the API
+
+        step_num += 1        # Final summary
+        summary = get_team_matches_summary(matches_stats)
+
+
+        successful = len([r for r in results if "error" not in r])
+        update_progress(
+            task_id,
+            steps,
+            f"Completed: fetched data for {successful}/{len(accounts)} players",
+            100,
+            {"results": results, "successful": successful, "total": len(accounts)},
+        )
 
     except Exception as exc:
-        update_progress(-1, f"Error: {exc!s}", -1, {"error": True})
+        update_progress(task_id, -1, f"Task error: {exc!s}", -1, {"error": True})
         raise
 
 
-@bp.route("/start-calculation")
-def start_calculation():
+@bp.route("/statistics/players", methods=["GET"])
+def players_statistics():
     """Start calculation and return task ID"""
-    task = heavy_calculation_task.delay(task_id := f"task_{int(time.time())}")
-    return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id})
+    try:
+        if request.method == "GET":
+            accounts = request.args.getlist("account_id")
+            days: int = int(request.args.get("days", 20))
+
+        if not accounts:
+            return jsonify({"error": "no account_ids provided"}), 400
+        if len(accounts) > 10:
+            return jsonify({"error": "too many players (account_ids) in the team (max 10)"}), 400
+
+        # Convert accounts to integers and filter valid ones
+        accounts_int = []
+        for a in accounts:
+            if isinstance(a, str):
+                a = a.strip()
+                try:
+                    accounts_int.append(int(a))
+                except ValueError:
+                    return jsonify({"error": f"Invalid account_id: {a}"}), 400
+
+        if not accounts_int:
+            return jsonify({"error": "no valid account_ids provided"}), 400
+
+        try:
+            task = players_statistics_task.delay(task_id := f"task_{int(time.time())}", accounts=accounts_int, days=days)
+            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id})
+        except Exception as e:
+            return jsonify({"error": f"Failed to start task: {e!s}"}), 500
+
+    except Exception as e:
+        return jsonify({"error": f"Invalid request: {e!s}"}), 400
+
+
 
 
 @bp.route("/stream-progress/<task_id>")
