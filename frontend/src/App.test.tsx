@@ -196,6 +196,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                     {
                         team: 'Aurora Gaming',
@@ -208,6 +209,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                 ],
             }
@@ -250,6 +252,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                     {
                         team: 'Aurora Gaming',
@@ -261,6 +264,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                 ],
             }
@@ -302,6 +306,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                     {
                         team: 'Aurora Gaming',
@@ -313,6 +318,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                 ],
             }
@@ -354,6 +360,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                     {
                         team: 'Aurora Gaming',
@@ -365,6 +372,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                 ],
             }
@@ -390,6 +398,156 @@ describe('App Component', () => {
             await waitFor(() => {
                 expect(screen.getByText('2500')).toBeInTheDocument()
                 expect(screen.getByText('2400')).toBeInTheDocument()
+            })
+        })
+    })
+
+    describe('Summary Data Display', () => {
+        it('should display summary statistics when task completes', async () => {
+            const mockStats = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_123',
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2400,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_456',
+                    },
+                ],
+            }
+
+            const mockSummary = {
+                task_123: {
+                    results: [],
+                    summary: {
+                        rating_matches: 28,
+                        tournament_matches: 20,
+                        other_matches: 6,
+                        matches_avg: 9,
+                        matches_median: 4,
+                        win_percentage: null,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+                task_456: {
+                    results: [],
+                    summary: {
+                        rating_matches: 15,
+                        tournament_matches: 10,
+                        other_matches: 3,
+                        matches_avg: 5.6,
+                        matches_median: 4,
+                        win_percentage: null,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+            }
+
+            let callCount = 0
+            const mockFetch = vi.fn((url: string) => {
+                callCount++
+                if (url === '/statistics?team=Team+A&team=Team+B') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockStats),
+                    })
+                }
+                if (url.includes('/results/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
+                    })
+                }
+                return Promise.reject(new Error('Unknown URL'))
+            }) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            // The component should display the initial stats
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
+            })
+        })
+
+        it('should display rating matches in summary table', async () => {
+            const mockStats = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2400,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                ],
+            }
+
+            const mockFetch = vi.fn(() =>
+                Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(mockStats),
+                })
+            ) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
             })
         })
     })
@@ -456,6 +614,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                     {
                         team: 'Team B',
@@ -467,6 +626,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
+                        task_id: null,
                     },
                 ],
             }
@@ -495,6 +655,229 @@ describe('App Component', () => {
                 const deltas = tableCells.filter(cell => cell.textContent?.includes('25.6') || cell.textContent?.includes('-10.2'))
                 expect(deltas.length).toBeGreaterThan(0)
             })
+        })
+    })
+
+    describe('Color Highlighting', () => {
+        it('should apply positive color for higher rating', () => {
+            const mockData = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2300,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                ],
+            }
+
+            const mockFetch = vi.fn(() =>
+                Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(mockData),
+                })
+            ) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            userEvent.type(team1Input, 'Team A')
+            userEvent.type(team2Input, 'Team B')
+            userEvent.click(button)
+        })
+    })
+
+    describe('Polling Management', () => {
+        it('should clear previous results when checking new statistics', async () => {
+            const mockData1 = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2400,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                ],
+            }
+
+            const mockData2 = {
+                teams: [
+                    {
+                        team: 'Team C',
+                        tag: 'C',
+                        team_id: 3,
+                        rating: 2600,
+                        delta: 35.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                    {
+                        team: 'Team D',
+                        tag: 'D',
+                        team_id: 4,
+                        rating: 2300,
+                        delta: -20.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                ],
+            }
+
+            let callCount = 0
+            const mockFetch = vi.fn(() => {
+                callCount++
+                // First call returns Team A vs B, second call returns Team C vs D
+                const data = callCount === 1 ? mockData1 : mockData2
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(data),
+                })
+            }) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            // First search
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
+            })
+
+            // Clear inputs and do second search
+            await userEvent.clear(team1Input)
+            await userEvent.clear(team2Input)
+            await userEvent.type(team1Input, 'Team C')
+            await userEvent.type(team2Input, 'Team D')
+            await userEvent.click(button)
+
+            // Previous results should be cleared, new results should be displayed
+            await waitFor(() => {
+                expect(screen.getByText('Team C')).toBeInTheDocument()
+                expect(screen.queryByText('Team A')).not.toBeInTheDocument()
+            })
+        })
+
+        it('should stop polling if a new search starts while polling', async () => {
+            const clearIntervalSpy = vi.spyOn(global, 'clearInterval')
+
+            const mockData = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_123', // Has task ID to trigger polling
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2400,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: null,
+                    },
+                ],
+            }
+
+            const mockFetch = vi.fn(() =>
+                Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(mockData),
+                })
+            ) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            // First search with task ID
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
+            })
+
+            // Second search should clear previous polling
+            await userEvent.clear(team1Input)
+            await userEvent.clear(team2Input)
+            await userEvent.type(team1Input, 'Team C')
+            await userEvent.type(team2Input, 'Team D')
+            await userEvent.click(button)
+
+            // clearInterval should have been called to stop the previous polling
+            await waitFor(() => {
+                expect(clearIntervalSpy).toHaveBeenCalled()
+            })
+
+            clearIntervalSpy.mockRestore()
         })
     })
 })

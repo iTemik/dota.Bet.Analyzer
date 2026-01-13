@@ -1,6 +1,6 @@
 """Tests for database initialization with app annotation."""
 
-from backend.dota_bet_analyzer import create_app
+from backend import create_app
 
 
 def test_app_teardown_registered():

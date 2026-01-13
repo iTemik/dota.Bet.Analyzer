@@ -39,7 +39,7 @@ function Start-InNewTerminal {
         [string]$Title,
         [string]$Command
     )
-    
+
     $processInfo = New-Object System.Diagnostics.ProcessStartInfo
     $processInfo.FileName = "powershell.exe"
     $processInfo.Arguments = "-NoExit -Command `"$Command`""

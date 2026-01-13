@@ -288,7 +288,7 @@ npm run dev
 
 This uses `concurrently` to start all services in the same terminal:
 - Backend (Flask) → http://localhost:5000
-- Frontend (Vite) → http://localhost:5173  
+- Frontend (Vite) → http://localhost:5173
 - Celery Worker → processing async tasks
 
 ### Option 3: Bash/Shell (macOS/Linux)

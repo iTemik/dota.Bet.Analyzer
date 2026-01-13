@@ -6,6 +6,19 @@ from typing import Any, Optional
 
 import requests
 from flask import current_app, g
+from pydantic import BaseModel
+
+
+class Player(BaseModel):
+    """Represents a Dota 2 player.
+
+    Attributes:
+        name: Player name
+        id: Unique player ID
+    """
+
+    name: str
+    id: int
 
 
 def get_d2ba_db():
@@ -40,7 +53,7 @@ def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
 
         return data
 
-    except requests.RequestException:
+    except Exception:
         return None
 
 

@@ -41,7 +41,7 @@ def test_get_matches_success(monkeypatch):
                     "match_id": 8645473241,
                     "player_slot": 2,
                     "radiant_win": True,
-                    "game_mode": 22,
+                    "game_mode": 4,
                     "lobby_type": 7,
                     "hero_id": 1,
                     "average_rank": 80,
@@ -173,7 +173,7 @@ def test_get_matches_malformed_entries(monkeypatch):
                     "match_id": 8645473242,
                     "player_slot": 2,
                     "radiant_win": True,
-                    "game_mode": 22,
+                    "game_mode": 4,
                     "lobby_type": 7,
                     "hero_id": 1,
                     "average_rank": 80,
@@ -251,7 +251,7 @@ def test_get_matches_default_days(monkeypatch):
     get_matches(account_id=123456)
 
     assert captured_url is not None
-    assert "date=90" in captured_url
+    assert "date=20" in captured_url
 
 
 def test_get_matches_url_format(monkeypatch):

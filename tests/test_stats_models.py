@@ -23,8 +23,33 @@ def test_compute_statistics_returns_model(monkeypatch):
             },
         )
 
+    # Mock the Celery task
+    class FakeTask:
+        id = "fake-task-id-123"
+
+    class MockPlayersStatisticsTask:
+        @staticmethod
+        def delay(**kwargs):
+            return FakeTask()
+
+    # Mock time.time() to return a fixed value
+    def fake_time():
+        return 1768287333.0
+
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr("backend.stats.get_players_by_team", lambda team_id: [Player(name="Alpha_Player1", id=101)])
+    monkeypatch.setattr(
+        "backend.stats._fetch_team_stats", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
+    )
+    monkeypatch.setattr("backend.stats.time.time", fake_time)
+    # Mock the import inside compute_statistics by patching dota_bet_analyzer module
+    import sys
+    from unittest.mock import MagicMock
+
+    mock_dota_bet = MagicMock()
+    mock_dota_bet.players_statistics_task = MockPlayersStatisticsTask()
+    sys.modules["backend.dota_bet_analyzer"] = mock_dota_bet
+    monkeypatch.setitem(sys.modules, "backend.dota_bet_analyzer", mock_dota_bet)
 
     res = compute_statistics(["A"])
     assert isinstance(res, StatsResponse)
@@ -35,9 +60,11 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.tag == "A"
     assert team.rating == 2500.5
     assert team.delta == -12.3
+    assert team.logo_url == "https://example.com/alpha_logo.png"
     assert len(team.players) == 1
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
+    assert team.task_id == "task_1768287333"  # Verify task_id is set with mocked time
     assert team.error_code is None
     assert team.error_message is None
 
