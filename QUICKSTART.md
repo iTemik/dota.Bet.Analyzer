@@ -32,13 +32,11 @@ This starts all three services in one terminal:
 
 ## 📊 Testing
 
+Runs all tests:
 ```bash
 npm test
 ```
 
-Runs all tests:
-- Backend: 56 tests ✅
-- Frontend: 19 tests ✅
 
 ## 🔧 Individual Services
 
