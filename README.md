@@ -167,8 +167,8 @@ npm test
 ```
 
 This runs:
-- Backend tests: `pytest` (56 tests)
-- Frontend tests: `vitest` (19 tests)
+- Backend tests: `pytest`
+- Frontend tests: `vitest`
 
 **Using pytest directly (backend only):**
 ```bash
@@ -345,6 +345,60 @@ The app uses Redis for:
 
 ---
 
+## 🔧 Backend (Flask + Python)
+
+The backend provides REST API endpoints for team statistics, match data, and player analytics.
+
+### Core Features
+
+#### Team Statistics (`/statistics`)
+- Compare two Dota 2 teams side-by-side
+- Returns team ratings, tags, IDs, and rating deltas
+- Processes match history data and calculates aggregate statistics
+- Supports both GET and POST requests with team names
+
+#### Player Statistics Task (`/statistics/players`)
+Async task for comprehensive player analysis:
+- **Match Fetching**: Retrieves match history for multiple players (up to 10)
+- **Player Rankings**: Fetches leaderboard rank for each player from OpenDota API
+- **Rank Analysis**:
+  - Calculates average player rank across the team
+  - Tracks players "Tysyachniki"  with not so high rank (>1000) who may negatively impact team performance
+- **Match Statistics**: Computes aggregate stats including:
+  - Win percentage across rating matches
+  - Tournament vs rating vs other match counts
+  - Average matches per player
+- **Progress Tracking**: Real-time progress updates via Redis and SSE streaming
+- **Async Processing**: Uses Celery with Redis broker for background processing
+
+**Task Workflow:**
+1. Client calls `/statistics/players?account_id=123&account_id=456`
+2. Backend starts Celery task and returns task_id
+3. Frontend polls `/stream-progress/<task_id>` for real-time updates
+4. Task processes matches, fetches ranks, calculates statistics
+5. Results stored in Redis at `/results/<task_id>` when complete
+
+#### Pro Players Database (`/ProPlayers`)
+- Fetches professional Dota 2 players from OpenDota API
+- Stores player data in SQLite database for reference
+- Updates player information on demand
+
+### Backend Testing
+
+Comprehensive test suite with 76+ tests covering:
+- Team statistics calculation
+- Player rank fetching from OpenDota API
+- Match summary computation (win percentage, average rank, bad rank players)
+- API endpoint validation
+- Error handling and edge cases
+
+Run backend tests:
+```bash
+python -m pytest -q
+```
+
+---
+
 ## 🎨 Frontend (React + Vite + TypeScript)
 
 The frontend is a modern React application for displaying team statistics and comparisons.
@@ -362,11 +416,42 @@ npm test          # Run tests
 
 ### Features
 
-- **Team Statistics Form**: Compare two Dota 2 teams side-by-side
-- **Real-time Results**: Display team ratings, tags, IDs, and deltas
-- **Conditional Highlighting**: Color-coded backgrounds for performance indicators
-- **Team Logos**: Displays team logos from backend data
-- **Responsive Design**: Works on desktop and mobile
+#### Team Comparison Form
+- Input two team names for comparison
+- Form validation (both teams required)
+- Keyboard support (Enter to submit)
+- Auto-focus on first input field
+
+#### Statistics Display
+- **Team Metadata**: Tags, IDs, current ratings
+- **Rating Delta**: Last match rating change with color coding
+- **Match Analysis**:
+  - Win percentage across all matches
+  - Rating matches count
+  - Tournament matches count
+  - Other matches count
+  - Average matches per player
+- **Team Quality Metrics**:
+  - Average player rank (lower is better - inverted color logic)
+  - Bad rank players count (players with rank >1000, lower is better)
+
+#### Color Highlighting
+- **Green (Positive)**: Better performance (higher rating, higher win %, lower rank)
+- **Red (Negative)**: Worse performance (lower rating, lower win %, higher rank)
+- **Gray (Neutral)**: No difference or not applicable
+- **Inverse Logic**: Rank and bad player count use inverse colors (lower = positive)
+
+#### Real-time Polling
+- Automatically polls for task completion every 5 seconds
+- Displays progress updates to user
+- Fetches summary statistics once task completes
+- Handles task cancellation when new search starts
+- Timeout protection (5-minute maximum)
+
+#### Responsive Design
+- Works on desktop and mobile devices
+- Flexible table layout
+- Clean, readable statistics display
 
 ### Development
 
@@ -375,18 +460,34 @@ The development server includes a proxy for API requests:
 
 ### Testing
 
-Comprehensive test suite with 21 tests covering:
-- Component rendering
-- Input validation
-- API integration and error handling
-- Results display logic
-- Conditional styling
+Comprehensive test suite with 26 tests covering:
+- Component rendering and structure
+- Input validation (empty teams, whitespace handling)
+- API integration and error handling (HTTP errors, network failures)
+- Results display and data formatting
+- Summary statistics display (win percentage, player ranks, bad players)
+- Keyboard interaction (Enter to submit)
+- Color coding logic (positive/negative/inverse)
+- Polling behavior (progress updates, cancellation, timeout)
 
-Run tests:
+Run frontend tests:
 ```bash
 npm test          # Watch mode
 npm test -- --run # Single run
+cd frontend && npm test -- --run  # From subdirectory
 ```
+
+Test categories:
+- **Rendering**: 4 tests (DOM structure, autofocus)
+- **Input Validation**: 4 tests (empty fields, whitespace)
+- **API Integration**: 4 tests (fetch calls, loading states, error handling)
+- **Results Display**: 4 tests (statistics rendering, data formatting)
+- **Summary Display**: 2 tests (summary statistics, rating matches)
+- **Keyboard Input**: 2 tests (Enter key in form fields)
+- **Delta Display**: 1 test (decimal formatting)
+- **Color Highlighting**: 1 test (color logic for ratings)
+- **Team Quality Metrics**: 2 tests (avg rank, bad players display)
+- **Polling Management**: 2 tests (results clearing, polling cancellation)
 
 For more details, see [frontend/README.md](frontend/README.md) and [frontend/TEST_GUIDE.md](frontend/TEST_GUIDE.md)
 
