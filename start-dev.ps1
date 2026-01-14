@@ -21,12 +21,14 @@ Write-Host "Activating Python virtual environment..." -ForegroundColor Cyan
 # Check for Redis
 Write-Host ""
 Write-Host "Checking Redis..." -ForegroundColor Cyan
-try {
-    $redisRunning = $null
+try
+{
     Get-Process redis-server -ErrorAction Stop | Out-Null
-    Write-Host "✓ Redis is already running" -ForegroundColor Green
-} catch {
-    Write-Host "⚠ Redis is not running" -ForegroundColor Yellow
+    Write-Host "[OK] Redis is already running" -ForegroundColor Green
+}
+catch
+{
+    Write-Host "[WARN] Redis is not running" -ForegroundColor Yellow
     Write-Host "  To start Redis:"
     Write-Host "  - Option 1: redis-server (if installed locally)"
     Write-Host "  - Option 2: docker run -d -p 6379:6379 redis:latest"
@@ -34,7 +36,8 @@ try {
 }
 
 # Function to open new terminal and run command
-function Start-InNewTerminal {
+function Start-InNewTerminal
+{
     param(
         [string]$Title,
         [string]$Command
@@ -46,7 +49,7 @@ function Start-InNewTerminal {
     $processInfo.UseShellExecute = $true
     $processInfo.CreateNoWindow = $false
     [System.Diagnostics.Process]::Start($processInfo) | Out-Null
-    Write-Host "✓ Started: $Title" -ForegroundColor Green
+    Write-Host "[OK] Started: $Title" -ForegroundColor Green
 }
 
 # Start services in separate terminal windows
@@ -55,15 +58,15 @@ Write-Host "Starting services..." -ForegroundColor Cyan
 Write-Host ""
 
 # Backend
-$backendCmd = "cd `"$scriptDir`" && .\.venv\Scripts\Activate.ps1 && flask --app backend --debug run --port=5000"
+$backendCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; flask --app backend --debug run --port=5000"
 Start-InNewTerminal "Backend (http://localhost:5000)" $backendCmd
 
 # Celery Worker
-$celeryCmd = "cd `"$scriptDir`" && .\.venv\Scripts\Activate.ps1 && python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo"
+$celeryCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo"
 Start-InNewTerminal "Celery Worker" $celeryCmd
 
 # Frontend
-$frontendCmd = "cd `"$scriptDir\frontend`" && npm run dev"
+$frontendCmd = "cd `"$scriptDir\frontend`"; npm run dev"
 Start-InNewTerminal "Frontend (http://localhost:5173)" $frontendCmd
 
 Write-Host ""

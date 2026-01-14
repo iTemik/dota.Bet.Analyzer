@@ -42,6 +42,7 @@ function App() {
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [rawResponse, setRawResponse] = useState<Record<string, unknown> | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const currentSearchIdRef = useRef<number>(0)
 
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
@@ -49,18 +50,22 @@ function App() {
       return
     }
 
+    // Increment search ID to mark this as a new search
+    currentSearchIdRef.current += 1
+    const thisSearchId = currentSearchIdRef.current
+
     // Stop any existing polling
     if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
+      clearInterval(pollIntervalRef.curent)
       pollIntervalRef.current = null
     }
 
     setLoading(true)
     setError(null)
+    setStatistics(null)
     setSummaryData(null)
     setProgress(null)
     setRawResponse(null)
-    setStatistics(null)
 
     try {
       const params = new URLSearchParams()
@@ -74,6 +79,10 @@ function App() {
       }
 
       const data = await response.json()
+
+      // Reset summary data when new statistics are loaded
+      // This ensures old data doesn't persist between searches
+      setSummaryData(null)
       setStatistics(data)
       //console.log('Statistics loaded:', data)
 
@@ -86,7 +95,7 @@ function App() {
       if (taskIds.length > 0) {
         //console.log('Starting polling for task IDs:', taskIds)
         // Poll progress for all tasks
-        await pollTasksProgress(taskIds)
+        await pollTasksProgress(taskIds, thisSearchId)
       } else {
         //console.log('No task IDs, loading completed')
         setLoading(false)
@@ -94,17 +103,27 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setStatistics(null)
+      setSummaryData(null)
       setLoading(false)
     }
   }
 
-  const pollTasksProgress = async (taskIds: (string | undefined)[]) => {
+  const pollTasksProgress = async (taskIds: (string | undefined)[], searchId: number) => {
     const MAX_POLLING_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
     const POLL_INTERVAL = 5 * 1000 // 5 seconds in milliseconds
     const startTime = Date.now()
 
     pollIntervalRef.current = setInterval(async () => {
       try {
+        // Skip processing if a new search has started
+        if (currentSearchIdRef.current !== searchId) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          return
+        }
+
         const elapsedTime = Date.now() - startTime
 
         // Check if polling timeout exceeded
@@ -253,17 +272,6 @@ function App() {
 
             //console.log('All results prepared, setting summary data:', detailedResults)
             setSummaryData(detailedResults)
-
-            // Clear task_ids from statistics to prevent re-polling old tasks
-            if (statistics) {
-              setStatistics({
-                ...statistics,
-                teams: statistics.teams.map(team => ({
-                  ...team,
-                  task_id: null
-                }))
-              })
-            }
 
             // Debug log to see the data structure
             //console.log('Summary data received:', detailedResults)
