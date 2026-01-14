@@ -75,16 +75,20 @@ function App() {
 
       const data = await response.json()
       setStatistics(data)
+      //console.log('Statistics loaded:', data)
 
       // Check if any team has a task_id (ongoing background task)
       const taskIds = data.teams
         .filter((team: TeamData) => team.task_id)
         .map((team: TeamData) => team.task_id)
 
+      //console.log('Task IDs found:', taskIds)
       if (taskIds.length > 0) {
+        //console.log('Starting polling for task IDs:', taskIds)
         // Poll progress for all tasks
         await pollTasksProgress(taskIds)
       } else {
+        //console.log('No task IDs, loading completed')
         setLoading(false)
       }
     } catch (err) {
@@ -121,7 +125,7 @@ function App() {
           if (!taskId) continue
 
           const progressUrl = `/stream-progress/${taskId}`
-          console.log(`Fetching progress from: ${progressUrl}`)
+          //console.log(`Fetching progress from: ${progressUrl}`)
           const progressResponse = await fetch(progressUrl)
           if (!progressResponse.ok) {
             setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
@@ -221,6 +225,7 @@ function App() {
 
         // If all tasks are complete, fetch detailed results
         if (allCompleted && Object.keys(summaries).length > 0) {
+          //console.log('All tasks completed, fetching detailed results')
           setLoading(false)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
@@ -234,16 +239,19 @@ function App() {
             for (const taskId of taskIds) {
               if (!taskId) continue
 
+              //console.log(`Fetching results for task ${taskId}`)
               const resultsResponse = await fetch(`/results/${taskId}`)
               if (resultsResponse.ok) {
                 const resultsData = await resultsResponse.json()
                 detailedResults[taskId] = resultsData
+                //console.log(`Results received for task ${taskId}:`, resultsData)
               } else {
                 console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
                 detailedResults[taskId] = summaries[taskId]
               }
             }
 
+            //console.log('All results prepared, setting summary data:', detailedResults)
             setSummaryData(detailedResults)
 
             // Clear task_ids from statistics to prevent re-polling old tasks
@@ -258,7 +266,7 @@ function App() {
             }
 
             // Debug log to see the data structure
-            console.log('Summary data received:', detailedResults)
+            //console.log('Summary data received:', detailedResults)
           } catch (err) {
             console.error('Error fetching detailed results:', err)
             // Fall back to summary data if results fetch fails
@@ -288,13 +296,23 @@ function App() {
     rating1: number | null | undefined,
     rating2: number | null | undefined
   ): [string, string] => {
-    if (!rating1 || !rating2) return ['transparent', 'transparent']
+    //console.log(`getRatingBackgroundColors comparison: rating1=${rating1}, rating2=${rating2}`)
+    if (!rating1 || !rating2) {
+      //console.log('  -> One or both ratings are null/undefined, returning transparent')
+      return ['transparent', 'transparent']
+    }
     const diff = Math.abs(rating1 - rating2)
-    if (diff <= 100) return ['transparent', 'transparent']
+    //console.log(`  -> Difference: ${diff}`)
+    if (diff <= 100) {
+      //console.log(`  -> Difference <= 100, returning transparent`)
+      return ['transparent', 'transparent']
+    }
 
     if (rating1 > rating2) {
+      //console.log(`  -> rating1 > rating2, returning [POSITIVE, NEGATIVE]`)
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
+      //console.log(`  -> rating1 <= rating2, returning [NEGATIVE, POSITIVE]`)
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
   }
@@ -303,10 +321,39 @@ function App() {
     const num1 = typeof value1 === 'number' ? value1 : null
     const num2 = typeof value2 === 'number' ? value2 : null
 
-    if (num1 === null || num2 === null) return ['transparent', 'transparent']
-    if (num1 === num2) return ['transparent', 'transparent']
+    //console.log(`getSummaryValueColors: value1=${value1} (num1=${num1}), value2=${value2} (num2=${num2})`)
+
+    if (num1 === null || num2 === null) {
+      //console.log('  -> One or both values are null/not numeric, returning transparent')
+      return ['transparent', 'transparent']
+    }
+    if (num1 === num2) {
+      //console.log(`  -> Values are equal (${num1} === ${num2}), returning transparent`)
+      return ['transparent', 'transparent']
+    }
 
     if (num1 > num2) {
+      //console.log(`  -> num1 (${num1}) > num2 (${num2}), returning [POSITIVE, NEGATIVE]`)
+      return [COLOR_POSITIVE, COLOR_NEGATIVE]
+    } else {
+      //console.log(`  -> num1 (${num1}) <= num2 (${num2}), returning [NEGATIVE, POSITIVE]`)
+      return [COLOR_NEGATIVE, COLOR_POSITIVE]
+    }
+  }
+
+  const getInverseSummaryValueColors = (value1: unknown, value2: unknown): [string, string] => {
+    const num1 = typeof value1 === 'number' ? value1 : null
+    const num2 = typeof value2 === 'number' ? value2 : null
+
+    if (num1 === null || num2 === null) {
+      return ['transparent', 'transparent']
+    }
+    if (num1 === num2) {
+      return ['transparent', 'transparent']
+    }
+
+    // Inverse logic: lower values are positive, higher values are negative
+    if (num1 < num2) {
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
@@ -314,13 +361,19 @@ function App() {
   }
 
   const getSummaryForTeam = (taskId: string | null | undefined) => {
-    if (!taskId || !summaryData) return null
+    //console.log(`getSummaryForTeam called with taskId: ${taskId}`)
+    if (!taskId || !summaryData) {
+      //console.log(`  -> taskId or summaryData is falsy, returning null`)
+      return null
+    }
 
     const data = summaryData[taskId]
     if (!data) {
-      console.warn(`No summary data found for taskId: ${taskId}`)
+      console.warn(`No summary data found for taskId: ${taskId}, available keys: ${Object.keys(summaryData).join(', ')}`)
       return null
     }
+
+    //console.log(`Found data for taskId ${taskId}:`, data)
 
     // Handle different possible data structures
     if (typeof data === 'object') {
@@ -328,13 +381,15 @@ function App() {
       const obj = data as Record<string, unknown>
       if (obj.summary && typeof obj.summary === 'object') {
         const summary = obj.summary as Record<string, unknown>
-        console.log(`Summary for ${taskId}:`, summary)
+        //console.log(`Returning summary.summary for ${taskId}:`, summary)
         return summary
       }
       if (obj.data && typeof obj.data === 'object') {
+        //console.log(`Returning data.data for ${taskId}:`, obj.data)
         return obj.data as Record<string, unknown>
       }
       // Otherwise assume it's the summary object directly
+      //console.log(`Returning data directly for ${taskId}:`, obj)
       return obj as Record<string, unknown>
     }
 
@@ -470,6 +525,33 @@ function App() {
                     </td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches)[1] }}>
                       {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches ?? '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Win Percentage</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage as number).toFixed(1) + '%' : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage as number).toFixed(1) + '%' : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Average Player Rank</td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank as number).toFixed(0) : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank as number).toFixed(0) : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Bad Rank Players</td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players ?? '-'}
+                    </td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players ?? '-'}
                     </td>
                   </tr>
                   <tr>

@@ -99,6 +99,8 @@ class MatchesSummary(BaseModel):
     matches_median: Optional[float] = None
     matches_avg: Optional[float] = None
     win_percentage: Optional[float] = None
+    avg_rank: Optional[float] = None
+    bad_rank_players: Optional[int] = None
 
 
 class StatisticsError(Exception):
@@ -368,6 +370,39 @@ def get_matches(account_id: int, days: int = 20) -> list[MatchStats]:
         raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}") from exc
 
 
+def get_rank(account_id: int) -> Optional[int]:
+    """Fetch player's leaderboard rank from OpenDota API.
+
+    Args:
+        account_id: Player's account ID
+
+    Returns:
+        Leaderboard rank value (None if not found or error occurred)
+    """
+    url = f"https://api.opendota.com/api/players/{account_id}"
+    data, error = _safe_get_json(url)
+
+    if error:
+        error_code, error_message = error
+        logger.debug(f"Failed to fetch rank for account {account_id}: {error_code} - {error_message}")
+        return None
+
+    if data is None:
+        return None
+
+    rank = data.get("leaderboard_rank")
+
+    if rank is None:
+        logger.debug(f"No leaderboard_rank found for account {account_id}")
+        return None
+
+    try:
+        return int(rank) if rank else None
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid rank value for account {account_id}: {rank}")
+        return None
+
+
 def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> MatchesSummary:
     """Generate summary statistics from lists of matches per player.
 
@@ -387,6 +422,7 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
     other_matches = 0
     total_matches = 0
     player_match_counts = []
+    wins = 0
 
     # TODO: exclude coaches and strange players from the statistics calculation.
     # These players should not impact on average matches.
@@ -405,6 +441,9 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
             else:
                 other_matches += 1
 
+            if (match.player_slot < 128 and match.radiant_win) or (match.player_slot >= 128 and not match.radiant_win):
+                wins += 1
+
     # Calculate average matches per player
     num_players = len(matches_by_player)
     matches_avg = total_matches / num_players if num_players > 0 else 0.0
@@ -418,5 +457,5 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
         other_matches=other_matches,
         matches_median=matches_median,
         matches_avg=matches_avg,
-        win_percentage=None,  # TODO: Implement calculation
+        win_percentage=100 * wins / total_matches if total_matches > 0 else 0.0,
     )

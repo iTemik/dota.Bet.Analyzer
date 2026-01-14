@@ -18,6 +18,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 0.0
         assert result.matches_median == 0.0
+        assert result.win_percentage == 0.0  # no matches = 0%
 
     def test_single_player_all_rating_matches(self):
         """Test single player with all rating matches.
@@ -38,6 +39,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 4.0
         assert result.matches_median == 4.0
+        assert result.win_percentage == 75.0  # 3 wins out of 4 matches
 
     def test_single_player_all_tournament_matches(self):
         """Test single player with all tournament matches.
@@ -56,6 +58,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 2.0
         assert result.matches_median == 2.0
+        assert result.win_percentage == 50.0  # 1 win out of 2 matches
 
     def test_single_player_mixed_matches(self):
         """Test single player with mixed match types."""
@@ -77,6 +80,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 1
         assert result.matches_avg == 4.0
         assert result.matches_median == 4.0
+        assert result.win_percentage == 50.0  # 2 wins out of 4 matches
 
     def test_two_players_with_different_match_counts(self):
         """Test two players with different match counts (tests median calculation)."""
@@ -99,6 +103,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 4.0  # (5 + 3) / 2
         assert result.matches_median == 4.0  # median of [5, 3]
+        assert result.win_percentage == 62.5  # 5 wins out of 8 matches
 
     def test_three_players_median_odd_count(self):
         """Test three players for median calculation with odd number of counts."""
@@ -124,6 +129,7 @@ class TestGetTeamMatchesSummary:
 
         assert result.matches_avg == pytest.approx((2 + 5 + 3) / 3, rel=1e-6)  # ≈ 3.333
         assert result.matches_median == 3.0  # median of [2, 5, 3] is 3
+        assert result.win_percentage == 50.0  # 5 wins out of 10 matches
 
     def test_four_players_median_even_count(self):
         """Test four players for median calculation with even number of counts."""
@@ -154,6 +160,7 @@ class TestGetTeamMatchesSummary:
 
         assert result.matches_avg == 2.5  # (1 + 2 + 3 + 4) / 4
         assert result.matches_median == 2.5  # median of [1, 2, 3, 4] is (2 + 3) / 2
+        assert result.win_percentage == 40.0  # 4 wins out of 10 matches
 
     def test_players_with_empty_match_lists(self):
         """Test with players having empty match lists."""
@@ -179,6 +186,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == pytest.approx((2 + 0 + 3) / 3, rel=1e-6)  # ≈ 1.667
         assert result.matches_median == 2.0  # median of [2, 0, 3] is 2
+        assert result.win_percentage == 100.0  # 5 wins out of 5 matches (player1: 2 wins, player3: 3 wins)
 
     def test_match_categorization_accuracy(self):
         """Test that matches are correctly categorized by game_mode and lobby_type.
@@ -213,6 +221,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 3
         assert result.matches_avg == 7.0
         assert result.matches_median == 7.0
+        assert result.win_percentage == pytest.approx(71.43, rel=1e-2)  # 5 wins out of 7 matches
 
     def test_large_number_of_players(self):
         """Test with a large number of players."""
@@ -233,6 +242,7 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 5.5  # 55 / 10
         assert result.matches_median == 5.5  # median of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        assert result.win_percentage == pytest.approx(54.55, rel=1e-2)  # 30 wins out of 55
 
     def test_all_constants_in_use(self):
         """Test using all values from the constants."""
@@ -254,3 +264,4 @@ class TestGetTeamMatchesSummary:
         assert result.other_matches == 0
         assert result.matches_avg == 6.0
         assert result.matches_median == 6.0
+        assert result.win_percentage == pytest.approx(66.67, rel=1e-2)  # 4 wins out of 6 matches

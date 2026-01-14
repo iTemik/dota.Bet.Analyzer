@@ -8,7 +8,12 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
-from backend.stats import compute_statistics, get_matches, get_team_matches_summary
+from backend.stats import (
+    compute_statistics,
+    get_matches,
+    get_rank,
+    get_team_matches_summary,
+)
 
 # Setup logger
 logger = setup_logging(__name__)
@@ -79,7 +84,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
     """
     try:
         logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
-        steps: int = 2 + len(accounts)  # Initial + per-account + final
+        steps: int = 2 + 2 * len(accounts)  # Initial + per-account + final
         step_num: int = 0
 
         update_progress(
@@ -91,6 +96,9 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
 
         results = []
         matches_stats = []  # List of lists: each inner list is matches for one player
+        bad_rank_players: int = 0
+        players_avg_rank: float = 0.0
+        players_with_rank: int = 0
         for account_id in accounts:
             step_num += 1
             try:
@@ -117,6 +125,23 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                     100 * (step_num / steps),
                     {"account_id": account_id, "match_count": len(stats_data)},
                 )
+
+                player_rank = get_rank(account_id)
+                if player_rank is not None:
+                    players_with_rank += 1
+                    players_avg_rank += player_rank
+                    if player_rank > 1000:  # Tysyachniks ruins the games.
+                        bad_rank_players += 1
+                        logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Got Player rank {player_rank} for account {account_id}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "player_rank": player_rank},
+                )
+
             except Exception as e:
                 # Handle per-account errors gracefully
                 # TODO: rework, why do we need these results?
@@ -136,9 +161,11 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 )
 
             time.sleep(0.01)  # Short sleep to prevent overwhelming the API
-
+        players_avg_rank /= players_with_rank if players_with_rank else 1
         step_num += 1  # Final summary
         summary = get_team_matches_summary(matches_stats)  # This is heavy logic. To check.
+        summary.avg_rank = players_avg_rank
+        summary.bad_rank_players = bad_rank_players
 
         successful = len([r for r in results if "error" not in r])
 

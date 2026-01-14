@@ -709,6 +709,238 @@ describe('App Component', () => {
         })
     })
 
+    describe('Summary Statistics - Team Quality Metrics', () => {
+        it('should display average player rank in summary table', async () => {
+            const mockStats = {
+                teams: [
+                    {
+                        team: 'Team A',
+                        tag: 'A',
+                        team_id: 1,
+                        rating: 2500,
+                        delta: 25.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_avg_rank_1',
+                    },
+                    {
+                        team: 'Team B',
+                        tag: 'B',
+                        team_id: 2,
+                        rating: 2400,
+                        delta: -10.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_avg_rank_2',
+                    },
+                ],
+            }
+
+            const mockSummary = {
+                task_avg_rank_1: {
+                    results: [],
+                    summary: {
+                        rating_matches: 28,
+                        tournament_matches: 20,
+                        other_matches: 6,
+                        matches_avg: 9,
+                        matches_median: 4,
+                        win_percentage: 75.5,
+                        avg_rank: 3500,
+                        bad_rank_players: 2,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+                task_avg_rank_2: {
+                    results: [],
+                    summary: {
+                        rating_matches: 15,
+                        tournament_matches: 10,
+                        other_matches: 3,
+                        matches_avg: 5.6,
+                        matches_median: 4,
+                        win_percentage: 60.0,
+                        avg_rank: 4000,
+                        bad_rank_players: 3,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+            }
+
+            const mockFetch = vi.fn((url: string) => {
+                if (url.includes('/statistics')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockStats),
+                    })
+                }
+                if (url.includes('/stream-progress/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve(JSON.stringify({
+                            step: 1,
+                            message: 'Complete',
+                            progress: 100,
+                            data: mockSummary[taskId as keyof typeof mockSummary],
+                            timestamp: Date.now()
+                        })),
+                    })
+                }
+                if (url.includes('/results/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
+                    })
+                }
+                return Promise.reject(new Error('Unknown URL'))
+            }) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            // Wait for statistics to be displayed
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
+            })
+
+            // Wait for summary data to be polled and the rows to be rendered
+            await waitFor(() => {
+                expect(screen.getByText(/Average Player Rank/i)).toBeInTheDocument()
+            }, { timeout: 10000 })
+        }, 15000)
+
+        it('should display bad rank players count in summary table', async () => {
+            const mockStats = {
+                teams: [
+                    {
+                        team: 'Team C',
+                        tag: 'C',
+                        team_id: 3,
+                        rating: 2600,
+                        delta: 35.5,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_bad_rank_1',
+                    },
+                    {
+                        team: 'Team D',
+                        tag: 'D',
+                        team_id: 4,
+                        rating: 2300,
+                        delta: -20.3,
+                        error_code: null,
+                        error_message: null,
+                        players: [],
+                        other_players: [],
+                        task_id: 'task_bad_rank_2',
+                    },
+                ],
+            }
+
+            const mockSummary = {
+                task_bad_rank_1: {
+                    results: [],
+                    summary: {
+                        rating_matches: 32,
+                        tournament_matches: 22,
+                        other_matches: 7,
+                        matches_avg: 10.5,
+                        matches_median: 5,
+                        win_percentage: 72.0,
+                        avg_rank: 3200,
+                        bad_rank_players: 1,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+                task_bad_rank_2: {
+                    results: [],
+                    summary: {
+                        rating_matches: 18,
+                        tournament_matches: 12,
+                        other_matches: 4,
+                        matches_avg: 6.2,
+                        matches_median: 4,
+                        win_percentage: 55.5,
+                        avg_rank: 4200,
+                        bad_rank_players: 4,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+            }
+
+            const mockFetch = vi.fn((url: string) => {
+                if (url.includes('/statistics')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockStats),
+                    })
+                }
+                if (url.includes('/stream-progress/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve(JSON.stringify({
+                            step: 1,
+                            message: 'Complete',
+                            progress: 100,
+                            data: mockSummary[taskId as keyof typeof mockSummary],
+                            timestamp: Date.now()
+                        })),
+                    })
+                }
+                if (url.includes('/results/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
+                    })
+                }
+                return Promise.reject(new Error('Unknown URL'))
+            }) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team2Input = screen.getByLabelText(/Team #2/i)
+            const button = screen.getByRole('button', { name: /Check Statistics/i })
+
+            await userEvent.type(team1Input, 'Team C')
+            await userEvent.type(team2Input, 'Team D')
+            await userEvent.click(button)
+
+            // Wait for statistics to be displayed
+            await waitFor(() => {
+                expect(screen.getByText('Team C')).toBeInTheDocument()
+            })
+
+            // Wait for summary data to be polled and the rows to be rendered
+            await waitFor(() => {
+                expect(screen.getByText(/Bad Rank Players/i)).toBeInTheDocument()
+            }, { timeout: 10000 })
+        }, 15000)
+    })
+
     describe('Polling Management', () => {
         it('should clear previous results when checking new statistics', async () => {
             const mockData1 = {
