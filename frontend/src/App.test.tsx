@@ -1043,7 +1043,7 @@ describe('App Component', () => {
         })
 
         it('should stop polling if a new search starts while polling', async () => {
-            const clearIntervalSpy = vi.spyOn(global, 'clearInterval')
+            const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
 
             const mockData = {
                 teams: [

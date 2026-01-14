@@ -41,7 +41,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [rawResponse, setRawResponse] = useState<Record<string, unknown> | null>(null)
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
@@ -512,19 +512,19 @@ function App() {
                   <tr>
                     <td className="row-label">Rating Matches</td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches)[0] }}>
-                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches ?? '-')}
                     </td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches)[1] }}>
-                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches ?? '-')}
                     </td>
                   </tr>
                   <tr>
                     <td className="row-label">Tournament Matches</td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches)[0] }}>
-                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches ?? '-')}
                     </td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches)[1] }}>
-                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches ?? '-')}
                     </td>
                   </tr>
                   <tr>
@@ -548,24 +548,24 @@ function App() {
                   <tr>
                     <td className="row-label">Bad Rank Players</td>
                     <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[0] }}>
-                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players ?? '-')}
                     </td>
                     <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[1] }}>
-                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players ?? '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players ?? '-')}
                     </td>
                   </tr>
                   <tr>
                     <td className="row-label">Other Matches</td>
-                    <td>{getSummaryForTeam(statistics.teams?.[0]?.task_id)?.other_matches ?? '-'}</td>
-                    <td>{getSummaryForTeam(statistics.teams?.[1]?.task_id)?.other_matches ?? '-'}</td>
+                    <td>{String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.other_matches ?? '-')}</td>
+                    <td>{String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.other_matches ?? '-')}</td>
                   </tr>
                   <tr>
                     <td className="row-label">Average Matches Per Player</td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg)[0] }}>
-                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg as number).toFixed(2) : '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg as number).toFixed(2) : '-')}
                     </td>
                     <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg)[1] }}>
-                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg as number).toFixed(2) : '-'}
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg as number).toFixed(2) : '-')}
                     </td>
                   </tr>
                   <tr>

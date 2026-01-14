@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import scripts.generate_schema as gs
+import scripts.generate_schema as gs  # type: ignore[import-untyped]
 
 
 def test_generate_matches_existing_file():
