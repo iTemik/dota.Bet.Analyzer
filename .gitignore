@@ -17,4 +17,5 @@ logs/
 
 node_modules/
 frontend/build/
+frontend/.vite/
 .DS_Store
