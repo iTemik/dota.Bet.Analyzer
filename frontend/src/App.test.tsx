@@ -118,8 +118,8 @@ describe('App Component', () => {
                                 }),
                             100
                         )
-                    )
-            ) as any
+                    ) as any
+            )
 
             globalThis.fetch = mockFetch
 
@@ -511,7 +511,7 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
-                        task_id: null,
+                        task_id: 'task_rating_1',
                     },
                     {
                         team: 'Team B',
@@ -523,17 +523,73 @@ describe('App Component', () => {
                         error_message: null,
                         players: [],
                         other_players: [],
-                        task_id: null,
+                        task_id: 'task_rating_2',
                     },
                 ],
             }
 
-            const mockFetch = vi.fn(() =>
-                Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve(mockStats),
-                })
-            ) as any
+            const mockSummary = {
+                task_rating_1: {
+                    results: [],
+                    summary: {
+                        rating_matches: 28,
+                        tournament_matches: 20,
+                        other_matches: 6,
+                        matches_avg: 9,
+                        matches_median: 4,
+                        win_percentage: 65.0,
+                        avg_rank: 3500,
+                        bad_rank_players: 2,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+                task_rating_2: {
+                    results: [],
+                    summary: {
+                        rating_matches: 15,
+                        tournament_matches: 10,
+                        other_matches: 3,
+                        matches_avg: 5.6,
+                        matches_median: 4,
+                        win_percentage: 55.0,
+                        avg_rank: 4000,
+                        bad_rank_players: 3,
+                    },
+                    successful: 6,
+                    total: 6,
+                },
+            }
+
+            const mockFetch = vi.fn((url: string) => {
+                if (url.includes('/statistics')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockStats),
+                    })
+                }
+                if (url.includes('/stream-progress/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve(JSON.stringify({
+                            step: 1,
+                            message: 'Complete',
+                            progress: 100,
+                            data: mockSummary[taskId as keyof typeof mockSummary],
+                            timestamp: Date.now()
+                        })),
+                    })
+                }
+                if (url.includes('/results/')) {
+                    const taskId = url.split('/').pop()
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
+                    })
+                }
+                return Promise.reject(new Error('Unknown URL'))
+            }) as any
 
             globalThis.fetch = mockFetch
 
@@ -546,10 +602,18 @@ describe('App Component', () => {
             await userEvent.type(team2Input, 'Team B')
             await userEvent.click(button)
 
+            // Wait for statistics to be displayed
             await waitFor(() => {
                 expect(screen.getByText('Team A')).toBeInTheDocument()
             })
-        })
+
+            // Wait for summary data to be polled and rating matches to appear
+            await waitFor(() => {
+                expect(screen.getByText(/Rating Matches/i)).toBeInTheDocument()
+                expect(screen.getByText('28')).toBeInTheDocument()
+                expect(screen.getByText('15')).toBeInTheDocument()
+            }, { timeout: 10000 })
+        }, 15000)
     })
 
     describe('Keyboard Input', () => {
@@ -659,7 +723,7 @@ describe('App Component', () => {
     })
 
     describe('Color Highlighting', () => {
-        it('should apply positive color for higher rating', () => {
+        it('should apply positive color for higher rating', async () => {
             const mockData = {
                 teams: [
                     {
@@ -703,9 +767,34 @@ describe('App Component', () => {
             const team2Input = screen.getByLabelText(/Team #2/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
-            userEvent.type(team1Input, 'Team A')
-            userEvent.type(team2Input, 'Team B')
-            userEvent.click(button)
+            await userEvent.type(team1Input, 'Team A')
+            await userEvent.type(team2Input, 'Team B')
+            await userEvent.click(button)
+
+            // Wait for the table to render with statistics
+            await waitFor(() => {
+                expect(screen.getByText('Team A')).toBeInTheDocument()
+            })
+
+            // Now query for rating cells
+            const ratingCells = screen.getAllByRole('cell')
+            const teamARatingCell = ratingCells.find(cell =>
+                cell.parentElement?.children[0]?.textContent === 'Rating' &&
+                cell.textContent === '2500'
+            )
+
+            expect(teamARatingCell).toHaveStyle({
+                backgroundColor: '#6b9d7a' // COLOR_POSITIVE (higher rating)
+            })
+
+            const teamBRatingCell = ratingCells.find(cell =>
+                cell.parentElement?.children[0]?.textContent === 'Rating' &&
+                cell.textContent === '2300'
+            )
+
+            expect(teamBRatingCell).toHaveStyle({
+                backgroundColor: '#9d6b6b' // COLOR_NEGATIVE (lower rating)
+            })
         })
     })
 
