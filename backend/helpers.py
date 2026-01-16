@@ -3,14 +3,13 @@ from urllib import parse
 
 
 def prepare_sql_for_team_explore(team: str) -> str:
-    """Prepare parameterized SQL query to find team by name or tag with rating info.
+    """Prepare SQL query to find team by name or tag with rating info.
 
     Args:
         team: Team name or tag to search for
 
     Returns:
-        SQL query string using a parameter placeholder for the team value.
-        The caller is responsible for binding the actual team parameter.
+        SQL query string with the team value embedded and properly escaped.
 
     Raises:
         ValueError: If team name is invalid
@@ -18,14 +17,15 @@ def prepare_sql_for_team_explore(team: str) -> str:
     if not team or not isinstance(team, str):
         raise ValueError("Invalid team name")
 
-    # The team value must be supplied as a bound parameter when executing this query.
-    # This SQL uses $1 as the placeholder for the team name/tag.
+    # Escape single quotes and backslashes for SQL
+    escaped_team = team.replace("\\", "\\\\").replace("'", "''")
+
     sql = (
         "SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
         "FROM teams t "
         "LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
-        "WHERE t.name ILIKE $1 ESCAPE '\\' "
-        "OR t.tag ILIKE $1 ESCAPE '\\' "
+        f"WHERE t.name ILIKE '{escaped_team}' ESCAPE '\\' "
+        f"OR t.tag ILIKE '{escaped_team}' ESCAPE '\\' "
         "ORDER BY tr.rating DESC "
         "LIMIT 1"
     )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import './App.css'
 
 // Color constants - defined in App.css as CSS variables
@@ -12,6 +12,7 @@ interface TeamData {
   rating: null | number
   delta: number
   logo_url?: string
+  task_id?: string | null
   other_players: unknown[]
   players: unknown[]
   tag: string
@@ -23,12 +24,25 @@ interface Statistics {
   teams: TeamData[]
 }
 
+interface ProgressData {
+  step: number
+  message: string
+  progress: number
+  data: unknown
+  timestamp: number
+}
+
 function App() {
   const [team1, setTeam1] = useState('')
   const [team2, setTeam2] = useState('')
   const [statistics, setStatistics] = useState<Statistics | null>(null)
+  const [summaryData, setSummaryData] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<ProgressData | null>(null)
+  const [rawResponse, setRawResponse] = useState<Record<string, unknown> | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const currentSearchIdRef = useRef<number>(0)
 
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
@@ -36,8 +50,22 @@ function App() {
       return
     }
 
+    // Increment search ID to mark this as a new search
+    currentSearchIdRef.current += 1
+    const thisSearchId = currentSearchIdRef.current
+
+    // Stop any existing polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+
     setLoading(true)
     setError(null)
+    setStatistics(null)
+    setSummaryData(null)
+    setProgress(null)
+    setRawResponse(null)
 
     try {
       const params = new URLSearchParams()
@@ -51,13 +79,218 @@ function App() {
       }
 
       const data = await response.json()
+
+      // Reset summary data when new statistics are loaded
+      // This ensures old data doesn't persist between searches
+      setSummaryData(null)
       setStatistics(data)
+      //console.log('Statistics loaded:', data)
+
+      // Check if any team has a task_id (ongoing background task)
+      const taskIds = data.teams
+        .filter((team: TeamData) => team.task_id)
+        .map((team: TeamData) => team.task_id)
+
+      //console.log('Task IDs found:', taskIds)
+      if (taskIds.length > 0) {
+        //console.log('Starting polling for task IDs:', taskIds)
+        // Poll progress for all tasks
+        await pollTasksProgress(taskIds, thisSearchId)
+      } else {
+        //console.log('No task IDs, loading completed')
+        setLoading(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setStatistics(null)
-    } finally {
+      setSummaryData(null)
       setLoading(false)
     }
+  }
+
+  const pollTasksProgress = async (taskIds: (string | undefined)[], searchId: number) => {
+    const MAX_POLLING_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
+    const POLL_INTERVAL = 5 * 1000 // 5 seconds in milliseconds
+    const startTime = Date.now()
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        // Skip processing if a new search has started
+        if (currentSearchIdRef.current !== searchId) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          return
+        }
+
+        const elapsedTime = Date.now() - startTime
+
+        // Check if polling timeout exceeded
+        if (elapsedTime > MAX_POLLING_TIME) {
+          setError('Polling timeout: Task took longer than 5 minutes')
+          setLoading(false)
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          return
+        }
+
+        let allCompleted = true
+        const summaries: Record<string, unknown> = {}
+
+        for (const taskId of taskIds) {
+          if (!taskId) continue
+
+          const progressUrl = `/stream-progress/${taskId}`
+          //console.log(`Fetching progress from: ${progressUrl}`)
+          const progressResponse = await fetch(progressUrl)
+          if (!progressResponse.ok) {
+            setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
+            setLoading(false)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            return
+          }
+
+          // Read response text once
+          let responseText: string
+          try {
+            responseText = await progressResponse.text()
+          } catch (textError) {
+            setError(`Failed to read response for task ${taskId}: ${textError}`)
+            setLoading(false)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            return
+          }
+
+          // Parse NDJSON format (newline-delimited JSON)
+          let progressData: ProgressData
+          try {
+            // Split by newlines and filter out empty lines
+            const lines = responseText.split('\n').filter(line => line.trim())
+
+            if (lines.length === 0) {
+              setError(`No data found in response for task ${taskId}`)
+              setRawResponse({ error: 'No lines in response', response: responseText })
+              setLoading(false)
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              return
+            }
+
+            // Try to parse each line until we find valid JSON
+            // Use the last valid JSON line as the most recent progress
+            let lastValidJson: ProgressData | null = null
+            const allLines: unknown[] = []
+
+            for (const line of lines) {
+              try {
+                const parsedLine = JSON.parse(line)
+                lastValidJson = parsedLine as ProgressData
+                allLines.push(parsedLine)
+              } catch (e) {
+                // Skip lines that aren't valid JSON
+                continue
+              }
+            }
+
+            if (!lastValidJson) {
+              setError(`No valid JSON found in response for task ${taskId}`)
+              setRawResponse({ error: 'Invalid JSON in all lines', response: responseText })
+              setLoading(false)
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+              return
+            }
+
+            progressData = lastValidJson
+            // Store the most recent data for debugging
+            setRawResponse({
+              latestProgress: progressData,
+              allUpdates: allLines,
+              rawResponse: responseText
+            })
+          } catch (parseError) {
+            setError(`Error parsing response for task ${taskId}: ${parseError}`)
+            setRawResponse({ error: 'Parsing error', response: responseText })
+            setLoading(false)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            return
+          }
+
+          setProgress(progressData)
+
+          // Check if task is complete (progress === 100)
+          if (progressData.progress === 100) {
+            summaries[taskId] = progressData.data
+          } else if (progressData.progress < 100) {
+            allCompleted = false
+          }
+        }
+
+        // If all tasks are complete, fetch detailed results
+        if (allCompleted && Object.keys(summaries).length > 0) {
+          //console.log('All tasks completed, fetching detailed results')
+          setLoading(false)
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+
+          // Fetch detailed results for each completed task
+          try {
+            const detailedResults: Record<string, unknown> = {}
+
+            for (const taskId of taskIds) {
+              if (!taskId) continue
+
+              //console.log(`Fetching results for task ${taskId}`)
+              const resultsResponse = await fetch(`/results/${taskId}`)
+              if (resultsResponse.ok) {
+                const resultsData = await resultsResponse.json()
+                detailedResults[taskId] = resultsData
+                //console.log(`Results received for task ${taskId}:`, resultsData)
+              } else {
+                console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
+                detailedResults[taskId] = summaries[taskId]
+              }
+            }
+
+            //console.log('All results prepared, setting summary data:', detailedResults)
+            setSummaryData(detailedResults)
+
+            // Debug log to see the data structure
+            //console.log('Summary data received:', detailedResults)
+          } catch (err) {
+            console.error('Error fetching detailed results:', err)
+            // Fall back to summary data if results fetch fails
+            setSummaryData(summaries)
+          }
+        }
+      } catch (err) {
+        console.error('Error polling progress:', err)
+        setError(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
+        setLoading(false)
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
+      }
+    }, POLL_INTERVAL)
   }
 
   const getDeltaBackgroundColor = (delta: number | undefined): string => {
@@ -71,15 +304,104 @@ function App() {
     rating1: number | null | undefined,
     rating2: number | null | undefined
   ): [string, string] => {
-    if (!rating1 || !rating2) return ['transparent', 'transparent']
+    //console.log(`getRatingBackgroundColors comparison: rating1=${rating1}, rating2=${rating2}`)
+    if (!rating1 || !rating2) {
+      //console.log('  -> One or both ratings are null/undefined, returning transparent')
+      return ['transparent', 'transparent']
+    }
     const diff = Math.abs(rating1 - rating2)
-    if (diff <= 100) return ['transparent', 'transparent']
+    //console.log(`  -> Difference: ${diff}`)
+    if (diff <= 100) {
+      //console.log(`  -> Difference <= 100, returning transparent`)
+      return ['transparent', 'transparent']
+    }
 
     if (rating1 > rating2) {
+      //console.log(`  -> rating1 > rating2, returning [POSITIVE, NEGATIVE]`)
+      return [COLOR_POSITIVE, COLOR_NEGATIVE]
+    } else {
+      //console.log(`  -> rating1 <= rating2, returning [NEGATIVE, POSITIVE]`)
+      return [COLOR_NEGATIVE, COLOR_POSITIVE]
+    }
+  }
+
+  const getSummaryValueColors = (value1: unknown, value2: unknown): [string, string] => {
+    const num1 = typeof value1 === 'number' ? value1 : null
+    const num2 = typeof value2 === 'number' ? value2 : null
+
+    //console.log(`getSummaryValueColors: value1=${value1} (num1=${num1}), value2=${value2} (num2=${num2})`)
+
+    if (num1 === null || num2 === null) {
+      //console.log('  -> One or both values are null/not numeric, returning transparent')
+      return ['transparent', 'transparent']
+    }
+    if (num1 === num2) {
+      //console.log(`  -> Values are equal (${num1} === ${num2}), returning transparent`)
+      return ['transparent', 'transparent']
+    }
+
+    if (num1 > num2) {
+      //console.log(`  -> num1 (${num1}) > num2 (${num2}), returning [POSITIVE, NEGATIVE]`)
+      return [COLOR_POSITIVE, COLOR_NEGATIVE]
+    } else {
+      //console.log(`  -> num1 (${num1}) <= num2 (${num2}), returning [NEGATIVE, POSITIVE]`)
+      return [COLOR_NEGATIVE, COLOR_POSITIVE]
+    }
+  }
+
+  const getInverseSummaryValueColors = (value1: unknown, value2: unknown): [string, string] => {
+    const num1 = typeof value1 === 'number' ? value1 : null
+    const num2 = typeof value2 === 'number' ? value2 : null
+
+    if (num1 === null || num2 === null) {
+      return ['transparent', 'transparent']
+    }
+    if (num1 === num2) {
+      return ['transparent', 'transparent']
+    }
+
+    // Inverse logic: lower values are positive, higher values are negative
+    if (num1 < num2) {
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
+  }
+
+  const getSummaryForTeam = (taskId: string | null | undefined) => {
+    //console.log(`getSummaryForTeam called with taskId: ${taskId}`)
+    if (!taskId || !summaryData) {
+      //console.log(`  -> taskId or summaryData is falsy, returning null`)
+      return null
+    }
+
+    const data = summaryData[taskId]
+    if (!data) {
+      console.warn(`No summary data found for taskId: ${taskId}, available keys: ${Object.keys(summaryData).join(', ')}`)
+      return null
+    }
+
+    //console.log(`Found data for taskId ${taskId}:`, data)
+
+    // Handle different possible data structures
+    if (typeof data === 'object') {
+      // If it's wrapped in a 'summary' key, unwrap it (this is the expected structure)
+      const obj = data as Record<string, unknown>
+      if (obj.summary && typeof obj.summary === 'object') {
+        const summary = obj.summary as Record<string, unknown>
+        //console.log(`Returning summary.summary for ${taskId}:`, summary)
+        return summary
+      }
+      if (obj.data && typeof obj.data === 'object') {
+        //console.log(`Returning data.data for ${taskId}:`, obj.data)
+        return obj.data as Record<string, unknown>
+      }
+      // Otherwise assume it's the summary object directly
+      //console.log(`Returning data directly for ${taskId}:`, obj)
+      return obj as Record<string, unknown>
+    }
+
+    return null
   }
 
   return (
@@ -120,6 +442,24 @@ function App() {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+
+      {progress && loading && (
+        <div className="progress-section">
+          <h2>Task Progress</h2>
+          <p>{progress.message}</p>
+          <div style={{ width: '100%', height: '20px', backgroundColor: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${progress.progress}%`,
+                height: '100%',
+                backgroundColor: '#6b9d7a',
+                transition: 'width 0.3s ease',
+              }}
+            />
+          </div>
+          <p>{progress.progress}% complete</p>
+        </div>
+      )}
 
       {statistics && (
         <div className="results-section">
@@ -175,11 +515,90 @@ function App() {
                   {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
                 </td>
               </tr>
+              {summaryData && (
+                <>
+                  <tr>
+                    <td className="row-label">Rating Matches</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches)[0] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches ?? '-')}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.rating_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches)[1] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.rating_matches ?? '-')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Tournament Matches</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches)[0] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches ?? '-')}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.tournament_matches, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches)[1] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.tournament_matches ?? '-')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Win Percentage</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage as number).toFixed(1) + '%' : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.win_percentage, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.win_percentage as number).toFixed(1) + '%' : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Average Player Rank</td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank as number).toFixed(0) : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.avg_rank, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.avg_rank as number).toFixed(0) : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Bad Rank Players</td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[0] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players ?? '-')}
+                    </td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.bad_rank_players, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players)[1] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.bad_rank_players ?? '-')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Other Matches</td>
+                    <td>{String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.other_matches ?? '-')}</td>
+                    <td>{String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.other_matches ?? '-')}</td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Average Matches Per Player</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg)[0] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg as number).toFixed(2) : '-')}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_avg, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg)[1] }}>
+                      {String(getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_avg as number).toFixed(2) : '-')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Median Matches Per Player</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_median, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_median)[0] }}>
+                      {getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_median ? (getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_median as number).toFixed(2) : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(getSummaryForTeam(statistics.teams?.[0]?.task_id)?.matches_median, getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_median)[1] }}>
+                      {getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_median ? (getSummaryForTeam(statistics.teams?.[1]?.task_id)?.matches_median as number).toFixed(2) : '-'}
+                    </td>
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
 
-          <h2>Raw JSON</h2>
+          <h2>Raw team stats JSON</h2>
           <pre>{JSON.stringify(statistics, null, 2)}</pre>
+
+          {summaryData && (
+            <>
+              <h2>Match Statistics Summary</h2>
+              <pre>{JSON.stringify(summaryData, null, 2)}</pre>
+            </>
+          )}
         </div>
       )}
     </div>

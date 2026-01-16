@@ -12,4 +12,10 @@ htmlcov/
 
 dist/
 build/
+logs/
 *.egg-info/
+
+node_modules/
+frontend/build/
+frontend/.vite/
+.DS_Store

@@ -6,23 +6,45 @@ from celery import Celery  # type: ignore[import-untyped]
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend.config import Config
+from backend.logging_config import setup_logging
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
-from backend.stats import compute_statistics
+from backend.stats import (
+    compute_statistics,
+    get_matches,
+    get_rank,
+    get_team_matches_summary,
+)
+
+# Setup logger
+logger = setup_logging(__name__)
 
 bp = Blueprint("dota", __name__)
 
 # Initialize Celery without app-specific config; the app factory will update it
 celery = Celery(__name__)
 
+# Configure Celery to use Redis as message broker (development)
+# Redis connection: redis://localhost:6379/0
+celery.conf.update(
+    broker_url=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
+    result_backend=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
+)
+
 # Redis for progress storage
 redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
 
 
-@celery.task(bind=True)
-def heavy_calculation_task(self, task_id):
-    """Celery task for heavy calculation"""
+def update_progress(task_id, step, message, progress, data=None):
+    """Update task progress in Redis (lightweight - no heavy data).
 
-    def update_progress(step, message, progress, data=None):
+    Args:
+        task_id: Unique task identifier
+        step: Current step number
+        message: Progress message
+        progress: Progress percentage (0-100) or -1 for error
+        data: Additional data to store (optional, should be lightweight)
+    """
+    try:
         progress_data = {
             "step": step,
             "message": message,
@@ -31,44 +53,192 @@ def heavy_calculation_task(self, task_id):
             "timestamp": time.time(),
         }
         redis_client.setex(f"progress:{task_id}", 3600, json.dumps(progress_data))  # Expire after 1 hour
+        logger.debug(f"Progress updated for task {task_id}: {message} ({progress}%)")
+    except Exception as e:
+        # Log error but don't fail the task if Redis is unavailable
+        logger.warning(f"Failed to update progress for task {task_id}: {e}")
 
+
+def store_results(task_id, results_data):
+    """Store heavy computation results in Redis (separate from progress).
+
+    Args:
+        task_id: Unique task identifier
+        results_data: Heavy results data (will be stored separately)
+    """
     try:
-        # First update - almost instant
-        update_progress(1, "Initial processing complete", 10, {"initial_result": "Quick calculation done"})
+        redis_client.setex(f"results:{task_id}", 3600, json.dumps(results_data))  # Expire after 1 hour
+        logger.debug(f"Results stored for task {task_id}")
+    except Exception as e:
+        logger.warning(f"Failed to store results for task {task_id}: {e}")
 
-        # Simulate your heavy calculations
-        calculations = [
-            (2, "Processing data chunk 1...", 30, {"chunk1": "result1"}),
-            (3, "Processing data chunk 2...", 50, {"chunk2": "result2"}),
-            (4, "Finalizing calculations...", 75, {"chunk3": "result3"}),
-            (5, "Calculation complete!", 100, {"final": "all_results"}),
-        ]
 
-        for step, message, progress, data in calculations:
-            # Your actual heavy calculation here
-            time.sleep(0.01)  # Short sleep for tests
-            update_progress(step, message, progress, data)
+@celery.task(bind=True)
+def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
+    """Celery task to fetch match statistics for multiple players.
+
+    Args:
+        task_id: Unique task identifier for progress tracking
+        accounts: List of account IDs to fetch statistics for
+        days: Number of days of match history to fetch
+    """
+    try:
+        logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
+        steps: int = 2 + 2 * len(accounts)  # Initial + per-account + final
+        step_num: int = 0
+
+        update_progress(
+            task_id,
+            step_num,
+            f"Initializing match history fetch for {len(accounts)} players",
+            100 * (step_num / steps),
+        )
+
+        results = []
+        matches_stats = []  # List of lists: each inner list is matches for one player
+        bad_rank_players: int = 0
+        players_avg_rank: float = 0.0
+        players_with_rank: int = 0
+        for account_id in accounts:
+            step_num += 1
+            try:
+                # Fetch match data for this account
+                players_statistics = get_matches(account_id=account_id, days=days)
+                matches_stats.append(players_statistics)  # Append as a list per player
+
+                # Convert MatchStats objects to dicts for JSON serialization
+                stats_data = [stat.model_dump() for stat in players_statistics]
+
+                # TODO: rework, why do we need these results?
+                results.append(
+                    {
+                        "account_id": account_id,
+                        "match_count": len(stats_data),
+                        "matches": stats_data,
+                    }
+                )
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Fetched {len(stats_data)} matches for account {account_id}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "match_count": len(stats_data)},
+                )
+
+                player_rank = get_rank(account_id)
+                if player_rank is not None:
+                    players_with_rank += 1
+                    players_avg_rank += player_rank
+                    if player_rank > 1000:  # Tysyachniks ruin the games.
+                        bad_rank_players += 1
+                        logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Got Player rank {player_rank} for account {account_id}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "player_rank": player_rank},
+                )
+
+            except Exception as e:
+                # Handle per-account errors gracefully
+                # TODO: rework, why do we need these results?
+                results.append(
+                    {
+                        "account_id": account_id,
+                        "error": str(e),
+                    }
+                )
+
+                update_progress(
+                    task_id,
+                    step_num,
+                    f"Error fetching data for account {account_id}: {e!s}",
+                    100 * (step_num / steps),
+                    {"account_id": account_id, "error": str(e)},
+                )
+
+            time.sleep(0.01)  # Short sleep to prevent overwhelming the API
+        players_avg_rank /= players_with_rank if players_with_rank else 1
+        step_num += 1  # Final summary
+        summary = get_team_matches_summary(matches_stats)  # This is heavy logic. To check.
+        summary.avg_rank = players_avg_rank
+        summary.bad_rank_players = bad_rank_players
+
+        successful = len([r for r in results if "error" not in r])
+
+        # Store heavy results separately (not in progress stream)
+        final_results = {
+            "results": results,
+            "successful": successful,
+            "total": len(accounts),
+            "summary": summary.model_dump(),
+        }
+        store_results(task_id, final_results)
+
+        # Update progress with lightweight final message (no heavy data)
+        update_progress(
+            task_id,
+            steps,
+            f"Completed: fetched data for {successful}/{len(accounts)} players",
+            100,
+            {"successful": successful, "total": len(accounts)},  # Lightweight summary only
+        )
 
     except Exception as exc:
-        update_progress(-1, f"Error: {exc!s}", -1, {"error": True})
+        logger.error(f"Task error for task_id={task_id}: {exc}", exc_info=True)
+        update_progress(task_id, -1, f"Task error: {exc!s}", -1, {"error": True})
         raise
 
 
-@bp.route("/start-calculation")
-def start_calculation():
+@bp.route("/statistics/players", methods=["GET"])
+def players_statistics():
     """Start calculation and return task ID"""
-    task = heavy_calculation_task.delay(task_id := f"task_{int(time.time())}")
-    return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id})
+    try:
+        if request.method == "GET":
+            accounts = request.args.getlist("account_id")
+            days: int = int(request.args.get("days", 20))
+
+        if not accounts:
+            return jsonify({"error": "no account_ids provided"}), 400
+        if len(accounts) > 10:
+            return jsonify({"error": "too many players (account_ids) in the team (max 10)"}), 400
+
+        # Convert accounts to integers and filter valid ones
+        accounts_int = []
+        for a in accounts:
+            if isinstance(a, str):
+                a = a.strip()
+                try:
+                    accounts_int.append(int(a))
+                except ValueError:
+                    return jsonify({"error": f"Invalid account_id: {a}"}), 400
+
+        if not accounts_int:
+            return jsonify({"error": "no valid account_ids provided"}), 400
+
+        try:
+            task = players_statistics_task.delay(
+                task_id := f"task_{int(time.time())}", accounts=accounts_int, days=days
+            )
+            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id})
+        except Exception as e:
+            return jsonify({"error": f"Failed to start task: {e!s}"}), 500
+
+    except Exception as e:
+        return jsonify({"error": f"Invalid request: {e!s}"}), 400
 
 
 @bp.route("/stream-progress/<task_id>")
 def stream_progress(task_id):
-    """Stream progress updates"""
+    """Stream progress updates (lightweight data only)"""
 
     def generate():
-        """Yield Server-Sent Events with progress updates for a task.
+        """Yield progress updates for a task.
 
-        Reads progress snapshots from Redis and emits them as SSE messages
+        Reads lightweight progress snapshots from Redis and emits them
         until the task reaches completion or an error state.
         """
         last_step = 0
@@ -83,7 +253,7 @@ def stream_progress(task_id):
 
                 # Send update if there's new progress
                 if current_step > last_step:
-                    yield f"data: {json.dumps(current_data)}\n\n"
+                    yield f"{json.dumps(current_data)}\n"
                     last_step = current_step
 
                     # Break if complete or error
@@ -97,6 +267,26 @@ def stream_progress(task_id):
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*"},
     )
+
+
+@bp.route("/results/<task_id>")
+def get_results(task_id):
+    """Retrieve final computation results for a completed task.
+
+    Returns:
+        JSON response with detailed results including all matches and summary statistics.
+        Returns 404 if results not found or task still in progress.
+    """
+    try:
+        results_data = redis_client.get(f"results:{task_id}")
+        if not results_data:
+            return jsonify({"error": "Results not found. Task may still be in progress."}), 404
+
+        results = json.loads(results_data)
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error(f"Error retrieving results for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to retrieve results: {e}"}), 500
 
 
 @bp.route("/statistics", methods=["GET", "POST"])

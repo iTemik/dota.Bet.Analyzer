@@ -1,6 +1,11 @@
 import os
+import sys
+from pathlib import Path
 
-from backend import create_app
+# Add the parent directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from backend import create_app  # type: ignore[import-untyped]
 
 
 def test_default_database_filename():
