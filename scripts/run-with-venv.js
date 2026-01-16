@@ -19,7 +19,6 @@ if (!command) {
 
 // Detect OS and get venv python path
 const isWindows = process.platform === 'win32';
-const isMac = process.platform === 'darwin';
 
 let venvPythonPath;
 if (isWindows) {
