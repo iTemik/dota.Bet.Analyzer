@@ -130,7 +130,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 if player_rank is not None:
                     players_with_rank += 1
                     players_avg_rank += player_rank
-                    if player_rank > 1000:  # Tysyachniks ruins the games.
+                    if player_rank > 1000:  # Tysyachniks ruin the games.
                         bad_rank_players += 1
                         logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
 
