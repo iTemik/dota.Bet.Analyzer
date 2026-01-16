@@ -56,7 +56,7 @@ function App() {
 
     // Stop any existing polling
     if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.curent)
+      clearInterval(pollIntervalRef.current)
       pollIntervalRef.current = null
     }
 
