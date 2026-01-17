@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import './App.css'
+import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
 const COLOR_POSITIVE = '#6b9d7a'
@@ -406,7 +407,10 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Dota 2 Bet Analyzer</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h1>Dota 2 Bet Analyzer</h1>
+        <span style={{ color: '#888', fontSize: '0.9rem' }}>v{VERSION}</span>
+      </div>
 
       <div className="form-section">
         <div className="input-groups-row">
