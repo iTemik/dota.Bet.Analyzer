@@ -279,7 +279,7 @@ def test_get_players_by_team_id(app):
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Team A", "TA", 1),
             (2, "76561197961234561", "url", "player2", "Player Two", 2, 100, "Team A", "TA", 1),
-            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Team B", "TB", 1),
+            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Team B", "TB", 0),
         ]
 
         for player in test_players:
@@ -292,15 +292,16 @@ def test_get_players_by_team_id(app):
         db.commit()
 
         # Test get_players_by_team_id
-        players = get_players_by_team(team_id=100)
-        assert len(players) == 2
-        player_names = [p.name for p in players]
+        pro_players, other_players = get_players_by_team(team_id=100)
+        assert len(pro_players) == 2
+        assert len(other_players) == 0
+        player_names = [p.name for p in pro_players]
         assert "Player One" in player_names
         assert "Player Two" in player_names
         assert "Player Three" not in player_names
         # Check that Player objects have correct ID
-        assert any(p.id == 1 for p in players)
-        assert any(p.id == 2 for p in players)
+        assert any(p.id == 1 for p in pro_players)
+        assert any(p.id == 2 for p in pro_players)
 
 
 def test_get_players_by_team_name(app):
@@ -313,7 +314,7 @@ def test_get_players_by_team_name(app):
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Liquid", "Liquid", 1),
             (2, "76561197961234561", "url", "player2", "Player Two", 2, 100, "Liquid", "Liquid", 1),
-            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Secret", "Secret", 1),
+            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Secret", "Secret", 0),
         ]
 
         for player in test_players:
@@ -326,9 +327,10 @@ def test_get_players_by_team_name(app):
         db.commit()
 
         # Test case-insensitive team_name
-        players = get_players_by_team(team_name="LIQUID")
-        assert len(players) == 2
-        player_names = [p.name for p in players]
+        pro_players, other_players = get_players_by_team(team_name="LIQUID")
+        assert len(pro_players) == 2
+        assert len(other_players) == 0
+        player_names = [p.name for p in pro_players]
         assert "Player One" in player_names
         assert "Player Two" in player_names
 
@@ -343,7 +345,7 @@ def test_get_players_by_team_tag(app):
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Team A", "TA", 1),
             (2, "76561197961234561", "url", "player2", "Player Two", 2, 100, "Team A", "TA", 1),
-            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Team B", "TB", 1),
+            (3, "76561197961234562", "url", "player3", "Player Three", 1, 200, "Team B", "TB", 0),
         ]
 
         for player in test_players:
@@ -356,9 +358,10 @@ def test_get_players_by_team_tag(app):
         db.commit()
 
         # Test case-insensitive team_tag
-        players = get_players_by_team(team_tag="ta")
-        assert len(players) == 2
-        player_names = [p.name for p in players]
+        pro_players, other_players = get_players_by_team(team_tag="ta")
+        assert len(pro_players) == 2
+        assert len(other_players) == 0
+        player_names = [p.name for p in pro_players]
         assert "Player One" in player_names
         assert "Player Two" in player_names
 
@@ -372,7 +375,7 @@ def test_get_players_by_team_multiple_criteria(app):
         cursor = db.cursor()
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Liquid", "Liquid", 1),
-            (2, "76561197961234561", "url", "player2", "Player Two", 2, 200, "Secret", "Secret", 1),
+            (2, "76561197961234561", "url", "player2", "Player Two", 2, 200, "Secret", "Secret", 0),
         ]
 
         for player in test_players:
@@ -385,11 +388,13 @@ def test_get_players_by_team_multiple_criteria(app):
         db.commit()
 
         # Test multiple criteria (team_id=100 OR team_name="Secret")
-        players = get_players_by_team(team_id=100, team_name="Secret")
-        assert len(players) == 2
-        player_names = [p.name for p in players]
-        assert "Player One" in player_names
-        assert "Player Two" in player_names
+        pro_players, other_players = get_players_by_team(team_id=100, team_name="Secret")
+        assert len(pro_players) == 1  # Player One with is_pro=1
+        assert len(other_players) == 1  # Player Two with is_pro=0
+        pro_player_names = [p.name for p in pro_players]
+        other_player_names = [p.name for p in other_players]
+        assert "Player One" in pro_player_names
+        assert "Player Two" in other_player_names
 
 
 def test_get_players_by_team_no_matches(app):
@@ -397,8 +402,9 @@ def test_get_players_by_team_no_matches(app):
     with app.app_context():
         from backend.pro_players import get_players_by_team
 
-        players = get_players_by_team(team_id=9999)
-        assert players == []
+        pro_players, other_players = get_players_by_team(team_id=9999)
+        assert pro_players == []
+        assert other_players == []
 
 
 def test_get_players_by_team_no_criteria():
@@ -426,13 +432,14 @@ def test_get_players_by_team_integration_with_stats(app):
         cursor.execute(
             """INSERT INTO pro_players
             (account_id, steamid, profileurl, personaname, name, fantasy_role, team_id, team_name, team_tag, is_pro)
-            VALUES (2, '76561197961234561', 'url', 'player2', 'Player Two', 2, 123456, 'Test Team', 'TT', 1)"""
+            VALUES (2, '76561197961234561', 'url', 'player2', 'Player Two', 2, 123456, 'Test Team', 'TT', 0)"""
         )
         db.commit()
 
-        # Demonstrate that get_players_by_team can be used in TeamStats creation
-        players = get_players_by_team(team_id=123456)
-        assert len(players) == 2
+        # Demonstrate that get_players_by_team returns a tuple of pro_players and other_players
+        pro_players, other_players = get_players_by_team(team_id=123456)
+        assert len(pro_players) == 1
+        assert len(other_players) == 1
 
         # Create a TeamStats with players populated from database query
         team_stats = TeamStats(
@@ -442,9 +449,11 @@ def test_get_players_by_team_integration_with_stats(app):
             rating=2500.5,
             delta=25.3,
             logo_url="https://example.com/logo.png",
-            players=players,
+            players=pro_players,
+            other_players=other_players,
         )
 
-        assert len(team_stats.players) == 2
-        assert team_stats.players[0].name in ["Player One", "Player Two"]
-        assert team_stats.players[1].name in ["Player One", "Player Two"]
+        assert len(team_stats.players) == 1
+        assert team_stats.players[0].name == "Player One"
+        assert len(team_stats.other_players) == 1
+        assert team_stats.other_players[0].name == "Player Two"

@@ -37,7 +37,9 @@ def test_compute_statistics_returns_model(monkeypatch):
         return 1768287333.0
 
     monkeypatch.setattr(requests, "get", fake_get)
-    monkeypatch.setattr("backend.stats.get_players_by_team", lambda team_id: [Player(name="Alpha_Player1", id=101)])
+    monkeypatch.setattr(
+        "backend.stats.get_players_by_team", lambda team_id: ([Player(name="Alpha_Player1", id=101)], [])
+    )
     monkeypatch.setattr(
         "backend.stats._fetch_team_stats", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
     )
