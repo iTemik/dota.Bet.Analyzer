@@ -3,7 +3,7 @@ import threading
 
 from flask import Flask
 
-__version__ = "1.1.42"
+__version__ = "1.1"
 
 # Module-level singleton and a lock to make creation thread-safe
 _app = None
