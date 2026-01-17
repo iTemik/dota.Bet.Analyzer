@@ -1,5 +1,6 @@
 {
     "name": "dota-bet-analyzer",
+    "version": "1.1",
     "description": "Dota 2 Bet Analyzer - Multi-service development environment",
     "private": true,
     "scripts": {

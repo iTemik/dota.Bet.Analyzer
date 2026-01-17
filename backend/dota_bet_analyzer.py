@@ -1,10 +1,12 @@
 ﻿import json
+import os
 import time
 
 import redis
 from celery import Celery  # type: ignore[import-untyped]
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
+from backend import __version__
 from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
@@ -191,6 +193,24 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
         logger.error(f"Task error for task_id={task_id}: {exc}", exc_info=True)
         update_progress(task_id, -1, f"Task error: {exc!s}", -1, {"error": True})
         raise
+
+
+@bp.route("/version", methods=["GET"])
+def get_version():
+    """Get backend and frontend versions."""
+    backend_version = __version__
+    build_number = os.environ.get("BUILD_NUMBER", "DEV")
+    full_backend_version = f"{backend_version}.{build_number}"
+
+    return (
+        jsonify(
+            {
+                "backend": full_backend_version,
+                "build": build_number,
+            }
+        ),
+        200,
+    )
 
 
 @bp.route("/statistics/players", methods=["GET"])

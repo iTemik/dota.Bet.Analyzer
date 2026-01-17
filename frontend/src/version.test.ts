@@ -7,13 +7,9 @@ describe('Version', () => {
         expect(typeof VERSION).toBe('string')
     })
 
-    it('should have a valid semantic version format', () => {
+    it('should be in format X.Y.Z', () => {
         // Match semantic versioning pattern: major.minor.patch
         const semverPattern = /^\d+\.\d+\.\d+$/
         expect(VERSION).toMatch(semverPattern)
-    })
-
-    it('should be 0.1.0', () => {
-        expect(VERSION).toBe('0.1.0')
     })
 })

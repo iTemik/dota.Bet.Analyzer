@@ -19,7 +19,7 @@ describe('App Component', () => {
 
         it('should render version in header', () => {
             render(<App />)
-            expect(screen.getByText(/v0\.1\.0/)).toBeInTheDocument()
+            expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument()
         })
 
         it('should render team input fields', () => {
