@@ -270,7 +270,7 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
                 continue
 
             team_id, team_name, tag, rating, delta = team_info1
-            players = get_players_by_team(team_id=team_id)
+            pro_players, other_players = get_players_by_team(team_id=team_id)
 
             # Fetch team logo URL
             team_info2, error = _fetch_team_stats(team_id)
@@ -281,8 +281,8 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
 
             # Initiate Celery task for player match statistics if players exist
             task_id = None
-            if players:
-                account_ids = [player.id for player in players]
+            if pro_players:
+                account_ids = [player.id for player in pro_players]
                 task_id = f"task_{int(time.time())}"
                 players_statistics_task.delay(task_id=task_id, accounts=account_ids)
 
@@ -293,8 +293,8 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
                 rating=rating,
                 delta=delta,
                 logo_url=team_info2.get("logo_url") if team_info2 else None,
-                players=players,
-                other_players=[],
+                players=pro_players,
+                other_players=other_players,
                 task_id=task_id,
             )
             result.append(stats)
