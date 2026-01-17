@@ -37,16 +37,9 @@ jobs:
           cd frontend
           npm ci
 
-      - name: Run backend tests
+      - name: Run tests (backend and frontend)
         if: always()
-        run: |
-          python -m pytest tests/ -v --junit-xml=test-results/backend/junit.xml || true
-
-      - name: Run frontend tests
-        if: always()
-        run: |
-          cd frontend
-          npm test -- --run || true
+        run: npm test
 
       - name: Upload test reports
         if: always()
