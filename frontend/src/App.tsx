@@ -41,7 +41,6 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
-  const [rawResponse, setRawResponse] = useState<Record<string, unknown> | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentSearchIdRef = useRef<number>(0)
 
@@ -66,7 +65,6 @@ function App() {
     setStatistics(null)
     setSummaryData(null)
     setProgress(null)
-    setRawResponse(null)
 
     try {
       const params = new URLSearchParams()
@@ -179,7 +177,6 @@ function App() {
 
             if (lines.length === 0) {
               setError(`No data found in response for task ${taskId}`)
-              setRawResponse({ error: 'No lines in response', response: responseText })
               setLoading(false)
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current)
@@ -206,7 +203,6 @@ function App() {
 
             if (!lastValidJson) {
               setError(`No valid JSON found in response for task ${taskId}`)
-              setRawResponse({ error: 'Invalid JSON in all lines', response: responseText })
               setLoading(false)
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current)
@@ -216,15 +212,8 @@ function App() {
             }
 
             progressData = lastValidJson
-            // Store the most recent data for debugging
-            setRawResponse({
-              latestProgress: progressData,
-              allUpdates: allLines,
-              rawResponse: responseText
-            })
           } catch (parseError) {
             setError(`Error parsing response for task ${taskId}: ${parseError}`)
-            setRawResponse({ error: 'Parsing error', response: responseText })
             setLoading(false)
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)

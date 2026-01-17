@@ -26,9 +26,8 @@ describe('Frontend Version Management', () => {
     })
 
     it('should be greater than or equal to 1.0.0', () => {
-        const [major, minor, patch] = VERSION.split('.')
+        const [major] = VERSION.split('.')
         const majorNum = Number(major)
-        const minorNum = Number(minor)
         expect(majorNum).toBeGreaterThanOrEqual(1)
     })
 })
