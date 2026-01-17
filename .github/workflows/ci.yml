@@ -49,8 +49,10 @@ jobs:
           ruff check .
           black --check --line-length=120 .
           isort --check-only --profile=black .
-          # Run other pre-commit hooks
-          pre-commit run --all-files --exclude-regex="(ruff|black|isort)"
+          # Run other pre-commit hooks (skip the ones we already checked)
+          pre-commit run --all-files
+        env:
+          SKIP: ruff,black,isort
 
       - name: Create test results directories
         run: |
@@ -74,8 +76,9 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           name: Test Results
+          artifact: test-reports
           path: |
-            test-results/backend/junit.xml
-            test-results/frontend/junit.xml
+            backend/junit.xml
+            frontend/junit.xml
           reporter: java-junit
           fail-on-error: false
