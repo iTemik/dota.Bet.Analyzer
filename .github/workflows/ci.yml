@@ -41,6 +41,11 @@ jobs:
           cd frontend
           npm ci
 
+      - name: Create test results directories
+        run: |
+          mkdir -p test-results/backend
+          mkdir -p test-results/frontend
+
       - name: Run tests (backend and frontend)
         if: always()
         run: npm test
