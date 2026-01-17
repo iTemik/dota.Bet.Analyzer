@@ -17,6 +17,11 @@ describe('App Component', () => {
             expect(screen.getByRole('heading', { name: /Dota 2 Bet Analyzer/i })).toBeInTheDocument()
         })
 
+        it('should render version in header', () => {
+            render(<App />)
+            expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument()
+        })
+
         it('should render team input fields', () => {
             render(<App />)
             expect(screen.getByLabelText(/Team #1/i)).toBeInTheDocument()

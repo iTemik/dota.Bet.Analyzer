@@ -8,6 +8,10 @@ import requests
 from flask import current_app, g
 from pydantic import BaseModel
 
+from backend.logging_config import setup_logging
+
+logger = setup_logging(__name__)
+
 
 class Player(BaseModel):
     """Represents a Dota 2 player.
@@ -125,9 +129,6 @@ def sync_pro_players_on_startup(app):
     This runs asynchronously to not block app initialization.
     Errors are logged but don't fail the app startup.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
 
     try:
         with app.app_context():
@@ -158,17 +159,15 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
         team_tag: Team tag to search for (case-insensitive)
 
     Returns:
-        List of Player objects matching the team criteria, or empty list if no matches
+        Tuple of (pro_players, other_players) where:
+        - pro_players: List of Player objects where is_pro=1
+        - other_players: List of Player objects where is_pro is missing or !=0
 
     Raises:
         ValueError: If no search criteria provided
     """
-    import logging
-
     # Import here to avoid circular imports
     from backend.stats import Player
-
-    logger = logging.getLogger(__name__)
 
     if not any([team_id, team_name, team_tag]):
         raise ValueError("At least one search criterion (team_id, team_name, or team_tag) must be provided")
@@ -194,22 +193,30 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
             params.append(team_tag)
 
         where_clause = " OR ".join(conditions) if conditions else "1=0"
-        query = f"SELECT account_id, name FROM pro_players WHERE {where_clause} ORDER BY name"
+        query = f"SELECT account_id, name, is_pro FROM pro_players WHERE {where_clause} ORDER BY name"
 
         logger.debug(f"Executing query: {query} with params: {params}")
         cursor.execute(query, params)
         rows = cursor.fetchall()
         logger.debug(f"Query returned {len(rows)} rows")
 
-        # Convert rows to Player objects
-        players = []
+        # Separate players into two lists based on is_pro value
+        pro_players = []
+        other_players = []
+
         for row in rows:
+            logger.debug(f"Processing row: {dict(row)}")
             if row["name"]:
-                players.append(Player(name=row["name"], id=row["account_id"]))
-        logger.debug(f"Returning {len(players)} Player objects")
-        return players
+                player = Player(name=row["name"], id=row["account_id"])
+                if row["is_pro"] == 1:
+                    pro_players.append(player)
+                else:
+                    other_players.append(player)
+
+        logger.debug(f"Returning {len(pro_players)} pro players and {len(other_players)} other players")
+        return pro_players, other_players
 
     except sqlite3.Error as e:
-        # Log error but return empty list
+        # Log error but return empty lists
         logger.error(f"Error querying players by team: {e}")
-        return []
+        return [], []

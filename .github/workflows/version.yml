@@ -1,0 +1,69 @@
+name: Version and Release
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download previous build number
+        continue-on-error: true
+        run: |
+          # Try to download previous build number from artifacts
+          # For first run, this will fail and default to 0
+          mkdir -p .build-cache
+          echo "0" > .build-cache/build-number.txt
+
+      - name: Calculate build number
+        id: build
+        run: |
+          PREV_BUILD=$(cat .build-cache/build-number.txt || echo "0")
+          NEW_BUILD=$((PREV_BUILD + 1))
+          echo "number=$NEW_BUILD" >> $GITHUB_OUTPUT
+          echo "Build number: $NEW_BUILD"
+
+      - name: Set version in files
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.number }}
+        run: |
+          node scripts/version.js increment-minor
+          node scripts/version.js build $BUILD_NUMBER
+
+      - name: Commit version update
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json frontend/src/version.ts backend/__init__.py
+          git commit -m "chore: bump version to $(node scripts/version.js get-full)" || echo "No changes to commit"
+
+      - name: Push changes
+        if: success()
+        run: |
+          git push origin HEAD:${{ github.ref }} || echo "No changes to push"
+
+      - name: Upload build number
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-cache
+          path: .build-cache/build-number.txt
+          retention-days: 1
+
+      - name: Create Release Tag
+        if: success()
+        run: |
+          VERSION=$(node scripts/version.js get-full)
+          git tag -a "v${VERSION}" -m "Release ${VERSION}" || echo "Tag already exists"
+          git push origin "v${VERSION}" || echo "Tag push failed"
+        continue-on-error: true
