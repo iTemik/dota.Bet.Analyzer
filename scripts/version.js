@@ -34,13 +34,9 @@ export const VERSION = '${version}'
     fs.writeFileSync(versionTsPath, content);
 }
 
+// Backend version is now read from VERSION file at runtime, no source update needed
 function updateBackendSource(version) {
-    let content = fs.readFileSync(versionPyPath, 'utf8');
-    content = content.replace(
-        /__version__\s*=\s*['"][^'"]+['"]/,
-        `__version__ = '${version}'`
-    );
-    fs.writeFileSync(versionPyPath, content);
+    // No-op: version is read from backend/VERSION at import time
 }
 
 function getFrontendVersion() {
