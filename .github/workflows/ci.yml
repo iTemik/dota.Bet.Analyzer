@@ -78,7 +78,6 @@ jobs:
           name: Test Results
           artifact: test-reports
           path: |
-            backend/junit.xml
-            frontend/junit.xml
+            **/junit.xml
           reporter: java-junit
           fail-on-error: false
