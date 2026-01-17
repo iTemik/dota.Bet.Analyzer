@@ -81,3 +81,39 @@ jobs:
             **/junit.xml
           reporter: java-junit
           fail-on-error: false
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Prepare build package
+        run: |
+          VERSION=$(cat package.json | grep '"version"' | head -1 | awk -F'"' '{print $4}')
+          PACKAGE_NAME="dota-bet-analyzer-${VERSION}"
+          mkdir -p build/${PACKAGE_NAME}
+
+          # Copy frontend build
+          cp -r frontend/dist build/${PACKAGE_NAME}/
+
+          # Copy backend code
+          cp -r backend build/${PACKAGE_NAME}/
+
+          # Copy requirements and config files
+          cp requirements.txt build/${PACKAGE_NAME}/
+          cp pyproject.toml build/${PACKAGE_NAME}/
+
+          # Create zip archive
+          cd build
+          zip -r "${PACKAGE_NAME}.zip" "${PACKAGE_NAME}"
+          cd ..
+
+          # Move to root for artifact upload
+          mv build/${PACKAGE_NAME}.zip .
+          echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+
+      - name: Upload build package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: dota-bet-analyzer-*.zip
+          retention-days: 30
