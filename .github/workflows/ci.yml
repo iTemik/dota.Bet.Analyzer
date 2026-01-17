@@ -40,6 +40,17 @@ jobs:
         run: |
           cd frontend
           npm ci
+          cd ..
+
+      - name: Run pre-commit checks (lint and format validation)
+        run: |
+          source .venv/bin/activate
+          # Run formatters/linters in check mode (no modifications in CI)
+          ruff check .
+          black --check --line-length=120 .
+          isort --check-only --profile=black .
+          # Run other pre-commit hooks
+          pre-commit run --all-files --exclude-regex="(ruff|black|isort)"
 
       - name: Create test results directories
         run: |
@@ -68,8 +79,3 @@ jobs:
             test-results/frontend/junit.xml
           reporter: java-junit
           fail-on-error: false
-
-      - name: Run pre-commit
-        uses: pre-commit/action@v3.0.0
-        with:
-          extra_args: --all-files
