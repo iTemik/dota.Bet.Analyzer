@@ -14,11 +14,10 @@ Both frontend and backend use **semantic versioning** in the format:
 
 ### Version Files (MAJOR.MINOR format)
 - `backend/VERSION` - Contains backend's MAJOR.MINOR (e.g., `1.1`)
-- `frontend/VERSION` - Contains frontend's MAJOR.MINOR (e.g., `1.1`)
 
 ### Source Files (Full version)
 - `backend/__init__.py` - Contains `__version__ = "1.1"` (MAJOR.MINOR only, BUILD added at runtime)
-- `frontend/src/version.ts` - Contains `export const VERSION = '1.1.0'` (Full version with BUILD)
+- `frontend/src/version.ts` - Contains `export const VERSION = '1.2.0'` (Full semantic version)
 
 ## Version Management Script
 
@@ -113,12 +112,10 @@ Use the version script to manually update major versions:
 node scripts/version.js backend major 2
 # Result: backend/__init__.py shows __version__ = "2.0"
 #         backend/VERSION shows 2.0
-#         backend/src/version.ts shows 2.0.0
 
 # Update only frontend major version
 node scripts/version.js frontend major 2
-# Result: frontend/VERSION shows 2.0
-#         frontend/src/version.ts shows 2.0.0
+# Result: frontend/src/version.ts exports VERSION = '2.0.0'
 ```
 
 ## Integration with Build Number

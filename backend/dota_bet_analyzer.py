@@ -36,7 +36,7 @@ celery.conf.update(
 redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
 
 
-def update_progress(task_id, step, message, progress, data=None):
+def update_progress(task_id: str, step: int, message: str, progress: float, data: dict | None = None) -> None:
     """Update task progress in Redis (lightweight - no heavy data).
 
     Args:
@@ -61,7 +61,7 @@ def update_progress(task_id, step, message, progress, data=None):
         logger.warning(f"Failed to update progress for task {task_id}: {e}")
 
 
-def store_results(task_id, results_data):
+def store_results(task_id: str, results_data: dict) -> None:
     """Store heavy computation results in Redis (separate from progress).
 
     Args:
@@ -196,8 +196,12 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
 
 
 @bp.route("/version", methods=["GET"])
-def get_version():
-    """Get backend and frontend versions."""
+def get_version() -> tuple[Response, int]:
+    """Get backend and frontend versions.
+
+    Returns:
+        Tuple of (JSON response, HTTP status code)
+    """
     backend_version = __version__
     build_number = os.environ.get("BUILD_NUMBER", "DEV")
     full_backend_version = f"{backend_version}.{build_number}"
@@ -214,7 +218,7 @@ def get_version():
 
 
 @bp.route("/statistics/players", methods=["GET"])
-def players_statistics():
+def players_statistics() -> tuple[Response, int]:
     """Start calculation and return task ID"""
     try:
         if request.method == "GET":
@@ -243,7 +247,7 @@ def players_statistics():
             task = players_statistics_task.delay(
                 task_id := f"task_{int(time.time())}", accounts=accounts_int, days=days
             )
-            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id})
+            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
         except Exception as e:
             return jsonify({"error": f"Failed to start task: {e!s}"}), 500
 
@@ -252,7 +256,7 @@ def players_statistics():
 
 
 @bp.route("/stream-progress/<task_id>")
-def stream_progress(task_id):
+def stream_progress(task_id: str) -> Response:
     """Stream progress updates (lightweight data only)"""
 
     def generate():
@@ -290,7 +294,7 @@ def stream_progress(task_id):
 
 
 @bp.route("/results/<task_id>")
-def get_results(task_id):
+def get_results(task_id: str) -> tuple[Response, int]:
     """Retrieve final computation results for a completed task.
 
     Returns:
@@ -310,7 +314,7 @@ def get_results(task_id):
 
 
 @bp.route("/statistics", methods=["GET", "POST"])
-def statistics():
+def statistics() -> tuple[Response, int]:
     """Get statistics for teams provided by arguments.
 
     Supports:
@@ -339,11 +343,11 @@ def statistics():
         return jsonify({"error": "too many teams (max 10)"}), 400
 
     stats = compute_statistics(teams)
-    return jsonify(stats.model_dump())
+    return jsonify(stats.model_dump()), 200
 
 
 @bp.route("/ProPlayers", methods=["GET"])
-def pro_players():
+def pro_players() -> tuple[Response, int]:
     """Fetch pro players from OpenDota API and store in database.
 
     Returns:

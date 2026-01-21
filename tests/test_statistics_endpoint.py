@@ -19,7 +19,8 @@ def test_get_statistics_query_params(monkeypatch):
     client = app.test_client()
 
     rv = client.get("/statistics?team=Alpha&team=Beta")
-    assert rv.status_code == 200
+    # Verify HTTP status code is 200
+    assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
     data = rv.get_json()
     assert "teams" in data
     assert isinstance(data["teams"], list)

@@ -28,11 +28,14 @@ try
 }
 catch
 {
-    Write-Host "[WARN] Redis is not running" -ForegroundColor Yellow
-    Write-Host "  To start Redis:"
-    Write-Host "  - Option 1: redis-server (if installed locally)"
-    Write-Host "  - Option 2: docker run -d -p 6379:6379 redis:latest"
+    Write-Host "[ERROR] Redis is not running" -ForegroundColor Red
     Write-Host ""
+    Write-Host "To run Redis, choose one option:" -ForegroundColor Yellow
+    Write-Host "1. Install Redis locally: https://github.com/microsoftarchive/redis/releases" -ForegroundColor Cyan
+    Write-Host "2. Use Docker (recommended):" -ForegroundColor Cyan
+    Write-Host "   docker run -d -p 6379:6379 redis:latest" -ForegroundColor Cyan
+    Write-Host ""
+    exit 1
 }
 
 # Function to open new terminal and run command

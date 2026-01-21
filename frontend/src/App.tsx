@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { VERSION } from './version'
 
@@ -6,7 +6,11 @@ import { VERSION } from './version'
 const COLOR_POSITIVE = '#6b9d7a'
 const COLOR_NEGATIVE = '#9d6b6b'
 
-// TODO: actualize to the Stats structure of the backend
+interface Player {
+  name: string
+  id: number
+}
+
 interface TeamData {
   error_code: null | string
   error_message: null | string
@@ -14,8 +18,8 @@ interface TeamData {
   delta: number
   logo_url?: string
   task_id?: string | null
-  other_players: unknown[]
-  players: unknown[]
+  other_players: Player[]
+  players: Player[]
   tag: string
   team: string
   team_id: number
@@ -41,8 +45,30 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
+  const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentSearchIdRef = useRef<number>(0)
+
+  useEffect(() => {
+    const fetchBackendVersion = async () => {
+      try {
+        const response = await fetch('/api/version')
+        const text = await response.text()
+        //console.log('Raw response text:', JSON.stringify(text))
+        if (response.ok) {
+          const data = JSON.parse(text)
+          //console.log('Parsed backend version response:', data)
+          setBackendVersion(data.backend || data.backend_version || 'unknown')
+        } else {
+          console.error('Backend version response not ok:', response.status)
+        }
+      } catch (err) {
+        console.error('Failed to fetch backend version:', err)
+      }
+    }
+
+    fetchBackendVersion()
+  }, [])
 
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
@@ -71,7 +97,7 @@ function App() {
       params.append('team', team1)
       params.append('team', team2)
 
-      const response = await fetch(`/statistics?${params.toString()}`)
+      const response = await fetch(`/api/statistics?${params.toString()}`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -83,20 +109,16 @@ function App() {
       // This ensures old data doesn't persist between searches
       setSummaryData(null)
       setStatistics(data)
-      //console.log('Statistics loaded:', data)
 
       // Check if any team has a task_id (ongoing background task)
       const taskIds = data.teams
         .filter((team: TeamData) => team.task_id)
         .map((team: TeamData) => team.task_id)
 
-      //console.log('Task IDs found:', taskIds)
       if (taskIds.length > 0) {
-        //console.log('Starting polling for task IDs:', taskIds)
         // Poll progress for all tasks
         await pollTasksProgress(taskIds, thisSearchId)
       } else {
-        //console.log('No task IDs, loading completed')
         setLoading(false)
       }
     } catch (err) {
@@ -109,7 +131,7 @@ function App() {
 
   const pollTasksProgress = async (taskIds: (string | undefined)[], searchId: number) => {
     const MAX_POLLING_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
-    const POLL_INTERVAL = 5 * 1000 // 5 seconds in milliseconds
+    const POLL_INTERVAL = 3 * 1000 // 3 seconds in milliseconds
     const startTime = Date.now()
 
     pollIntervalRef.current = setInterval(async () => {
@@ -142,8 +164,7 @@ function App() {
         for (const taskId of taskIds) {
           if (!taskId) continue
 
-          const progressUrl = `/stream-progress/${taskId}`
-          //console.log(`Fetching progress from: ${progressUrl}`)
+          const progressUrl = `/api/stream-progress/${taskId}`
           const progressResponse = await fetch(progressUrl)
           if (!progressResponse.ok) {
             setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
@@ -234,7 +255,6 @@ function App() {
 
         // If all tasks are complete, fetch detailed results
         if (allCompleted && Object.keys(summaries).length > 0) {
-          //console.log('All tasks completed, fetching detailed results')
           setLoading(false)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
@@ -248,23 +268,17 @@ function App() {
             for (const taskId of taskIds) {
               if (!taskId) continue
 
-              //console.log(`Fetching results for task ${taskId}`)
-              const resultsResponse = await fetch(`/results/${taskId}`)
+              const resultsResponse = await fetch(`/api/results/${taskId}`)
               if (resultsResponse.ok) {
                 const resultsData = await resultsResponse.json()
                 detailedResults[taskId] = resultsData
-                //console.log(`Results received for task ${taskId}:`, resultsData)
               } else {
                 console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
                 detailedResults[taskId] = summaries[taskId]
               }
             }
 
-            //console.log('All results prepared, setting summary data:', detailedResults)
             setSummaryData(detailedResults)
-
-            // Debug log to see the data structure
-            //console.log('Summary data received:', detailedResults)
           } catch (err) {
             console.error('Error fetching detailed results:', err)
             // Fall back to summary data if results fetch fails
@@ -294,23 +308,17 @@ function App() {
     rating1: number | null | undefined,
     rating2: number | null | undefined
   ): [string, string] => {
-    //console.log(`getRatingBackgroundColors comparison: rating1=${rating1}, rating2=${rating2}`)
     if (!rating1 || !rating2) {
-      //console.log('  -> One or both ratings are null/undefined, returning transparent')
       return ['transparent', 'transparent']
     }
     const diff = Math.abs(rating1 - rating2)
-    //console.log(`  -> Difference: ${diff}`)
     if (diff <= 100) {
-      //console.log(`  -> Difference <= 100, returning transparent`)
       return ['transparent', 'transparent']
     }
 
     if (rating1 > rating2) {
-      //console.log(`  -> rating1 > rating2, returning [POSITIVE, NEGATIVE]`)
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
-      //console.log(`  -> rating1 <= rating2, returning [NEGATIVE, POSITIVE]`)
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
   }
@@ -319,22 +327,16 @@ function App() {
     const num1 = typeof value1 === 'number' ? value1 : null
     const num2 = typeof value2 === 'number' ? value2 : null
 
-    //console.log(`getSummaryValueColors: value1=${value1} (num1=${num1}), value2=${value2} (num2=${num2})`)
-
     if (num1 === null || num2 === null) {
-      //console.log('  -> One or both values are null/not numeric, returning transparent')
       return ['transparent', 'transparent']
     }
     if (num1 === num2) {
-      //console.log(`  -> Values are equal (${num1} === ${num2}), returning transparent`)
       return ['transparent', 'transparent']
     }
 
     if (num1 > num2) {
-      //console.log(`  -> num1 (${num1}) > num2 (${num2}), returning [POSITIVE, NEGATIVE]`)
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
-      //console.log(`  -> num1 (${num1}) <= num2 (${num2}), returning [NEGATIVE, POSITIVE]`)
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
   }
@@ -359,9 +361,7 @@ function App() {
   }
 
   const getSummaryForTeam = (taskId: string | null | undefined) => {
-    //console.log(`getSummaryForTeam called with taskId: ${taskId}`)
     if (!taskId || !summaryData) {
-      //console.log(`  -> taskId or summaryData is falsy, returning null`)
       return null
     }
 
@@ -371,23 +371,18 @@ function App() {
       return null
     }
 
-    //console.log(`Found data for taskId ${taskId}:`, data)
-
     // Handle different possible data structures
     if (typeof data === 'object') {
       // If it's wrapped in a 'summary' key, unwrap it (this is the expected structure)
       const obj = data as Record<string, unknown>
       if (obj.summary && typeof obj.summary === 'object') {
         const summary = obj.summary as Record<string, unknown>
-        //console.log(`Returning summary.summary for ${taskId}:`, summary)
         return summary
       }
       if (obj.data && typeof obj.data === 'object') {
-        //console.log(`Returning data.data for ${taskId}:`, obj.data)
         return obj.data as Record<string, unknown>
       }
       // Otherwise assume it's the summary object directly
-      //console.log(`Returning data directly for ${taskId}:`, obj)
       return obj as Record<string, unknown>
     }
 
@@ -396,9 +391,12 @@ function App() {
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem' }}>
         <h1>Dota 2 Bet Analyzer</h1>
-        <span style={{ color: '#888', fontSize: '0.9rem' }}>v{VERSION}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+          <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: '500' }}>Frontend: v{VERSION}</span>
+          <span style={{ color: '#999', fontSize: '0.8rem' }}>Backend: v {backendVersion || 'loading...'}</span>
+        </div>
       </div>
 
       <div className="form-section">

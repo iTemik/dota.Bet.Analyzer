@@ -6,17 +6,25 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/statistics': {
+      '/api/version': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
-      '/stream-progress': {
+      '/api/statistics': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
-      '/results': {
+      '/api/stream-progress': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/api/results': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }
