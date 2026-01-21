@@ -4,7 +4,7 @@
     "description": "Dota 2 Bet Analyzer - Multi-service development environment",
     "private": true,
     "scripts": {
-        "dev": "concurrently \"npm run backend\" \"npm run celery\" \"npm run frontend\"",
+        "dev": "node scripts/check-redis.js && concurrently \"npm run backend\" \"npm run celery\" \"npm run frontend\"",
         "backend": "node scripts/run-with-venv.js \"python -m flask --app backend --debug run --port=5000\"",
         "celery": "node scripts/run-with-venv.js \"python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo\"",
         "frontend": "cd frontend && npm run dev",

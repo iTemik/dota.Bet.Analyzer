@@ -6,7 +6,11 @@ import { VERSION } from './version'
 const COLOR_POSITIVE = '#6b9d7a'
 const COLOR_NEGATIVE = '#9d6b6b'
 
-// TODO: actualize to the Stats structure of the backend
+interface Player {
+  name: string
+  id: number
+}
+
 interface TeamData {
   error_code: null | string
   error_message: null | string
@@ -14,8 +18,8 @@ interface TeamData {
   delta: number
   logo_url?: string
   task_id?: string | null
-  other_players: unknown[]
-  players: unknown[]
+  other_players: Player[]
+  players: Player[]
   tag: string
   team: string
   team_id: number
@@ -83,20 +87,16 @@ function App() {
       // This ensures old data doesn't persist between searches
       setSummaryData(null)
       setStatistics(data)
-      //console.log('Statistics loaded:', data)
 
       // Check if any team has a task_id (ongoing background task)
       const taskIds = data.teams
         .filter((team: TeamData) => team.task_id)
         .map((team: TeamData) => team.task_id)
 
-      //console.log('Task IDs found:', taskIds)
       if (taskIds.length > 0) {
-        //console.log('Starting polling for task IDs:', taskIds)
         // Poll progress for all tasks
         await pollTasksProgress(taskIds, thisSearchId)
       } else {
-        //console.log('No task IDs, loading completed')
         setLoading(false)
       }
     } catch (err) {
@@ -143,7 +143,6 @@ function App() {
           if (!taskId) continue
 
           const progressUrl = `/stream-progress/${taskId}`
-          //console.log(`Fetching progress from: ${progressUrl}`)
           const progressResponse = await fetch(progressUrl)
           if (!progressResponse.ok) {
             setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
@@ -234,7 +233,6 @@ function App() {
 
         // If all tasks are complete, fetch detailed results
         if (allCompleted && Object.keys(summaries).length > 0) {
-          //console.log('All tasks completed, fetching detailed results')
           setLoading(false)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
@@ -248,23 +246,17 @@ function App() {
             for (const taskId of taskIds) {
               if (!taskId) continue
 
-              //console.log(`Fetching results for task ${taskId}`)
               const resultsResponse = await fetch(`/results/${taskId}`)
               if (resultsResponse.ok) {
                 const resultsData = await resultsResponse.json()
                 detailedResults[taskId] = resultsData
-                //console.log(`Results received for task ${taskId}:`, resultsData)
               } else {
                 console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
                 detailedResults[taskId] = summaries[taskId]
               }
             }
 
-            //console.log('All results prepared, setting summary data:', detailedResults)
             setSummaryData(detailedResults)
-
-            // Debug log to see the data structure
-            //console.log('Summary data received:', detailedResults)
           } catch (err) {
             console.error('Error fetching detailed results:', err)
             // Fall back to summary data if results fetch fails
@@ -294,23 +286,17 @@ function App() {
     rating1: number | null | undefined,
     rating2: number | null | undefined
   ): [string, string] => {
-    //console.log(`getRatingBackgroundColors comparison: rating1=${rating1}, rating2=${rating2}`)
     if (!rating1 || !rating2) {
-      //console.log('  -> One or both ratings are null/undefined, returning transparent')
       return ['transparent', 'transparent']
     }
     const diff = Math.abs(rating1 - rating2)
-    //console.log(`  -> Difference: ${diff}`)
     if (diff <= 100) {
-      //console.log(`  -> Difference <= 100, returning transparent`)
       return ['transparent', 'transparent']
     }
 
     if (rating1 > rating2) {
-      //console.log(`  -> rating1 > rating2, returning [POSITIVE, NEGATIVE]`)
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
-      //console.log(`  -> rating1 <= rating2, returning [NEGATIVE, POSITIVE]`)
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
   }
@@ -319,22 +305,16 @@ function App() {
     const num1 = typeof value1 === 'number' ? value1 : null
     const num2 = typeof value2 === 'number' ? value2 : null
 
-    //console.log(`getSummaryValueColors: value1=${value1} (num1=${num1}), value2=${value2} (num2=${num2})`)
-
     if (num1 === null || num2 === null) {
-      //console.log('  -> One or both values are null/not numeric, returning transparent')
       return ['transparent', 'transparent']
     }
     if (num1 === num2) {
-      //console.log(`  -> Values are equal (${num1} === ${num2}), returning transparent`)
       return ['transparent', 'transparent']
     }
 
     if (num1 > num2) {
-      //console.log(`  -> num1 (${num1}) > num2 (${num2}), returning [POSITIVE, NEGATIVE]`)
       return [COLOR_POSITIVE, COLOR_NEGATIVE]
     } else {
-      //console.log(`  -> num1 (${num1}) <= num2 (${num2}), returning [NEGATIVE, POSITIVE]`)
       return [COLOR_NEGATIVE, COLOR_POSITIVE]
     }
   }
@@ -359,9 +339,7 @@ function App() {
   }
 
   const getSummaryForTeam = (taskId: string | null | undefined) => {
-    //console.log(`getSummaryForTeam called with taskId: ${taskId}`)
     if (!taskId || !summaryData) {
-      //console.log(`  -> taskId or summaryData is falsy, returning null`)
       return null
     }
 
@@ -371,23 +349,18 @@ function App() {
       return null
     }
 
-    //console.log(`Found data for taskId ${taskId}:`, data)
-
     // Handle different possible data structures
     if (typeof data === 'object') {
       // If it's wrapped in a 'summary' key, unwrap it (this is the expected structure)
       const obj = data as Record<string, unknown>
       if (obj.summary && typeof obj.summary === 'object') {
         const summary = obj.summary as Record<string, unknown>
-        //console.log(`Returning summary.summary for ${taskId}:`, summary)
         return summary
       }
       if (obj.data && typeof obj.data === 'object') {
-        //console.log(`Returning data.data for ${taskId}:`, obj.data)
         return obj.data as Record<string, unknown>
       }
       // Otherwise assume it's the summary object directly
-      //console.log(`Returning data directly for ${taskId}:`, obj)
       return obj as Record<string, unknown>
     }
 
