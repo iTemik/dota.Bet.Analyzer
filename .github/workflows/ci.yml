@@ -46,9 +46,19 @@ jobs:
         run: |
           source .venv/bin/activate
           # Run formatters/linters in check mode (no modifications in CI)
-          ruff check .
-          black --check --line-length=120 .
-          isort --check-only --profile=black .
+          echo "Running ruff check..."
+          ruff check . --output-format=concise || (echo "RUFF CHECK FAILED"; exit 1)
+          echo ""
+
+          echo "Running black check..."
+          black --check --line-length=120 --diff . || (echo "BLACK CHECK FAILED"; exit 1)
+          echo ""
+
+          echo "Running isort check..."
+          isort --check-only --profile=black --diff . || (echo "ISORT CHECK FAILED"; exit 1)
+          echo ""
+
+          echo "Running other pre-commit hooks..."
           # Run other pre-commit hooks (skip the ones we already checked)
           pre-commit run --all-files
         env:
@@ -87,7 +97,7 @@ jobs:
 
       - name: Prepare build package
         run: |
-          VERSION=$(cat package.json | grep '"version"' | head -1 | awk -F'"' '{print $4}')
+          VERSION=$(cat frontend/package.json | grep '"version"' | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/')
           PACKAGE_NAME="dota-bet-analyzer-${VERSION}"
           mkdir -p build/${PACKAGE_NAME}
 
