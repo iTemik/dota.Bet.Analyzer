@@ -6,15 +6,19 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/statistics': {
+      '/api/version': {
         target: 'http://localhost:5000',
         changeOrigin: true
       },
-      '/stream-progress': {
+      '/api/statistics': {
         target: 'http://localhost:5000',
         changeOrigin: true
       },
-      '/results': {
+      '/api/stream-progress': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/api/results': {
         target: 'http://localhost:5000',
         changeOrigin: true
       }

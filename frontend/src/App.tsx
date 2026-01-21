@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { VERSION } from './version'
 
@@ -45,8 +45,30 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
+  const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentSearchIdRef = useRef<number>(0)
+
+  useEffect(() => {
+    const fetchBackendVersion = async () => {
+      try {
+        const response = await fetch('/api/version')
+        const text = await response.text()
+        //console.log('Raw response text:', JSON.stringify(text))
+        if (response.ok) {
+          const data = JSON.parse(text)
+          //console.log('Parsed backend version response:', data)
+          setBackendVersion(data.backend || data.backend_version || 'unknown')
+        } else {
+          console.error('Backend version response not ok:', response.status)
+        }
+      } catch (err) {
+        console.error('Failed to fetch backend version:', err)
+      }
+    }
+
+    fetchBackendVersion()
+  }, [])
 
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
@@ -75,7 +97,7 @@ function App() {
       params.append('team', team1)
       params.append('team', team2)
 
-      const response = await fetch(`/statistics?${params.toString()}`)
+      const response = await fetch(`/api/statistics?${params.toString()}`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -109,7 +131,7 @@ function App() {
 
   const pollTasksProgress = async (taskIds: (string | undefined)[], searchId: number) => {
     const MAX_POLLING_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
-    const POLL_INTERVAL = 5 * 1000 // 5 seconds in milliseconds
+    const POLL_INTERVAL = 3 * 1000 // 3 seconds in milliseconds
     const startTime = Date.now()
 
     pollIntervalRef.current = setInterval(async () => {
@@ -142,7 +164,7 @@ function App() {
         for (const taskId of taskIds) {
           if (!taskId) continue
 
-          const progressUrl = `/stream-progress/${taskId}`
+          const progressUrl = `/api/stream-progress/${taskId}`
           const progressResponse = await fetch(progressUrl)
           if (!progressResponse.ok) {
             setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
@@ -246,7 +268,7 @@ function App() {
             for (const taskId of taskIds) {
               if (!taskId) continue
 
-              const resultsResponse = await fetch(`/results/${taskId}`)
+              const resultsResponse = await fetch(`/api/results/${taskId}`)
               if (resultsResponse.ok) {
                 const resultsData = await resultsResponse.json()
                 detailedResults[taskId] = resultsData
@@ -369,9 +391,12 @@ function App() {
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem' }}>
         <h1>Dota 2 Bet Analyzer</h1>
-        <span style={{ color: '#888', fontSize: '0.9rem' }}>v{VERSION}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+          <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: '500' }}>Frontend: v{VERSION}</span>
+          <span style={{ color: '#999', fontSize: '0.8rem' }}>Backend: v {backendVersion || 'loading...'}</span>
+        </div>
       </div>
 
       <div className="form-section">
