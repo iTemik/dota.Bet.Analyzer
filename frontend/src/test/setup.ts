@@ -26,4 +26,4 @@ beforeAll(() => {
 
 afterAll(() => {
     console.warn = originalWarn
-});
+})

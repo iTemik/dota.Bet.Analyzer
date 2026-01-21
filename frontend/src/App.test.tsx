@@ -26,9 +26,9 @@ globalThis.fetch = vi.fn()
 
 describe('App Component', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        // Setup default fetch mock that handles all routes
-        (globalThis.fetch as any).mockImplementation((url: string) => {
+        vi.clearAllMocks()
+            // Setup default fetch mock that handles all routes
+            ; (globalThis.fetch as any).mockImplementation((url: string) => {
             if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
