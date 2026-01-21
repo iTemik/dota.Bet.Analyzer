@@ -8,19 +8,23 @@ export default defineConfig({
     proxy: {
       '/api/version': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/api/statistics': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/api/stream-progress': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/api/results': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }
