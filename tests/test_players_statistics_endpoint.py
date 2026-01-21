@@ -22,7 +22,7 @@ def client(app):
 class TestPlayersStatisticsEndpoint:
     """Test suite for /statistics/players endpoint."""
 
-    def test_returns_201_status_on_success(self, client):
+    def test_returns_200_status_on_success(self, client):
         """Test that endpoint returns 200 status code on successful request."""
         with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-id-123")
