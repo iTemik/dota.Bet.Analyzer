@@ -126,7 +126,8 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
 
     db.commit()
     elapsed = time.time() - start_time
-    logger.info(f"Stored/updated {count} pro players in {elapsed:.3f}s ({count/elapsed:.1f} records/sec)")
+    rate = count / elapsed if elapsed > 0 else 0.0
+    logger.info(f"Stored/updated {count} pro players in {elapsed:.3f}s ({rate:.1f} records/sec)")
     return count
 
 
@@ -352,5 +353,6 @@ def store_teams(teams_data: list[dict[str, Any]]) -> int:
 
     db.commit()
     elapsed = time.time() - start_time
-    logger.info(f"Stored/updated {count} teams in {elapsed:.3f}s ({count/elapsed:.1f} records/sec)")
+    records_per_sec = (count / elapsed) if elapsed > 0 else 0.0
+    logger.info(f"Stored/updated {count} teams in {elapsed:.3f}s ({records_per_sec:.1f} records/sec)")
     return count

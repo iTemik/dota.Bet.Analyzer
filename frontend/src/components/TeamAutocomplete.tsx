@@ -212,7 +212,7 @@ export function TeamAutocomplete({
           value={value}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => isOpen && setIsOpen(true)}
+          onFocus={() => suggestions.length > 0 && setIsOpen(true)}
           placeholder={placeholder}
           disabled={disabled}
           className="autocomplete-input"
