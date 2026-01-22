@@ -18,26 +18,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Download previous build number
-        continue-on-error: true
-        run: |
-          # Try to download previous build number from artifacts
-          # For first run, this will fail and default to 0
-          mkdir -p .build-cache
-          echo "0" > .build-cache/build-number.txt
-
-      - name: Calculate build number
-        id: build
-        run: |
-          PREV_BUILD=$(cat .build-cache/build-number.txt || echo "0")
-          NEW_BUILD=$((PREV_BUILD + 1))
-          echo "number=$NEW_BUILD" >> $GITHUB_OUTPUT
-          echo "Build number: $NEW_BUILD"
-
       - name: Set version in files
         env:
-          BUILD_NUMBER: ${{ steps.build.outputs.number }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
+          echo "Using GitHub run number as build number: $BUILD_NUMBER"
           node scripts/version.js frontend increment-minor
           node scripts/version.js backend increment-minor
           node scripts/version.js frontend build $BUILD_NUMBER
@@ -55,13 +40,6 @@ jobs:
         if: success()
         run: |
           git push origin HEAD:${{ github.ref }} || echo "No changes to push"
-
-      - name: Upload build number
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-cache
-          path: .build-cache/build-number.txt
-          retention-days: 1
 
       - name: Create Release Tag
         if: success()
