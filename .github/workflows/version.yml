@@ -38,15 +38,18 @@ jobs:
         env:
           BUILD_NUMBER: ${{ steps.build.outputs.number }}
         run: |
-          node scripts/version.js increment-minor
-          node scripts/version.js build $BUILD_NUMBER
+          node scripts/version.js frontend increment-minor
+          node scripts/version.js backend increment-minor
+          node scripts/version.js frontend build $BUILD_NUMBER
+          node scripts/version.js backend build $BUILD_NUMBER
 
       - name: Commit version update
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add package.json frontend/src/version.ts backend/__init__.py
-          git commit -m "chore: bump version to $(node scripts/version.js get-full)" || echo "No changes to commit"
+          FRONTEND_VERSION=$(node scripts/version.js frontend get)
+          git commit -m "chore: bump version to ${FRONTEND_VERSION}" || echo "No changes to commit"
 
       - name: Push changes
         if: success()
@@ -63,7 +66,13 @@ jobs:
       - name: Create Release Tag
         if: success()
         run: |
-          VERSION=$(node scripts/version.js get-full)
-          git tag -a "v${VERSION}" -m "Release ${VERSION}" || echo "Tag already exists"
-          git push origin "v${VERSION}" || echo "Tag push failed"
-        continue-on-error: true
+          FRONTEND_VERSION=$(node scripts/version.js frontend get)
+          BACKEND_VERSION=$(node scripts/version.js backend get)
+          echo "Frontend version: $FRONTEND_VERSION"
+          echo "Backend version: $BACKEND_VERSION"
+
+          # Create tag combining both frontend and backend versions
+          RELEASE_VERSION="${FRONTEND_VERSION}-${BACKEND_VERSION}"
+          echo "Creating release tag: v${RELEASE_VERSION}"
+          git tag -a "v${RELEASE_VERSION}" -m "Release v${RELEASE_VERSION}" || (echo "Tag already exists, skipping tag creation"; exit 0)
+          git push origin "v${RELEASE_VERSION}" || echo "Tag push completed"
