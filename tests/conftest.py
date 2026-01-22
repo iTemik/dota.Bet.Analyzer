@@ -43,7 +43,9 @@ def app():
 
     # Patch the API call to prevent real requests during app startup
     with patch("backend.pro_players.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = None  # Return None to skip startup sync
+        mock_fetch.side_effect = ConnectionError(
+            "Mocked connection error to skip startup sync"
+        )
 
         app = create_app(
             {
