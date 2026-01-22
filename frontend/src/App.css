@@ -37,6 +37,8 @@ h1 {
   padding: 2rem;
   border-radius: 8px;
   backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 100;
 }
 
 .input-groups-row {
@@ -116,6 +118,8 @@ input:focus {
   padding: 2rem;
   border-radius: 8px;
   backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 1;
 }
 
 .results-section h2 {
@@ -172,4 +176,46 @@ pre {
   text-align: left;
   font-size: 0.9rem;
   color: #fff;
+}
+
+/* Collapsible sections */
+.collapsible-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  user-select: none;
+  transition: background 0.2s;
+  margin-bottom: 0.5rem;
+}
+
+.collapsible-header:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.collapsible-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.collapsible-toggle {
+  font-size: 1.2rem;
+  transition: transform 0.2s;
+}
+
+.collapsible-toggle.expanded {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.collapsible-content.expanded {
+  max-height: 2000px;
 }

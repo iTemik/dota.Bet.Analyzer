@@ -1,0 +1,208 @@
+/* TeamAutocomplete component styles */
+
+.team-autocomplete {
+    position: relative;
+    width: 100%;
+}
+
+.autocomplete-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.autocomplete-input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.autocomplete-input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.autocomplete-input:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    cursor: not-allowed;
+}
+
+/* Loading spinner */
+.autocomplete-spinner {
+    position: absolute;
+    right: 12px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #4a90e2;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Error message */
+.autocomplete-error {
+    color: #d32f2f;
+    font-size: 0.875rem;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background-color: #ffebee;
+    border-radius: 4px;
+}
+
+/* Dropdown */
+.autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 4px 0 0 0;
+    padding: 0;
+    list-style: none;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 10000;
+}
+
+/* Dropdown options */
+.autocomplete-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.autocomplete-option:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-option:hover {
+    background-color: #f5f5f5;
+}
+
+.autocomplete-option.highlighted {
+    background-color: #e3f2fd;
+}
+
+.autocomplete-option:active {
+    background-color: #e0e0e0;
+}
+
+/* Option content */
+.option-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.option-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.option-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.option-name {
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.option-tag {
+    font-size: 0.85rem;
+    color: #666;
+    font-style: italic;
+}
+
+.option-rating {
+    font-size: 0.9rem;
+    color: #999;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Empty state */
+.autocomplete-empty {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-size: 0.95rem;
+    list-style: none;
+}
+
+/* Scrollbar styling for webkit browsers */
+.autocomplete-dropdown::-webkit-scrollbar {
+    width: 8px;
+}
+
+.autocomplete-dropdown::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.autocomplete-dropdown::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.autocomplete-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+    .autocomplete-input {
+        font-size: 16px;
+        /* Prevents zoom on iOS */
+    }
+
+    .autocomplete-dropdown {
+        max-height: 250px;
+    }
+
+    .option-content {
+        gap: 8px;
+    }
+
+    .option-logo {
+        width: 36px;
+        height: 36px;
+    }
+
+    .option-name {
+        font-size: 0.95rem;
+    }
+
+    .option-tag {
+        font-size: 0.8rem;
+    }
+}

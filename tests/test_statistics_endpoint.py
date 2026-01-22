@@ -18,7 +18,7 @@ def test_get_statistics_query_params(monkeypatch):
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.get("/statistics?team=Alpha&team=Beta")
+    rv = client.get("/api/statistics?team=Alpha&team=Beta")
     # Verify HTTP status code is 200
     assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
     data = rv.get_json()
@@ -45,7 +45,7 @@ def test_get_statistics_numbered_params(monkeypatch):
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.get("/statistics?team1=Alpha&team2=Beta")
+    rv = client.get("/api/statistics?team1=Alpha&team2=Beta")
     assert rv.status_code == 200
     data = rv.get_json()
     assert len(data["teams"]) == 2
@@ -68,7 +68,7 @@ def test_post_statistics_json_body(monkeypatch):
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.post("/statistics", json={"teams": ["X", "Y", "Z"]})
+    rv = client.post("/api/statistics", json={"teams": ["X", "Y", "Z"]})
     assert rv.status_code == 200
     data = rv.get_json()
     assert len(data["teams"]) == 3
@@ -93,7 +93,7 @@ def test_post_trims_and_filters_teams(monkeypatch):
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.post("/statistics", json={"teams": ["  A  ", 123, None, "B "]})
+    rv = client.post("/api/statistics", json={"teams": ["  A  ", 123, None, "B "]})
     assert rv.status_code == 200
     data = rv.get_json()
     assert len(data["teams"]) == 2
@@ -106,7 +106,7 @@ def test_too_many_teams_returns_400():
     client = app.test_client()
 
     many = [f"T{i}" for i in range(12)]
-    rv = client.post("/statistics", json={"teams": many})
+    rv = client.post("/api/statistics", json={"teams": many})
     assert rv.status_code == 400
 
 
@@ -114,9 +114,9 @@ def test_no_teams_returns_400():
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.get("/statistics")
+    rv = client.get("/api/statistics")
     assert rv.status_code == 400
-    rv = client.post("/statistics", json={})
+    rv = client.post("/api/statistics", json={})
     assert rv.status_code == 400
 
 
@@ -136,7 +136,7 @@ def test_response_shape_contains_expected_fields(monkeypatch):
     app = create_app(test_config={})
     client = app.test_client()
 
-    rv = client.post("/statistics", json={"teams": ["Single"]})
+    rv = client.post("/api/statistics", json={"teams": ["Single"]})
     assert rv.status_code == 200
     data = rv.get_json()
     assert "teams" in data and isinstance(data["teams"], list) and len(data["teams"]) == 1

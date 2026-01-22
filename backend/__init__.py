@@ -90,7 +90,7 @@ def _init_extensions(app):
     from .dota_bet_analyzer import bp as dota_bp
     from .dota_bet_analyzer import celery as celery_app
 
-    app.register_blueprint(dota_bp)
+    app.register_blueprint(dota_bp, url_prefix="/api")
     celery_app.conf.update(app.config or {})
 
     # Sync pro players on app startup (only in production, not in test mode)

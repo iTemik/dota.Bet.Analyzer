@@ -35,19 +35,19 @@ class TestVersionEndpoint:
 
     def test_version_returns_200_status(self, client):
         """Test that /version returns 200 status code."""
-        rv = client.get("/version")
+        rv = client.get("/api/version")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
     def test_version_returns_json_response(self, client):
         """Test that /version returns valid JSON."""
-        rv = client.get("/version")
+        rv = client.get("/api/version")
         assert rv.status_code == 200
         data = rv.get_json()
         assert isinstance(data, dict)
 
     def test_version_contains_backend_version(self, client):
         """Test that response contains backend version field."""
-        rv = client.get("/version")
+        rv = client.get("/api/version")
         assert rv.status_code == 200
         data = rv.get_json()
         assert "backend" in data
@@ -55,7 +55,7 @@ class TestVersionEndpoint:
 
     def test_version_contains_build_number(self, client):
         """Test that response contains build number field."""
-        rv = client.get("/version")
+        rv = client.get("/api/version")
         assert rv.status_code == 200
         data = rv.get_json()
         assert "build" in data
@@ -70,7 +70,7 @@ class TestStreamProgressEndpoint:
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             # Mock Redis to return completed progress immediately
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
-            rv = client.get("/stream-progress/test-task-123")
+            rv = client.get("/api/stream-progress/test-task-123")
             assert rv.status_code == 200
 
     def test_stream_progress_returns_event_stream(self, client):
@@ -78,7 +78,7 @@ class TestStreamProgressEndpoint:
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             # Return completed task immediately to avoid streaming
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
-            rv = client.get("/stream-progress/test-task-123")
+            rv = client.get("/api/stream-progress/test-task-123")
             assert rv.status_code == 200
             assert "text/event-stream" in rv.content_type
 
@@ -87,7 +87,7 @@ class TestStreamProgressEndpoint:
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             # Return completed task immediately
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
-            rv = client.get("/stream-progress/test-task-123")
+            rv = client.get("/api/stream-progress/test-task-123")
             assert rv.status_code == 200
             assert "Access-Control-Allow-Origin" in rv.headers
 
@@ -100,14 +100,14 @@ class TestResultsEndpoint:
         test_data = {"results": [{"account_id": 123, "matches": []}], "successful": 1, "total": 1}
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             mock_redis.get.return_value = json.dumps(test_data).encode()
-            rv = client.get("/results/test-task-123")
+            rv = client.get("/api/results/test-task-123")
             assert rv.status_code == 200
 
     def test_results_returns_404_when_not_found(self, client):
         """Test that /results returns 404 when results not found."""
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             mock_redis.get.return_value = None
-            rv = client.get("/results/nonexistent-task")
+            rv = client.get("/api/results/nonexistent-task")
             assert rv.status_code == 404
 
     def test_results_returns_json_response(self, client):
@@ -115,7 +115,7 @@ class TestResultsEndpoint:
         test_data = {"results": [], "successful": 0, "total": 1}
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             mock_redis.get.return_value = json.dumps(test_data).encode()
-            rv = client.get("/results/test-task-456")
+            rv = client.get("/api/results/test-task-456")
             assert rv.status_code == 200
             data = rv.get_json()
             assert isinstance(data, dict)
@@ -125,7 +125,7 @@ class TestResultsEndpoint:
         """Test that 404 response contains error message."""
         with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
             mock_redis.get.return_value = None
-            rv = client.get("/results/nonexistent")
+            rv = client.get("/api/results/nonexistent")
             assert rv.status_code == 404
             data = rv.get_json()
             assert "error_code" in data
@@ -152,7 +152,7 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.get("/statistics?team=TestTeam")
+        rv = client.get("/api/statistics?team=TestTeam")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
     def test_statistics_post_returns_200_on_success(self, monkeypatch):
@@ -172,7 +172,7 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/statistics", json={"teams": ["Team1"]})
+        rv = client.post("/api/statistics", json={"teams": ["Team1"]})
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
     def test_statistics_get_returns_400_when_no_teams(self):
@@ -180,7 +180,7 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.get("/statistics")
+        rv = client.get("/api/statistics")
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -191,7 +191,7 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/statistics", json={})
+        rv = client.post("/api/statistics", json={})
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -210,7 +210,7 @@ class TestStatisticsEndpoint:
         client = app.test_client()
 
         teams = [f"Team{i}" for i in range(11)]
-        rv = client.post("/statistics", json={"teams": teams})
+        rv = client.post("/api/statistics", json={"teams": teams})
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
 
     def test_statistics_unsupported_method_returns_405(self):
@@ -218,7 +218,7 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.put("/statistics", json={"teams": ["Team1"]})
+        rv = client.put("/api/statistics", json={"teams": ["Team1"]})
         assert rv.status_code == 405
 
 
@@ -233,7 +233,7 @@ class TestProPlayersEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/pro-players/sync")
+        rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
     def test_pro_players_returns_503_on_connection_error(self, monkeypatch):
@@ -243,7 +243,7 @@ class TestProPlayersEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/pro-players/sync")
+        rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -255,7 +255,7 @@ class TestProPlayersEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/pro-players/sync")
+        rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -268,7 +268,7 @@ class TestProPlayersEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/pro-players/sync")
+        rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 200
         data = rv.get_json()
         assert isinstance(data, dict)
@@ -286,7 +286,7 @@ class TestTeamsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/teams/sync")
+        rv = client.post("/api/teams/sync")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
     def test_teams_returns_503_on_connection_error(self, monkeypatch):
@@ -296,7 +296,7 @@ class TestTeamsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/teams/sync")
+        rv = client.post("/api/teams/sync")
         assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -308,7 +308,7 @@ class TestTeamsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/teams/sync")
+        rv = client.post("/api/teams/sync")
         assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
         data = rv.get_json()
         assert "error_code" in data
@@ -321,7 +321,7 @@ class TestTeamsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        rv = client.post("/teams/sync")
+        rv = client.post("/api/teams/sync")
         assert rv.status_code == 200
         data = rv.get_json()
         assert isinstance(data, dict)

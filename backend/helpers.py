@@ -20,6 +20,7 @@ class ErrorCode:
     FAILED_TO_STORE_PRO_PLAYERS = "FAILED_TO_STORE_PRO_PLAYERS"
     FAILED_TO_FETCH_TEAMS = "FAILED_TO_FETCH_TEAMS"
     FAILED_TO_STORE_TEAMS = "FAILED_TO_STORE_TEAMS"
+    SEARCH_ERROR = "SEARCH_ERROR"
 
 
 def prepare_sql_for_team_explore(team: str) -> str:

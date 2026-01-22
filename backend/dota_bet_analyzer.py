@@ -575,6 +575,92 @@ def sync_teams() -> tuple[Response, int]:
         )
 
 
+@bp.route("/teams/search", methods=["GET"])
+def search_teams():
+    """Search for teams by name for autocomplete.
+
+    Query parameters:
+      - q: Search query (minimum 2 characters)
+      - limit: Maximum number of results (default: 10, max: 50)
+
+    Returns:
+      - 200: JSON array of matching teams with {team_id, name, tag, logo_url, rating}
+      - 400: Missing or invalid query parameter
+      - 503: Database connection error
+    """
+    from backend.db import get_db
+
+    search_query = request.args.get("q", "").strip()
+    limit = min(int(request.args.get("limit", 10)), 50)  # Cap at 50
+
+    # Validate search query
+    if not search_query or len(search_query) < 2:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.INVALID_REQUEST,
+                    "message": "Search query must be at least 2 characters",
+                }
+            ),
+            400,
+        )
+
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        # Search teams by name or tag (case-insensitive)
+        # Prioritize teams that start with the query, then those containing it
+        cursor.execute(
+            """
+            SELECT team_id, name, tag, logo_url, rating
+            FROM teams
+            WHERE LOWER(name) LIKE LOWER(?) OR LOWER(tag) LIKE LOWER(?)
+            ORDER BY
+              CASE
+                WHEN LOWER(name) LIKE LOWER(?) THEN 0
+                WHEN LOWER(tag) LIKE LOWER(?) THEN 1
+                ELSE 2
+              END,
+              name
+            LIMIT ?
+            """,
+            (
+                f"{search_query}%",  # Starts with
+                f"%{search_query}%",  # Contains
+                f"{search_query}%",
+                f"{search_query}%",
+                limit,
+            ),
+        )
+
+        teams = [
+            {
+                "team_id": row[0],
+                "name": row[1],
+                "tag": row[2],
+                "logo_url": row[3],
+                "rating": row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        return jsonify(teams), 200
+
+    except Exception as e:
+        logger.error(f"Error searching teams: {e!s}")
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.SEARCH_ERROR,
+                    "message": "Failed to search teams",
+                    "details": {"url": request.path},
+                }
+            ),
+            503,
+        )
+
+
 if __name__ == "__main__":
     from backend import create_app
 

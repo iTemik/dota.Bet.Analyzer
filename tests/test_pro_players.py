@@ -101,7 +101,7 @@ def test_pro_players_endpoint_success(client, sample_pro_players_data):
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = sample_pro_players_data
 
-        response = client.post("/pro-players/sync")
+        response = client.post("/api/pro-players/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -114,7 +114,7 @@ def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = sample_pro_players_data
 
-        response = client.post("/pro-players/sync")
+        response = client.post("/api/pro-players/sync")
         assert response.status_code == 200
 
         # Check database
@@ -142,7 +142,7 @@ def test_pro_players_endpoint_connection_failure(client):
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
 
-        response = client.post("/pro-players/sync")
+        response = client.post("/api/pro-players/sync")
 
         assert response.status_code == 503
         data = json.loads(response.data)
@@ -154,7 +154,7 @@ def test_pro_players_endpoint_invalid_response(client):
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
 
-        response = client.post("/pro-players/sync")
+        response = client.post("/api/pro-players/sync")
 
         assert response.status_code == 502
         data = json.loads(response.data)
@@ -166,7 +166,7 @@ def test_pro_players_endpoint_empty_response(client):
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = []
 
-        response = client.post("/pro-players/sync")
+        response = client.post("/api/pro-players/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -179,7 +179,7 @@ def test_pro_players_upsert(client, sample_pro_players_data, app):
         mock_fetch.return_value = sample_pro_players_data
 
         # First insert
-        client.post("/pro-players/sync")
+        client.post("/api/pro-players/sync")
 
         # Update data
         updated_data = sample_pro_players_data.copy()
@@ -189,7 +189,7 @@ def test_pro_players_upsert(client, sample_pro_players_data, app):
         mock_fetch.return_value = updated_data
 
         # Second insert (should update)
-        client.post("/pro-players/sync")
+        client.post("/api/pro-players/sync")
 
         # Check database
         with app.app_context():
@@ -529,7 +529,7 @@ def test_teams_endpoint_sync_success(client, sample_teams_data):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = sample_teams_data
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -542,7 +542,7 @@ def test_teams_endpoint_stores_data(client, sample_teams_data, app):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = sample_teams_data
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
         assert response.status_code == 200
 
         # Check database
@@ -575,7 +575,7 @@ def test_teams_endpoint_api_failure(client):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
 
         assert response.status_code == 503
         data = json.loads(response.data)
@@ -587,7 +587,7 @@ def test_teams_endpoint_invalid_response(client):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
 
         assert response.status_code == 502
         data = json.loads(response.data)
@@ -599,7 +599,7 @@ def test_teams_endpoint_empty_response(client):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = []
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -613,7 +613,7 @@ def test_teams_upsert(client, sample_teams_data, app):
         mock_fetch.return_value = sample_teams_data
 
         # First insert
-        client.post("/teams/sync")
+        client.post("/api/teams/sync")
 
         # Update data
         updated_data = sample_teams_data.copy()
@@ -623,7 +623,7 @@ def test_teams_upsert(client, sample_teams_data, app):
         mock_fetch.return_value = updated_data
 
         # Second insert (should update)
-        client.post("/teams/sync")
+        client.post("/api/teams/sync")
 
         # Check database
         with app.app_context():
@@ -730,7 +730,7 @@ def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = large_dataset
 
-        response = client.post("/teams/sync")
+        response = client.post("/api/teams/sync")
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data["count"] == 1500
