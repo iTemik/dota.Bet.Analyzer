@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+import backend
 from backend import create_app
 from scripts.init_d2ba_db import init_d2ba_db
 
@@ -16,11 +17,9 @@ def reset_app_singleton():
     This ensures that tests which call create_app() without parameters
     don't contaminate the global _app cache used by other tests.
     """
-    import backend as backend_mod
-
-    backend_mod._app = None
+    backend._app = None
     yield
-    backend_mod._app = None
+    backend._app = None
 
 
 @pytest.fixture

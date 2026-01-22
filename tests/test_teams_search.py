@@ -147,3 +147,54 @@ class TestTeamsSearch:
         data = response.get_json()
         assert isinstance(data, list)
         assert len(data) == 0
+
+    def test_search_teams_limit_non_numeric(self, client, app):
+        """Test limit parameter with non-numeric value"""
+        test_teams = [(600, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        self._insert_teams(app, test_teams)
+
+        # Test with non-numeric limit
+        response = client.get("/api/teams/search?q=Team&limit=abc")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "message" in data
+        assert "valid integer" in data["message"].lower()
+
+    def test_search_teams_limit_negative(self, client, app):
+        """Test limit parameter with negative value"""
+        test_teams = [(700, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        self._insert_teams(app, test_teams)
+
+        # Test with negative limit
+        response = client.get("/api/teams/search?q=Team&limit=-1")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "message" in data
+        assert "positive" in data["message"].lower() or "greater than" in data["message"].lower()
+
+    def test_search_teams_limit_zero(self, client, app):
+        """Test limit parameter with zero value"""
+        test_teams = [(800, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        self._insert_teams(app, test_teams)
+
+        # Test with zero limit
+        response = client.get("/api/teams/search?q=Team&limit=0")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "message" in data
+        assert "positive" in data["message"].lower() or "greater than" in data["message"].lower()
+
+    def test_search_teams_limit_exceeds_max(self, client, app):
+        """Test that limit is capped at maximum (50)"""
+        # Insert more than 50 teams
+        test_teams = [
+            (900 + i, 1500.0, f"Team {i+1:03d}", f"T{i+1:03d}", f"https://example.com/t{i+1:03d}.png")
+            for i in range(60)
+        ]
+        self._insert_teams(app, test_teams)
+
+        # Test with limit=100 (should be capped at 50)
+        response = client.get("/api/teams/search?q=Team&limit=100")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) <= 50  # Should be capped at 50

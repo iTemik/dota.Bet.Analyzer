@@ -294,8 +294,10 @@ def fetch_teams_from_api() -> list[dict[str, Any]]:
                 logger.error(f"Failed to fetch first page of teams: {page_error}")
                 raise ConnectionError(f"Failed to fetch teams from OpenDota API: {page_error}") from page_error
 
-        if not all_teams:
-            raise ConnectionError("No teams fetched from OpenDota API (empty response)")
+        # Only raise ConnectionError if we never successfully fetched any page (page == 0)
+        # If page > 0, we made successful API calls even if result is empty
+        if not all_teams and page == 0:
+            raise ConnectionError("No teams fetched from OpenDota API (empty response on first page)")
 
         return all_teams
 

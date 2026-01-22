@@ -593,7 +593,18 @@ def search_teams():
     search_query = request.args.get("q", "").strip()
     limit_param = request.args.get("limit", 10)
     try:
-        limit = min(int(limit_param), 50)  # Cap at 50
+        limit = int(limit_param)
+        if limit <= 0:
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.INVALID_REQUEST,
+                        "message": "Limit parameter must be a positive integer",
+                    }
+                ),
+                400,
+            )
+        limit = min(limit, 50)  # Cap at 50
     except (TypeError, ValueError):
         return (
             jsonify(
@@ -622,36 +633,28 @@ def search_teams():
         cursor = db.cursor()
 
         # Search teams by name or tag (case-insensitive)
-        # Prioritize teams that start with the query, then those containing it
+        # WHERE uses "contains" pattern; ORDER BY prioritizes "starts with" matches
         cursor.execute(
             """
             SELECT team_id, name, tag, logo_url, rating
             FROM teams
             WHERE
               LOWER(name) LIKE LOWER(?) OR
-              LOWER(tag) LIKE LOWER(?) OR
-              LOWER(name) LIKE LOWER(?) OR
               LOWER(tag) LIKE LOWER(?)
             ORDER BY
               CASE
                 WHEN LOWER(name) LIKE LOWER(?) THEN 0
                 WHEN LOWER(tag) LIKE LOWER(?) THEN 1
-                WHEN LOWER(name) LIKE LOWER(?) THEN 2
-                WHEN LOWER(tag) LIKE LOWER(?) THEN 3
-                ELSE 4
+                ELSE 2
               END,
               name
             LIMIT ?
             """,
             (
-                f"{search_query}%",  # name starts with (WHERE)
-                f"{search_query}%",  # tag starts with (WHERE)
                 f"%{search_query}%",  # name contains (WHERE)
                 f"%{search_query}%",  # tag contains (WHERE)
-                f"{search_query}%",  # name starts with (ORDER BY)
-                f"{search_query}%",  # tag starts with (ORDER BY)
-                f"%{search_query}%",  # name contains (ORDER BY)
-                f"%{search_query}%",  # tag contains (ORDER BY)
+                f"{search_query}%",  # name starts with (ORDER BY - highest priority)
+                f"{search_query}%",  # tag starts with (ORDER BY - second priority)
                 limit,
             ),
         )
