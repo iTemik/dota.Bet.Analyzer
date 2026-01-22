@@ -283,7 +283,7 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             task_id = None
             if pro_players:
                 account_ids = [player.id for player in pro_players]
-                task_id = f"task_{int(time.time())}"
+                task_id = f"task_{team_name}_{int(time.time())}"
                 players_statistics_task.delay(task_id=task_id, accounts=account_ids)
 
             stats = TeamStats(

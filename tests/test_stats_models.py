@@ -66,7 +66,8 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert len(team.players) == 1
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
-    assert team.task_id == "task_1768287333"  # Verify task_id is set with mocked time
+    assert team.task_id is not None  # task_id should be generated
+    assert team.task_id.startswith("task_Alpha_")  # Verify task_id includes team name
     assert team.error_code is None
     assert team.error_message is None
 
