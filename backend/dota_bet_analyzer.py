@@ -588,7 +588,7 @@ def search_teams():
       - 400: Missing or invalid query parameter
       - 503: Database connection error
     """
-    from backend.db import get_db
+    from backend.pro_players import get_d2ba_db
 
     search_query = request.args.get("q", "").strip()
     limit_param = request.args.get("limit", 10)
@@ -618,7 +618,7 @@ def search_teams():
         )
 
     try:
-        db = get_db()
+        db = get_d2ba_db()
         cursor = db.cursor()
 
         # Search teams by name or tag (case-insensitive)
