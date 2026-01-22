@@ -457,3 +457,206 @@ def test_get_players_by_team_integration_with_stats(app):
         assert team_stats.players[0].name == "Player One"
         assert len(team_stats.other_players) == 1
         assert team_stats.other_players[0].name == "Player Two"
+
+
+# Tests for Teams Endpoint
+@pytest.fixture
+def sample_teams_data():
+    """Sample team data from OpenDota API."""
+    return [
+        {
+            "team_id": 7119388,
+            "rating": 1543.55,
+            "wins": 834,
+            "losses": 554,
+            "last_match_time": 1766341021,
+            "delta": -17.9257,
+            "match_id": 8615531269,
+            "name": "Team Spirit",
+            "tag": "TSpirit",
+            "logo_url": "https://cdn.steamusercontent.com/ugc/1839179120711951766/CD7E0885CB527334205CC7885E9C101B7BC17702/",
+        },
+        {
+            "team_id": 1375614,
+            "rating": 1523.45,
+            "wins": 750,
+            "losses": 500,
+            "last_match_time": 1766340921,
+            "delta": -10.5,
+            "match_id": 8615531268,
+            "name": "Evil Geniuses",
+            "tag": "EG",
+            "logo_url": "https://example.com/eg.png",
+        },
+    ]
+
+
+def test_teams_endpoint_sync_success(client, sample_teams_data):
+    """Test /teams/sync endpoint with successful API response."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = sample_teams_data
+
+        response = client.post("/teams/sync")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["status"] == "ok"
+        assert data["count"] == 2
+        assert "Stored 2 teams" in data["message"]
+
+
+def test_teams_endpoint_stores_data(client, sample_teams_data, app):
+    """Test that /teams/sync actually stores data in database."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = sample_teams_data
+
+        response = client.post("/teams/sync")
+        assert response.status_code == 200
+
+        # Check database
+        with app.app_context():
+            from backend.pro_players import get_d2ba_db
+
+            db = get_d2ba_db()
+            cursor = db.cursor()
+            cursor.execute("SELECT COUNT(*) FROM teams")
+            count = cursor.fetchone()[0]
+            assert count == 2
+
+            # Check specific team data
+            cursor.execute("SELECT * FROM teams WHERE team_id = ?", (7119388,))
+            team = cursor.fetchone()
+            assert team is not None
+            assert team["name"] == "Team Spirit"
+            assert team["tag"] == "TSpirit"
+            assert team["rating"] == 1543.55
+            assert team["logo_url"].startswith("https://cdn.steamusercontent.com")
+
+            # Verify that unwanted fields are NOT stored
+            assert "wins" not in dict(team).keys()
+            assert "losses" not in dict(team).keys()
+            assert "delta" not in dict(team).keys()
+
+
+def test_teams_endpoint_api_failure(client):
+    """Test /teams/sync endpoint when OpenDota API fails."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = None
+
+        response = client.post("/teams/sync")
+
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert "error" in data
+
+
+def test_teams_endpoint_empty_response(client):
+    """Test /teams/sync endpoint with empty array from API."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = []
+
+        response = client.post("/teams/sync")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["status"] == "ok"
+        assert data["count"] == 0
+
+
+def test_teams_upsert(client, sample_teams_data, app):
+    """Test that updating existing teams works (upsert behavior)."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = sample_teams_data
+
+        # First insert
+        client.post("/teams/sync")
+
+        # Update data
+        updated_data = sample_teams_data.copy()
+        updated_data[0]["rating"] = 1600.0
+        updated_data[0]["name"] = "Team Spirit Updated"
+
+        mock_fetch.return_value = updated_data
+
+        # Second insert (should update)
+        client.post("/teams/sync")
+
+        # Check database
+        with app.app_context():
+            from backend.pro_players import get_d2ba_db
+
+            db = get_d2ba_db()
+            cursor = db.cursor()
+
+            # Should still have 2 teams (upserted, not inserted again)
+            cursor.execute("SELECT COUNT(*) FROM teams")
+            count = cursor.fetchone()[0]
+            assert count == 2
+
+            # Check updated values
+            cursor.execute("SELECT * FROM teams WHERE team_id = ?", (7119388,))
+            team = cursor.fetchone()
+            assert team["rating"] == 1600.0
+            assert team["name"] == "Team Spirit Updated"
+
+
+@patch("backend.pro_players.requests.get")
+def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
+    """Test that fetch_teams_from_api handles pagination correctly."""
+    from backend.pro_players import fetch_teams_from_api
+
+    # Create mock responses: first page with 1000 items, second with 2
+    page_1 = sample_teams_data * 500  # 1000 items
+    page_2 = sample_teams_data  # 2 items (less than 1000, triggers stop)
+
+    # Setup mock to return different data for each page
+    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "raise_for_status": lambda self: None})()
+    mock_response_2 = type("Response", (), {"json": lambda self: page_2, "raise_for_status": lambda self: None})()
+
+    mock_get.side_effect = [mock_response_1, mock_response_2]
+
+    result = fetch_teams_from_api()
+
+    assert result is not None
+    assert len(result) == 1002  # 1000 + 2
+    # Verify API was called twice (page 0 and page 1)
+    assert mock_get.call_count == 2
+
+
+def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
+    """Test /teams/sync endpoint with larger dataset."""
+    # Create 1500 unique teams (more than one page)
+    large_dataset = []
+    for i in range(1500):
+        large_dataset.append(
+            {
+                "team_id": 1000000 + i,
+                "rating": 1500.0 + i,
+                "wins": 100 + i,
+                "losses": 50 + i,
+                "last_match_time": 1766341021 + i,
+                "delta": -10.0,
+                "match_id": 8615531269 + i,
+                "name": f"Team {i}",
+                "tag": f"T{i}",
+                "logo_url": f"https://example.com/team_{i}.png",
+            }
+        )
+
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.return_value = large_dataset
+
+        response = client.post("/teams/sync")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["count"] == 1500
+
+        # Verify all teams are stored
+        with app.app_context():
+            from backend.pro_players import get_d2ba_db
+
+            db = get_d2ba_db()
+            cursor = db.cursor()
+            cursor.execute("SELECT COUNT(*) FROM teams")
+            count = cursor.fetchone()[0]
+            assert count == 1500

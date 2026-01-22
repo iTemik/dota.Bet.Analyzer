@@ -226,9 +226,9 @@ Initialize the pro players database:
 python scripts/init_d2ba_db.py
 ```
 
-This creates `instance/d2ba.sqlite` with a `pro_players` table for storing Dota 2 professional player data.
+This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
 
-**Fetch Pro Players Data:**
+**Sync Pro Players Data:**
 
 Once the backend is running, sync the pro players database:
 
@@ -236,7 +236,17 @@ Once the backend is running, sync the pro players database:
 curl -X POST http://localhost:5000/api/pro-players/sync
 ```
 
-Or use your API client to send a POST request to http://localhost:5000/api/pro-players/sync
+**Sync Teams Data:**
+
+Sync teams data from OpenDota API (paginated, ~1000 teams per page):
+
+```bash
+curl -X POST http://localhost:5000/api/teams/sync
+```
+
+Or use your API client to send POST requests to:
+- `http://localhost:5000/api/pro-players/sync` - Sync professional players
+- `http://localhost:5000/api/teams/sync` - Sync all teams (handles pagination automatically)
 
 See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
 
@@ -457,6 +467,38 @@ npm test          # Run tests
 
 The development server includes a proxy for API requests:
 - `/statistics` requests are automatically forwarded to `http://localhost:5000` (Flask backend)
+
+### Test Data Isolation
+
+**Best practices implemented:**
+
+✅ **Separate Database Per Test** - Each test gets its own temporary database, preventing any cross-contamination with production data or other tests.
+
+✅ **Automatic Cleanup** - Temporary files and directories are automatically cleaned up after each test using pytest fixtures.
+
+✅ **Mocked External APIs** - External API calls to OpenDota are mocked to prevent network requests and ensure test determinism.
+
+✅ **Database Performance Logging** - All insert/update operations log execution time and throughput (records/sec):
+```
+Stored/updated 32 pro players in 0.045s (711.1 records/sec)
+Stored/updated 1523 teams in 0.234s (6505.1 records/sec)
+```
+
+**Test configuration** is centralized in `tests/conftest.py`:
+- `app` fixture: Creates isolated Flask test app with temp database
+- `client` fixture: Provides test client for making requests
+- Automatic database initialization with schema
+- Cleanup guaranteed even if tests fail
+
+**Database files used:**
+- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams)
+- **Testing**: Temporary directories created per test, cleaned up automatically
+
+This isolation ensures:
+- Tests cannot affect production data
+- Tests can run in parallel safely
+- No flaky tests from shared state
+- Easy debugging with complete test database copies
 
 ### Testing
 

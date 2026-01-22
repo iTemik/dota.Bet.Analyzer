@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import time
 from typing import Any, Optional
 
 import requests
@@ -73,6 +74,7 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
     if not players_data:
         return 0
 
+    start_time = time.time()
     db = get_d2ba_db()
     cursor = db.cursor()
 
@@ -115,6 +117,8 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
             continue
 
     db.commit()
+    elapsed = time.time() - start_time
+    logger.info(f"Stored/updated {count} pro players in {elapsed:.3f}s ({count/elapsed:.1f} records/sec)")
     return count
 
 
@@ -220,3 +224,85 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
         # Log error but return empty lists
         logger.error(f"Error querying players by team: {e}")
         return [], []
+
+
+def fetch_teams_from_api() -> Optional[list[dict[str, Any]]]:
+    """Fetch teams data from OpenDota API paginated by 1000 entries per page.
+
+    Returns:
+        List of team dictionaries, or None if request fails.
+    """
+    try:
+        all_teams = []
+        page = 0
+
+        # TODO: limit the loop. Errors should also break it.
+        while True:
+            response = requests.get(f"https://api.opendota.com/api/teams?page={page}", timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            if not isinstance(data, list):
+                return None
+
+            # If we get less than 1000 entries, it's the last page
+            if len(data) < 1000:
+                all_teams.extend(data)
+                break
+
+            all_teams.extend(data)
+            page += 1
+
+        return all_teams if all_teams else None
+
+    except Exception as e:
+        logger.error(f"Error fetching teams from API: {e}")
+        return None
+
+
+def store_teams(teams_data: list[dict[str, Any]]) -> int:
+    """Store teams data to database.
+
+    Args:
+        teams_data: List of team dictionaries from OpenDota API
+
+    Returns:
+        Number of teams stored/updated
+    """
+    if not teams_data:
+        return 0
+
+    start_time = time.time()
+    db = get_d2ba_db()
+    cursor = db.cursor()
+
+    count = 0
+    for team in teams_data:
+        try:
+            cursor.execute(
+                """
+                INSERT INTO teams (
+                    team_id, rating, name, tag, logo_url
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(team_id) DO UPDATE SET
+                    rating = excluded.rating,
+                    name = excluded.name,
+                    tag = excluded.tag,
+                    logo_url = excluded.logo_url
+                """,
+                (
+                    team.get("team_id"),
+                    team.get("rating"),
+                    team.get("name"),
+                    team.get("tag"),
+                    team.get("logo_url"),
+                ),
+            )
+            count += 1
+        except sqlite3.Error as e:
+            logger.error(f"Error storing team {team.get('team_id')}: {e}")
+
+    db.commit()
+    elapsed = time.time() - start_time
+    logger.info(f"Stored/updated {count} teams in {elapsed:.3f}s ({count/elapsed:.1f} records/sec)")
+    return count

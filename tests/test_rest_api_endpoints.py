@@ -246,3 +246,42 @@ class TestProPlayersEndpoint:
         data = rv.get_json()
         assert isinstance(data, dict)
         assert "status" in data or "error" in data
+
+
+class TestTeamsEndpoint:
+    """Test suite for /teams/sync endpoint."""
+
+    def test_teams_returns_200_on_success(self, monkeypatch):
+        """Test that /teams/sync returns 200 on success."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", lambda: [])
+        monkeypatch.setattr("backend.dota_bet_analyzer.store_teams", lambda x: 0)
+
+        app = create_app(test_config={})
+        client = app.test_client()
+
+        rv = client.post("/teams/sync")
+        assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
+
+    def test_teams_returns_500_on_fetch_failure(self, monkeypatch):
+        """Test that /teams/sync returns 500 when fetch fails."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", lambda: None)
+
+        app = create_app(test_config={})
+        client = app.test_client()
+
+        rv = client.post("/teams/sync")
+        assert rv.status_code == 500, f"Expected 500, got {rv.status_code}"
+
+    def test_teams_returns_json_response(self, monkeypatch):
+        """Test that /teams/sync returns valid JSON."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", lambda: [])
+        monkeypatch.setattr("backend.dota_bet_analyzer.store_teams", lambda x: 5)
+
+        app = create_app(test_config={})
+        client = app.test_client()
+
+        rv = client.post("/teams/sync")
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert isinstance(data, dict)
+        assert "status" in data or "error" in data

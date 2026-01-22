@@ -9,7 +9,12 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from backend import __version__
 from backend.config import Config
 from backend.logging_config import setup_logging
-from backend.pro_players import fetch_pro_players_from_api, store_pro_players
+from backend.pro_players import (
+    fetch_pro_players_from_api,
+    fetch_teams_from_api,
+    store_pro_players,
+    store_teams,
+)
 from backend.stats import (
     compute_statistics,
     get_matches,
@@ -372,6 +377,34 @@ def sync_pro_players() -> tuple[Response, int]:
         return jsonify({"status": "ok", "count": count, "message": f"Stored {count} pro players"}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to store pro players: {e!s}"}), 500
+
+
+@bp.route("/teams/sync", methods=["POST"])
+def sync_teams() -> tuple[Response, int]:
+    """Sync teams from OpenDota API and update database.
+
+    This is a write operation (POST) that fetches fresh team data from OpenDota API
+    (paginated in 1000-entry pages) and updates the local database. It's intended to run
+    infrequently (once daily during initialization/maintenance).
+
+    Returns:
+        JSON response with status and count of teams stored.
+    """
+    # Fetch data from OpenDota API (handles pagination internally)
+    teams_data = fetch_teams_from_api()
+
+    if teams_data is None:
+        return jsonify({"error": "Failed to fetch teams from OpenDota API"}), 500
+
+    if not teams_data:
+        return jsonify({"status": "ok", "count": 0, "message": "No teams data available"}), 200
+
+    # Store to database
+    try:
+        count = store_teams(teams_data)
+        return jsonify({"status": "ok", "count": count, "message": f"Stored {count} teams"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to store teams: {e!s}"}), 500
 
 
 if __name__ == "__main__":

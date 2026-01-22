@@ -29,6 +29,7 @@
 - Test all public functions
 - Test status codes: 200/201/400/404/500
 - Reports: `test-results/*/junit.xml`
+- Prod and tests db are separated
 
 ## PowerShell Only
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
