@@ -230,13 +230,13 @@ This creates `instance/d2ba.sqlite` with a `pro_players` table for storing Dota 
 
 **Fetch Pro Players Data:**
 
-Once the backend is running, populate the database:
+Once the backend is running, sync the pro players database:
 
 ```bash
-curl http://localhost:5000/ProPlayers
+curl -X POST http://localhost:5000/api/pro-players/sync
 ```
 
-Or visit http://localhost:5000/ProPlayers in your browser.
+Or use your API client to send a POST request to http://localhost:5000/api/pro-players/sync
 
 See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
 

@@ -95,11 +95,11 @@ def sample_pro_players_data():
 
 
 def test_pro_players_endpoint_success(client, sample_pro_players_data):
-    """Test /ProPlayers endpoint with successful API response."""
+    """Test /pro-players/sync endpoint with successful API response."""
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = sample_pro_players_data
 
-        response = client.get("/ProPlayers")
+        response = client.post("/pro-players/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -109,11 +109,11 @@ def test_pro_players_endpoint_success(client, sample_pro_players_data):
 
 
 def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
-    """Test that /ProPlayers actually stores data in database."""
+    """Test that /pro-players/sync actually stores data in database."""
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = sample_pro_players_data
 
-        response = client.get("/ProPlayers")
+        response = client.post("/pro-players/sync")
         assert response.status_code == 200
 
         # Check database
@@ -137,11 +137,11 @@ def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
 
 
 def test_pro_players_endpoint_api_failure(client):
-    """Test /ProPlayers endpoint when OpenDota API fails."""
+    """Test /pro-players/sync endpoint when OpenDota API fails."""
     with patch("backend.pro_players.requests.get") as mock_get:
         mock_get.side_effect = Exception("Network error")
 
-        response = client.get("/ProPlayers")
+        response = client.post("/pro-players/sync")
 
         assert response.status_code == 500
         data = json.loads(response.data)
@@ -149,11 +149,11 @@ def test_pro_players_endpoint_api_failure(client):
 
 
 def test_pro_players_endpoint_empty_response(client):
-    """Test /ProPlayers endpoint with empty array from API."""
+    """Test /pro-players/sync endpoint with empty array from API."""
     with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
         mock_fetch.return_value = []
 
-        response = client.get("/ProPlayers")
+        response = client.post("/pro-players/sync")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -167,7 +167,7 @@ def test_pro_players_upsert(client, sample_pro_players_data, app):
         mock_fetch.return_value = sample_pro_players_data
 
         # First insert
-        client.get("/ProPlayers")
+        client.post("/pro-players/sync")
 
         # Update data
         updated_data = sample_pro_players_data.copy()
@@ -177,7 +177,7 @@ def test_pro_players_upsert(client, sample_pro_players_data, app):
         mock_fetch.return_value = updated_data
 
         # Second insert (should update)
-        client.get("/ProPlayers")
+        client.post("/pro-players/sync")
 
         # Check database
         with app.app_context():
