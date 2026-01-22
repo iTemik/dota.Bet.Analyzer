@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { VERSION } from './version'
+import TeamAutocomplete from './components/TeamAutocomplete'
 
 // Color constants - defined in App.css as CSS variables
 const COLOR_POSITIVE = '#6b9d7a'
@@ -13,7 +14,6 @@ interface Player {
 
 interface TeamData {
   error_code: null | string
-  error_message: null | string
   rating: null | number
   delta: number
   logo_url?: string
@@ -46,6 +46,8 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
+  const [showRawStats, setShowRawStats] = useState(false)
+  const [showSummaryData, setShowSummaryData] = useState(false)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentSearchIdRef = useRef<number>(0)
 
@@ -100,7 +102,14 @@ function App() {
       const response = await fetch(`/api/statistics?${params.toString()}`)
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to extract error message from response body
+        try {
+          const errorData = await response.json()
+          const errorMsg = errorData.message || `HTTP error! status: ${response.status}`
+          throw new Error(errorMsg)
+        } catch {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
       }
 
       const data = await response.json()
@@ -403,12 +412,9 @@ function App() {
         <div className="input-groups-row">
           <div className="input-group">
             <label htmlFor="team1">Team #1</label>
-            <input
-              id="team1"
-              type="text"
+            <TeamAutocomplete
               value={team1}
-              onChange={(e) => setTeam1(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
+              onChange={setTeam1}
               placeholder="Enter first team name"
               autoFocus
             />
@@ -416,12 +422,9 @@ function App() {
 
           <div className="input-group">
             <label htmlFor="team2">Team #2</label>
-            <input
-              id="team2"
-              type="text"
+            <TeamAutocomplete
               value={team2}
-              onChange={(e) => setTeam2(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
+              onChange={setTeam2}
               placeholder="Enter second team name"
             />
           </div>
@@ -585,13 +588,23 @@ function App() {
             </tbody>
           </table>
 
-          <h2>Raw team stats JSON</h2>
-          <pre>{JSON.stringify(statistics, null, 2)}</pre>
+          <div className="collapsible-header" onClick={() => setShowRawStats(!showRawStats)}>
+            <h2>Raw team stats JSON</h2>
+            <span className={`collapsible-toggle ${showRawStats ? 'expanded' : ''}`}>▼</span>
+          </div>
+          <div className={`collapsible-content ${showRawStats ? 'expanded' : ''}`}>
+            <pre>{JSON.stringify(statistics, null, 2)}</pre>
+          </div>
 
           {summaryData && (
             <>
-              <h2>Match Statistics Summary</h2>
-              <pre>{JSON.stringify(summaryData, null, 2)}</pre>
+              <div className="collapsible-header" onClick={() => setShowSummaryData(!showSummaryData)}>
+                <h2>Match Statistics Summary</h2>
+                <span className={`collapsible-toggle ${showSummaryData ? 'expanded' : ''}`}>▼</span>
+              </div>
+              <div className={`collapsible-content ${showSummaryData ? 'expanded' : ''}`}>
+                <pre>{JSON.stringify(summaryData, null, 2)}</pre>
+              </div>
             </>
           )}
         </div>

@@ -8,8 +8,14 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend import __version__
 from backend.config import Config
+from backend.helpers import ErrorCode
 from backend.logging_config import setup_logging
-from backend.pro_players import fetch_pro_players_from_api, store_pro_players
+from backend.pro_players import (
+    fetch_pro_players_from_api,
+    fetch_teams_from_api,
+    store_pro_players,
+    store_teams,
+)
 from backend.stats import (
     compute_statistics,
     get_matches,
@@ -19,6 +25,7 @@ from backend.stats import (
 
 # Setup logger
 logger = setup_logging(__name__)
+
 
 bp = Blueprint("dota", __name__)
 
@@ -226,9 +233,27 @@ def players_statistics() -> tuple[Response, int]:
             days: int = int(request.args.get("days", 20))
 
         if not accounts:
-            return jsonify({"error": "no account_ids provided"}), 400
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.MISSING_ACCOUNT_IDS,
+                        "message": "no account_ids provided",
+                        "details": {"url": request.path},
+                    }
+                ),
+                400,
+            )
         if len(accounts) > 10:
-            return jsonify({"error": "too many players (account_ids) in the team (max 10)"}), 400
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.TOO_MANY_PLAYERS,
+                        "message": "too many players (account_ids) in the team (max 10)",
+                        "details": {"url": request.path, "limit": 10},
+                    }
+                ),
+                400,
+            )
 
         # Convert accounts to integers and filter valid ones
         accounts_int = []
@@ -238,10 +263,28 @@ def players_statistics() -> tuple[Response, int]:
                 try:
                     accounts_int.append(int(a))
                 except ValueError:
-                    return jsonify({"error": f"Invalid account_id: {a}"}), 400
+                    return (
+                        jsonify(
+                            {
+                                "error_code": ErrorCode.INVALID_ACCOUNT_ID,
+                                "message": f"Invalid account_id: {a}",
+                                "details": {"url": request.path, "value": a},
+                            }
+                        ),
+                        400,
+                    )
 
         if not accounts_int:
-            return jsonify({"error": "no valid account_ids provided"}), 400
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.MISSING_ACCOUNT_IDS,
+                        "message": "no valid account_ids provided",
+                        "details": {"url": request.path},
+                    }
+                ),
+                400,
+            )
 
         try:
             task = players_statistics_task.delay(
@@ -249,10 +292,28 @@ def players_statistics() -> tuple[Response, int]:
             )
             return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
         except Exception as e:
-            return jsonify({"error": f"Failed to start task: {e!s}"}), 500
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.FAILED_TO_START_TASK,
+                        "message": f"Failed to start task: {e!s}",
+                        "details": {"url": request.path},
+                    }
+                ),
+                500,
+            )
 
     except Exception as e:
-        return jsonify({"error": f"Invalid request: {e!s}"}), 400
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.INVALID_REQUEST,
+                    "message": f"Invalid request: {e!s}",
+                    "details": {"url": request.path},
+                }
+            ),
+            400,
+        )
 
 
 @bp.route("/stream-progress/<task_id>")
@@ -304,13 +365,31 @@ def get_results(task_id: str) -> tuple[Response, int]:
     try:
         results_data = redis_client.get(f"results:{task_id}")
         if not results_data:
-            return jsonify({"error": "Results not found. Task may still be in progress."}), 404
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.RESULTS_NOT_FOUND,
+                        "message": "Results not found. Task may still be in progress.",
+                        "details": {"url": request.path, "task_id": task_id},
+                    }
+                ),
+                404,
+            )
 
         results = json.loads(results_data)
         return jsonify(results), 200
     except Exception as e:
         logger.error(f"Error retrieving results for task {task_id}: {e}")
-        return jsonify({"error": f"Failed to retrieve results: {e}"}), 500
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_RETRIEVE_RESULTS,
+                    "message": f"Failed to retrieve results: {e}",
+                    "details": {"url": request.path},
+                }
+            ),
+            500,
+        )
 
 
 @bp.route("/statistics", methods=["GET", "POST"])
@@ -330,44 +409,281 @@ def statistics() -> tuple[Response, int]:
     elif request.method == "POST":
         body = request.get_json(silent=True)
         if not body or "teams" not in body:
-            return jsonify({"error": "no teams provided"}), 400
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.MISSING_TEAMS,
+                        "message": "no teams provided",
+                        "details": {"url": request.path},
+                    }
+                ),
+                400,
+            )
         teams = body.get("teams") or []
     else:
-        return jsonify({"error": "unsupported method"}), 400
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.UNSUPPORTED_METHOD,
+                    "message": "unsupported method",
+                    "details": {"url": request.path, "method": request.method},
+                }
+            ),
+            400,
+        )
 
     # Normalize & validate
     teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
     if not teams:
-        return jsonify({"error": "no teams provided"}), 400
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.MISSING_TEAMS,
+                    "message": "no teams provided",
+                    "details": {"url": request.path},
+                }
+            ),
+            400,
+        )
     if len(teams) > 10:
-        return jsonify({"error": "too many teams (max 10)"}), 400
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.TOO_MANY_TEAMS,
+                    "message": "too many teams (max 10)",
+                    "details": {"url": request.path, "limit": 10},
+                }
+            ),
+            400,
+        )
 
     stats = compute_statistics(teams)
     return jsonify(stats.model_dump()), 200
 
 
-@bp.route("/ProPlayers", methods=["GET"])
-def pro_players() -> tuple[Response, int]:
-    """Fetch pro players from OpenDota API and store in database.
+@bp.route("/pro-players/sync", methods=["POST"])
+def sync_pro_players() -> tuple[Response, int]:
+    """Sync pro players from OpenDota API and update database.
+
+    This is a write operation (POST) that fetches fresh pro player data from OpenDota API
+    and updates the local database. It's intended to run infrequently (once daily during
+    initialization/maintenance).
 
     Returns:
         JSON response with status and count of players stored.
     """
     # Fetch data from OpenDota API
-    players_data = fetch_pro_players_from_api()
-
-    if players_data is None:
-        return jsonify({"error": "Failed to fetch pro players from OpenDota API"}), 500
+    try:
+        players_data = fetch_pro_players_from_api()
+    except ConnectionError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
+                    "message": str(e),
+                    "details": {"url": request.path},
+                }
+            ),
+            503,
+        )
+    except ValueError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
+                    "message": f"Invalid response from OpenDota API: {e}",
+                    "details": {"url": request.path},
+                }
+            ),
+            502,
+        )
 
     if not players_data:
-        return jsonify({"status": "ok", "count": 0, "message": "No pro players data available"}), 200
+        return jsonify({"count": 0, "message": "No pro players data available"}), 200
 
     # Store to database
     try:
         count = store_pro_players(players_data)
-        return jsonify({"status": "ok", "count": count, "message": f"Stored {count} pro players"}), 200
+        return jsonify({"count": count, "message": f"Stored {count} pro players"}), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to store pro players: {e!s}"}), 500
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_STORE_PRO_PLAYERS,
+                    "message": f"Failed to store pro players: {e!s}",
+                    "details": {"url": request.path},
+                }
+            ),
+            500,
+        )
+
+
+@bp.route("/teams/sync", methods=["POST"])
+def sync_teams() -> tuple[Response, int]:
+    """Sync teams from OpenDota API and update database.
+
+    This is a write operation (POST) that fetches fresh team data from OpenDota API
+    (paginated in 1000-entry pages) and updates the local database. It's intended to run
+    infrequently (once daily during initialization/maintenance).
+
+    Returns:
+        JSON response with status and count of teams stored.
+    """
+    # Fetch data from OpenDota API (handles pagination internally)
+    try:
+        teams_data = fetch_teams_from_api()
+    except ConnectionError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
+                    "message": str(e),
+                    "details": {"url": request.path},
+                }
+            ),
+            503,
+        )
+    except ValueError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
+                    "message": f"Invalid response from OpenDota API: {e}",
+                    "details": {"url": request.path},
+                }
+            ),
+            502,
+        )
+
+    if not teams_data:
+        return jsonify({"count": 0, "message": "No teams data available"}), 200
+
+    # Store to database
+    try:
+        count = store_teams(teams_data)
+        return jsonify({"count": count, "message": f"Stored {count} teams"}), 200
+    except Exception as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_STORE_TEAMS,
+                    "message": f"Failed to store teams: {e!s}",
+                    "details": {"url": request.path},
+                }
+            ),
+            500,
+        )
+
+
+@bp.route("/teams/search", methods=["GET"])
+def search_teams():
+    """Search for teams by name for autocomplete.
+
+    Query parameters:
+      - q: Search query (minimum 2 characters)
+      - limit: Maximum number of results (default: 10, max: 50)
+
+    Returns:
+      - 200: JSON array of matching teams with {team_id, name, tag, logo_url, rating}
+      - 400: Missing or invalid query parameter
+      - 503: Database connection error
+    """
+    from backend.pro_players import get_d2ba_db
+
+    search_query = request.args.get("q", "").strip()
+    limit_param = request.args.get("limit", 10)
+    try:
+        limit = int(limit_param)
+        if limit <= 0:
+            return (
+                jsonify(
+                    {
+                        "error_code": ErrorCode.INVALID_REQUEST,
+                        "message": "Limit parameter must be a positive integer",
+                    }
+                ),
+                400,
+            )
+        limit = min(limit, 50)  # Cap at 50
+    except (TypeError, ValueError):
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.INVALID_REQUEST,
+                    "message": "Limit parameter must be a valid integer",
+                }
+            ),
+            400,
+        )
+
+    # Validate search query
+    if not search_query or len(search_query) < 2:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.INVALID_REQUEST,
+                    "message": "Search query must be at least 2 characters",
+                }
+            ),
+            400,
+        )
+
+    try:
+        db = get_d2ba_db()
+        cursor = db.cursor()
+
+        # Search teams by name or tag (case-insensitive)
+        # WHERE uses "contains" pattern; ORDER BY prioritizes "starts with" matches
+        cursor.execute(
+            """
+            SELECT team_id, name, tag, logo_url, rating
+            FROM teams
+            WHERE
+              LOWER(name) LIKE LOWER(?) OR
+              LOWER(tag) LIKE LOWER(?)
+            ORDER BY
+              CASE
+                WHEN LOWER(name) LIKE LOWER(?) THEN 0
+                WHEN LOWER(tag) LIKE LOWER(?) THEN 1
+                ELSE 2
+              END,
+              name
+            LIMIT ?
+            """,
+            (
+                f"%{search_query}%",  # name contains (WHERE)
+                f"%{search_query}%",  # tag contains (WHERE)
+                f"{search_query}%",  # name starts with (ORDER BY - highest priority)
+                f"{search_query}%",  # tag starts with (ORDER BY - second priority)
+                limit,
+            ),
+        )
+
+        teams = [
+            {
+                "team_id": row[0],
+                "name": row[1],
+                "tag": row[2],
+                "logo_url": row[3],
+                "rating": row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        return jsonify(teams), 200
+
+    except Exception as e:
+        logger.error(f"Error searching teams: {e!s}")
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.SEARCH_ERROR,
+                    "message": "Failed to search teams",
+                    "details": {"url": request.path},
+                }
+            ),
+            503,
+        )
 
 
 if __name__ == "__main__":

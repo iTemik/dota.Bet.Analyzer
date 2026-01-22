@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import time
 from typing import Any, Optional
 
 import requests
@@ -41,11 +42,15 @@ def close_d2ba_db(e=None):
         db.close()
 
 
-def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
+def fetch_pro_players_from_api() -> list[dict[str, Any]]:
     """Fetch pro players data from OpenDota API.
 
     Returns:
-        List of pro player dictionaries, or None if request fails.
+        List of pro player dictionaries.
+
+    Raises:
+        ConnectionError: If unable to connect to or get response from OpenDota API.
+        ValueError: If API response is invalid or not a list.
     """
     try:
         response = requests.get("https://api.opendota.com/api/proPlayers", timeout=30)
@@ -53,12 +58,16 @@ def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
         data = response.json()
 
         if not isinstance(data, list):
-            return None
+            raise ValueError(f"Expected list from API, got {type(data).__name__}")
 
         return data
 
-    except Exception:
-        return None
+    except requests.RequestException as e:
+        raise ConnectionError(f"Failed to fetch pro players from OpenDota API: {e}") from e
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Unexpected error parsing pro players response: {e}") from e
 
 
 def store_pro_players(players_data: list[dict[str, Any]]) -> int:
@@ -73,6 +82,7 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
     if not players_data:
         return 0
 
+    start_time = time.time()
     db = get_d2ba_db()
     cursor = db.cursor()
 
@@ -115,6 +125,9 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
             continue
 
     db.commit()
+    elapsed = time.time() - start_time
+    rate = count / elapsed if elapsed > 0 else 0.0
+    logger.info(f"Stored/updated {count} pro players in {elapsed:.3f}s ({rate:.1f} records/sec)")
     return count
 
 
@@ -220,3 +233,126 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
         # Log error but return empty lists
         logger.error(f"Error querying players by team: {e}")
         return [], []
+
+
+def fetch_teams_from_api() -> list[dict[str, Any]]:
+    """Fetch teams data from OpenDota API paginated by 1000 entries per page.
+
+    The API returns up to 1000 teams per page. This function fetches all pages
+    until it gets fewer than 1000 teams (indicating the last page) or reaches
+    the maximum page limit (100 pages = 100,000+ teams).
+
+    Returns:
+        List of team dictionaries (may be partial if an error occurs after fetching
+        some pages, but will raise exception if first page fails).
+
+    Raises:
+        ConnectionError: If unable to fetch the first page of teams.
+        ValueError: If API response is invalid (not a list).
+
+    Note:
+        If a page fails after successfully fetching previous pages, returns the data
+        collected so far rather than failing entirely (graceful degradation).
+    """
+    MAX_PAGES = 100
+    all_teams = []
+    page = 0
+
+    try:
+        while page < MAX_PAGES:
+            try:
+                response = requests.get(f"https://api.opendota.com/api/teams?page={page}", timeout=30)
+                response.raise_for_status()
+                data = response.json()
+
+                if not isinstance(data, list):
+                    error_msg = f"Page {page}: Expected list from API, got {type(data).__name__}"
+                    logger.warning(error_msg)
+                    if page == 0:
+                        raise ValueError(error_msg)
+                    break
+
+                all_teams.extend(data)
+                logger.debug(f"Fetched {len(data)} teams from page {page}")
+
+                # If we got fewer than 1000 teams, it's the last page
+                if len(data) < 1000:
+                    logger.info(f"Fetched teams from {page + 1} pages (total: {len(all_teams)} teams)")
+                    break
+
+                page += 1
+
+            except requests.RequestException as page_error:
+                # If we have data from previous pages, return it (graceful degradation)
+                if all_teams:
+                    logger.warning(
+                        f"Error fetching page {page}: {page_error}. "
+                        f"Returning {len(all_teams)} teams fetched before error"
+                    )
+                    break
+
+                # If this is the first page and it failed, raise exception (critical error)
+                logger.error(f"Failed to fetch first page of teams: {page_error}")
+                raise ConnectionError(f"Failed to fetch teams from OpenDota API: {page_error}") from page_error
+
+        # Only raise ConnectionError if we never successfully fetched any page (page == 0)
+        # If page > 0, we made successful API calls even if result is empty
+        if not all_teams and page == 0:
+            raise ConnectionError("No teams fetched from OpenDota API (empty response on first page)")
+
+        return all_teams
+
+    except (ConnectionError, ValueError):
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error fetching teams from API: {e}")
+        raise ConnectionError(f"Unexpected error fetching teams from API: {e}") from e
+
+
+def store_teams(teams_data: list[dict[str, Any]]) -> int:
+    """Store teams data to database.
+
+    Args:
+        teams_data: List of team dictionaries from OpenDota API
+
+    Returns:
+        Number of teams stored/updated
+    """
+    if not teams_data:
+        return 0
+
+    start_time = time.time()
+    db = get_d2ba_db()
+    cursor = db.cursor()
+
+    count = 0
+    for team in teams_data:
+        try:
+            cursor.execute(
+                """
+                INSERT INTO teams (
+                    team_id, rating, name, tag, logo_url
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(team_id) DO UPDATE SET
+                    rating = excluded.rating,
+                    name = excluded.name,
+                    tag = excluded.tag,
+                    logo_url = excluded.logo_url
+                """,
+                (
+                    team.get("team_id"),
+                    team.get("rating"),
+                    team.get("name"),
+                    team.get("tag"),
+                    team.get("logo_url"),
+                ),
+            )
+            count += 1
+        except sqlite3.Error as e:
+            logger.error(f"Error storing team {team.get('team_id')}: {e}")
+
+    db.commit()
+    elapsed = time.time() - start_time
+    records_per_sec = (count / elapsed) if elapsed > 0 else 0.0
+    logger.info(f"Stored/updated {count} teams in {elapsed:.3f}s ({records_per_sec:.1f} records/sec)")
+    return count

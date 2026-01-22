@@ -19,7 +19,7 @@
 ## Code Rules
 - Type hints: All functions
 - Docstrings: All public functions (Args, Returns)
-- Error JSON: `{error_code: str, error_message: str}`
+- Error JSON: `{error_code: str, message: str, details: {url: str}}`
 - REST prefix: `/api/`
 - Python naming: snake_case functions, PascalCase classes
 - TS naming: PascalCase components, camelCase functions
@@ -29,6 +29,7 @@
 - Test all public functions
 - Test status codes: 200/201/400/404/500
 - Reports: `test-results/*/junit.xml`
+- Prod and tests db are separated
 
 ## PowerShell Only
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
@@ -76,7 +77,7 @@ Backend: `backend/VERSION`, Frontend: `frontend/src/version.ts`
 Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql), Session: [backend/db.py](backend/db.py)
 
 ## Error Handling
-Always catch exceptions, return JSON `{error_code, error_message}` with proper HTTP status code
+Always catch exceptions, return JSON `{error_code, message, details}` with proper HTTP status code
 
 ## Examples
 

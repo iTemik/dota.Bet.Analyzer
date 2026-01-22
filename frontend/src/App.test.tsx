@@ -56,8 +56,8 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App />)
             })
-            expect(screen.getByLabelText(/Team #1/i)).toBeInTheDocument()
-            expect(screen.getByLabelText(/Team #2/i)).toBeInTheDocument()
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).toBeInTheDocument()
+            expect(screen.getByPlaceholderText(/Enter second team name/i)).toBeInTheDocument()
         })
 
         it('should render check button', async () => {
@@ -71,7 +71,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App />)
             })
-            const team1Input = screen.getByLabelText(/Team #1/i) as HTMLInputElement
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i) as HTMLInputElement
             // Wait for both autofocus and version fetch to complete
             await waitFor(() => {
                 expect(document.activeElement).toBe(team1Input)
@@ -91,7 +91,7 @@ describe('App Component', () => {
 
         it('should show error when only team1 is filled', async () => {
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -102,7 +102,7 @@ describe('App Component', () => {
 
         it('should show error when only team2 is filled', async () => {
             render(<App />)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team2Input, 'Team B')
@@ -113,8 +113,8 @@ describe('App Component', () => {
 
         it('should accept whitespace-only input as empty', async () => {
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, '   ')
@@ -137,8 +137,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Nigma Galaxy')
@@ -169,8 +169,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -191,8 +191,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -215,8 +215,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -241,7 +241,8 @@ describe('App Component', () => {
                         delta: 25.5,
                         logo_url: 'https://example.com/logo1.png',
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -254,7 +255,8 @@ describe('App Component', () => {
                         delta: -10.3,
                         logo_url: 'https://example.com/logo2.png',
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -272,8 +274,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Nigma Galaxy')
@@ -297,7 +299,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -309,7 +312,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -327,8 +331,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Nigma Galaxy')
@@ -351,7 +355,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -363,7 +368,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -381,8 +387,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Nigma Galaxy')
@@ -405,7 +411,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -417,7 +424,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -435,8 +443,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Nigma Galaxy')
@@ -461,7 +469,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_123',
@@ -473,7 +482,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_456',
@@ -535,8 +545,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -559,7 +569,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_rating_1',
@@ -571,7 +582,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_rating_2',
@@ -648,8 +660,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -682,8 +694,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
 
             await userEvent.type(team1Input, 'Team A')
             await userEvent.type(team2Input, 'Team B')
@@ -705,8 +717,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
 
             await userEvent.type(team1Input, 'Team A')
             await userEvent.type(team2Input, 'Team B')
@@ -729,7 +741,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.567,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -741,7 +754,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.234,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -759,8 +773,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -787,7 +801,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -799,7 +814,8 @@ describe('App Component', () => {
                         rating: 2300,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -817,8 +833,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -863,7 +879,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_avg_rank_1',
@@ -875,7 +892,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_avg_rank_2',
@@ -952,8 +970,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team A')
@@ -981,7 +999,8 @@ describe('App Component', () => {
                         rating: 2600,
                         delta: 35.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_bad_rank_1',
@@ -993,7 +1012,8 @@ describe('App Component', () => {
                         rating: 2300,
                         delta: -20.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_bad_rank_2',
@@ -1070,8 +1090,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             await userEvent.type(team1Input, 'Team C')
@@ -1101,7 +1121,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -1113,7 +1134,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -1130,7 +1152,8 @@ describe('App Component', () => {
                         rating: 2600,
                         delta: 35.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -1142,7 +1165,8 @@ describe('App Component', () => {
                         rating: 2300,
                         delta: -20.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -1173,8 +1197,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             // First search
@@ -1212,7 +1236,8 @@ describe('App Component', () => {
                         rating: 2500,
                         delta: 25.5,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: 'task_123', // Has task ID to trigger polling
@@ -1224,7 +1249,8 @@ describe('App Component', () => {
                         rating: 2400,
                         delta: -10.3,
                         error_code: null,
-                        error_message: null,
+                        message: null,
+                        details: null,
                         players: [],
                         other_players: [],
                         task_id: null,
@@ -1242,8 +1268,8 @@ describe('App Component', () => {
             globalThis.fetch = mockFetch
 
             render(<App />)
-            const team1Input = screen.getByLabelText(/Team #1/i)
-            const team2Input = screen.getByLabelText(/Team #2/i)
+            const team1Input = screen.getByPlaceholderText(/Enter first team name/i)
+            const team2Input = screen.getByPlaceholderText(/Enter second team name/i)
             const button = screen.getByRole('button', { name: /Check Statistics/i })
 
             // First search with task ID

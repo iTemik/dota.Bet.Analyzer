@@ -50,7 +50,6 @@ def test_compute_statistics_returns_model(monkeypatch):
 
     mock_dota_bet = MagicMock()
     mock_dota_bet.players_statistics_task = MockPlayersStatisticsTask()
-    sys.modules["backend.dota_bet_analyzer"] = mock_dota_bet
     monkeypatch.setitem(sys.modules, "backend.dota_bet_analyzer", mock_dota_bet)
 
     res = compute_statistics(["A"])
@@ -66,9 +65,10 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert len(team.players) == 1
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
-    assert team.task_id == "task_1768287333"  # Verify task_id is set with mocked time
+    assert team.task_id is not None  # task_id should be generated
+    assert team.task_id.startswith("task_42_")  # Verify task_id includes team_id
     assert team.error_code is None
-    assert team.error_message is None
+    assert team.message is None
 
 
 def test_compute_statistics_invalid_team():
@@ -77,7 +77,7 @@ def test_compute_statistics_invalid_team():
     assert len(res.teams) == 1
     team = res.teams[0]
     assert team.error_code == "INVALID_TEAM_NAME"
-    assert team.error_message == "Invalid team name"
+    assert team.message == "Invalid team name"
     assert team.team_id is None
 
 
@@ -94,7 +94,7 @@ def test_compute_statistics_network_error(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "NETWORK_ERROR"
-    assert team.error_message is not None and "connection failed" in team.error_message
+    assert team.message is not None and "connection failed" in team.message
     assert team.team_id is None
 
 
@@ -110,7 +110,7 @@ def test_compute_statistics_non_200(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "HTTP_ERROR"
-    assert team.error_message is not None and "500" in team.error_message
+    assert team.message is not None and "500" in team.message
     assert team.team_id is None
 
 
@@ -127,5 +127,5 @@ def test_compute_statistics_malformed_response(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "RESPONSE_PARSE_ERROR"
-    assert team.error_message is not None and "No rows" in team.error_message
+    assert team.message is not None and "No rows" in team.message
     assert team.team_id is None

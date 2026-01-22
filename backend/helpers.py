@@ -2,6 +2,27 @@ from typing import Any
 from urllib import parse
 
 
+# Error code constants (RFC 7807 compliant)
+class ErrorCode:
+    """Machine-readable error codes for API responses."""
+
+    MISSING_ACCOUNT_IDS = "MISSING_ACCOUNT_IDS"
+    TOO_MANY_PLAYERS = "TOO_MANY_PLAYERS"
+    INVALID_ACCOUNT_ID = "INVALID_ACCOUNT_ID"
+    FAILED_TO_START_TASK = "FAILED_TO_START_TASK"
+    INVALID_REQUEST = "INVALID_REQUEST"
+    RESULTS_NOT_FOUND = "RESULTS_NOT_FOUND"
+    FAILED_TO_RETRIEVE_RESULTS = "FAILED_TO_RETRIEVE_RESULTS"
+    MISSING_TEAMS = "MISSING_TEAMS"
+    UNSUPPORTED_METHOD = "UNSUPPORTED_METHOD"
+    TOO_MANY_TEAMS = "TOO_MANY_TEAMS"
+    FAILED_TO_FETCH_PRO_PLAYERS = "FAILED_TO_FETCH_PRO_PLAYERS"
+    FAILED_TO_STORE_PRO_PLAYERS = "FAILED_TO_STORE_PRO_PLAYERS"
+    FAILED_TO_FETCH_TEAMS = "FAILED_TO_FETCH_TEAMS"
+    FAILED_TO_STORE_TEAMS = "FAILED_TO_STORE_TEAMS"
+    SEARCH_ERROR = "SEARCH_ERROR"
+
+
 def prepare_sql_for_team_explore(team: str) -> str:
     """Prepare SQL query to find team by name or tag with rating info.
 
