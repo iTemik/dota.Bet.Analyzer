@@ -8,6 +8,8 @@ jobs:
   version:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,8 +21,6 @@ jobs:
           node-version: '20'
 
       - name: Set version in files
-        env:
-          BUILD_NUMBER: ${{ github.run_number }}
         run: |
           echo "Using GitHub run number as build number: $BUILD_NUMBER"
           node scripts/version.js frontend increment-minor
