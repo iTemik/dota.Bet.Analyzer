@@ -473,18 +473,29 @@ def sync_pro_players() -> tuple[Response, int]:
         JSON response with status and count of players stored.
     """
     # Fetch data from OpenDota API
-    players_data = fetch_pro_players_from_api()
-
-    if players_data is None:
+    try:
+        players_data = fetch_pro_players_from_api()
+    except ConnectionError as e:
         return (
             jsonify(
                 {
                     "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
-                    "message": "Failed to fetch pro players from OpenDota API",
+                    "message": str(e),
                     "details": {"url": request.path},
                 }
             ),
-            500,
+            503,
+        )
+    except ValueError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
+                    "message": f"Invalid response from OpenDota API: {e}",
+                    "details": {"url": request.path},
+                }
+            ),
+            502,
         )
 
     if not players_data:
@@ -519,18 +530,29 @@ def sync_teams() -> tuple[Response, int]:
         JSON response with status and count of teams stored.
     """
     # Fetch data from OpenDota API (handles pagination internally)
-    teams_data = fetch_teams_from_api()
-
-    if teams_data is None:
+    try:
+        teams_data = fetch_teams_from_api()
+    except ConnectionError as e:
         return (
             jsonify(
                 {
                     "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
-                    "message": "Failed to fetch teams from OpenDota API",
+                    "message": str(e),
                     "details": {"url": request.path},
                 }
             ),
-            500,
+            503,
+        )
+    except ValueError as e:
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
+                    "message": f"Invalid response from OpenDota API: {e}",
+                    "details": {"url": request.path},
+                }
+            ),
+            502,
         )
 
     if not teams_data:

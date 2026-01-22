@@ -7,8 +7,10 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from backend import create_app
+from backend.pro_players import fetch_pro_players_from_api, fetch_teams_from_api
 from scripts.init_d2ba_db import init_d2ba_db
 
 
@@ -21,7 +23,7 @@ def app():
 
     # Patch the API call to prevent real requests during app startup
     with patch("backend.pro_players.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = None  # Return None to skip startup sync
+        mock_fetch.side_effect = ConnectionError("Skipped during test setup")  # Skip startup sync
 
         app = create_app(
             {
@@ -135,14 +137,26 @@ def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
             assert player["is_pro"] == 1  # SQLite stores boolean as integer
 
 
-def test_pro_players_endpoint_api_failure(client):
-    """Test /pro-players/sync endpoint when OpenDota API fails."""
-    with patch("backend.pro_players.requests.get") as mock_get:
-        mock_get.side_effect = Exception("Network error")
+def test_pro_players_endpoint_connection_failure(client):
+    """Test /pro-players/sync endpoint when connection fails."""
+    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
+        mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
 
         response = client.post("/pro-players/sync")
 
-        assert response.status_code == 500
+        assert response.status_code == 503
+        data = json.loads(response.data)
+        assert "error_code" in data
+
+
+def test_pro_players_endpoint_invalid_response(client):
+    """Test /pro-players/sync endpoint when API returns invalid response."""
+    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
+        mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
+
+        response = client.post("/pro-players/sync")
+
+        assert response.status_code == 502
         data = json.loads(response.data)
         assert "error_code" in data
 
@@ -251,8 +265,6 @@ def test_store_pro_players_direct():
 
 def test_fetch_pro_players_from_api_integration():
     """Test fetch_pro_players_from_api with mocked requests."""
-    from backend.pro_players import fetch_pro_players_from_api
-
     sample_data = [{"account_id": 123, "name": "test"}]
 
     with patch("backend.pro_players.requests.get") as mock_get:
@@ -264,6 +276,29 @@ def test_fetch_pro_players_from_api_integration():
 
         assert result == sample_data
         mock_get.assert_called_once_with("https://api.opendota.com/api/proPlayers", timeout=30)
+
+
+def test_fetch_pro_players_from_api_connection_error():
+    """Test fetch_pro_players_from_api raises ConnectionError on network failure."""
+    with patch("backend.pro_players.requests.get") as mock_get:
+        mock_get.side_effect = requests.RequestException("Network error")
+
+        with pytest.raises(ConnectionError) as exc_info:
+            fetch_pro_players_from_api()
+
+        assert "Failed to fetch pro players" in str(exc_info.value)
+
+
+def test_fetch_pro_players_from_api_invalid_response():
+    """Test fetch_pro_players_from_api raises ValueError for non-list response."""
+    with patch("backend.pro_players.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = {"error": "not a list"}
+        mock_get.return_value.raise_for_status.return_value = None
+
+        with pytest.raises(ValueError) as exc_info:
+            fetch_pro_players_from_api()
+
+        assert "Expected list" in str(exc_info.value)
 
 
 def test_get_players_by_team_id(app):
@@ -538,11 +573,23 @@ def test_teams_endpoint_stores_data(client, sample_teams_data, app):
 def test_teams_endpoint_api_failure(client):
     """Test /teams/sync endpoint when OpenDota API fails."""
     with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
-        mock_fetch.return_value = None
+        mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
 
         response = client.post("/teams/sync")
 
-        assert response.status_code == 500
+        assert response.status_code == 503
+        data = json.loads(response.data)
+        assert "error_code" in data
+
+
+def test_teams_endpoint_invalid_response(client):
+    """Test /teams/sync endpoint when API returns invalid response."""
+    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+        mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
+
+        response = client.post("/teams/sync")
+
+        assert response.status_code == 502
         data = json.loads(response.data)
         assert "error_code" in data
 
@@ -600,8 +647,6 @@ def test_teams_upsert(client, sample_teams_data, app):
 @patch("backend.pro_players.requests.get")
 def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
     """Test that fetch_teams_from_api handles pagination correctly."""
-    from backend.pro_players import fetch_teams_from_api
-
     # Create mock responses: first page with 1000 items, second with 2
     page_1 = sample_teams_data * 500  # 1000 items
     page_2 = sample_teams_data  # 2 items (less than 1000, triggers stop)
@@ -615,9 +660,51 @@ def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
     result = fetch_teams_from_api()
 
     assert result is not None
+    assert isinstance(result, list)
     assert len(result) == 1002  # 1000 + 2
     # Verify API was called twice (page 0 and page 1)
     assert mock_get.call_count == 2
+
+
+@patch("backend.pro_players.requests.get")
+def test_fetch_teams_from_api_connection_error(mock_get):
+    """Test that fetch_teams_from_api raises ConnectionError on first page failure."""
+    mock_get.side_effect = requests.RequestException("Network error")
+
+    with pytest.raises(ConnectionError) as exc_info:
+        fetch_teams_from_api()
+
+    assert "Failed to fetch teams" in str(exc_info.value)
+
+
+@patch("backend.pro_players.requests.get")
+def test_fetch_teams_from_api_invalid_response(mock_get):
+    """Test that fetch_teams_from_api raises ValueError for non-list response."""
+    mock_response = type(
+        "Response", (), {"json": lambda self: {"error": "not a list"}, "raise_for_status": lambda self: None}
+    )()
+    mock_get.return_value = mock_response
+
+    with pytest.raises(ValueError) as exc_info:
+        fetch_teams_from_api()
+
+    assert "Expected list" in str(exc_info.value)
+
+
+@patch("backend.pro_players.requests.get")
+def test_fetch_teams_from_api_partial_failure_graceful_degradation(mock_get, sample_teams_data):
+    """Test that fetch_teams_from_api returns partial data if later pages fail."""
+    # First page succeeds, second page fails
+    page_1 = sample_teams_data * 500  # 1000 items
+    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "raise_for_status": lambda self: None})()
+
+    mock_get.side_effect = [mock_response_1, requests.RequestException("Network error on page 2")]
+
+    # Should return partial data from page 1, not raise exception
+    result = fetch_teams_from_api()
+
+    assert result is not None
+    assert len(result) == 1000  # Only page 1 data
 
 
 def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):

@@ -42,11 +42,15 @@ def close_d2ba_db(e=None):
         db.close()
 
 
-def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
+def fetch_pro_players_from_api() -> list[dict[str, Any]]:
     """Fetch pro players data from OpenDota API.
 
     Returns:
-        List of pro player dictionaries, or None if request fails.
+        List of pro player dictionaries.
+
+    Raises:
+        ConnectionError: If unable to connect to or get response from OpenDota API.
+        ValueError: If API response is invalid or not a list.
     """
     try:
         response = requests.get("https://api.opendota.com/api/proPlayers", timeout=30)
@@ -54,12 +58,16 @@ def fetch_pro_players_from_api() -> Optional[list[dict[str, Any]]]:
         data = response.json()
 
         if not isinstance(data, list):
-            return None
+            raise ValueError(f"Expected list from API, got {type(data).__name__}")
 
         return data
 
-    except Exception:
-        return None
+    except requests.RequestException as e:
+        raise ConnectionError(f"Failed to fetch pro players from OpenDota API: {e}") from e
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Unexpected error parsing pro players response: {e}") from e
 
 
 def store_pro_players(players_data: list[dict[str, Any]]) -> int:
@@ -226,38 +234,76 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
         return [], []
 
 
-def fetch_teams_from_api() -> Optional[list[dict[str, Any]]]:
+def fetch_teams_from_api() -> list[dict[str, Any]]:
     """Fetch teams data from OpenDota API paginated by 1000 entries per page.
 
+    The API returns up to 1000 teams per page. This function fetches all pages
+    until it gets fewer than 1000 teams (indicating the last page) or reaches
+    the maximum page limit (100 pages = 100,000+ teams).
+
     Returns:
-        List of team dictionaries, or None if request fails.
+        List of team dictionaries (may be partial if an error occurs after fetching
+        some pages, but will raise exception if first page fails).
+
+    Raises:
+        ConnectionError: If unable to fetch the first page of teams.
+        ValueError: If API response is invalid (not a list).
+
+    Note:
+        If a page fails after successfully fetching previous pages, returns the data
+        collected so far rather than failing entirely (graceful degradation).
     """
+    MAX_PAGES = 100
+    all_teams = []
+    page = 0
+
     try:
-        all_teams = []
-        page = 0
+        while page < MAX_PAGES:
+            try:
+                response = requests.get(f"https://api.opendota.com/api/teams?page={page}", timeout=30)
+                response.raise_for_status()
+                data = response.json()
 
-        # TODO: limit the loop. Errors should also break it.
-        while True:
-            response = requests.get(f"https://api.opendota.com/api/teams?page={page}", timeout=30)
-            response.raise_for_status()
-            data = response.json()
+                if not isinstance(data, list):
+                    error_msg = f"Page {page}: Expected list from API, got {type(data).__name__}"
+                    logger.warning(error_msg)
+                    if page == 0:
+                        raise ValueError(error_msg)
+                    break
 
-            if not isinstance(data, list):
-                return None
-
-            # If we get less than 1000 entries, it's the last page
-            if len(data) < 1000:
                 all_teams.extend(data)
-                break
+                logger.debug(f"Fetched {len(data)} teams from page {page}")
 
-            all_teams.extend(data)
-            page += 1
+                # If we got fewer than 1000 teams, it's the last page
+                if len(data) < 1000:
+                    logger.info(f"Fetched teams from {page + 1} pages (total: {len(all_teams)} teams)")
+                    break
 
-        return all_teams if all_teams else None
+                page += 1
 
+            except requests.RequestException as page_error:
+                # If we have data from previous pages, return it (graceful degradation)
+                if all_teams:
+                    logger.warning(
+                        f"Error fetching page {page}: {page_error}. "
+                        f"Returning {len(all_teams)} teams fetched before error"
+                    )
+                    break
+
+                # If this is the first page and it failed, raise exception (critical error)
+                logger.error(f"Failed to fetch first page of teams: {page_error}")
+                raise ConnectionError(f"Failed to fetch teams from OpenDota API: {page_error}") from page_error
+
+        if not all_teams:
+            raise ConnectionError("No teams fetched from OpenDota API (empty response)")
+
+        return all_teams
+
+    except (ConnectionError, ValueError):
+        raise
     except Exception as e:
-        logger.error(f"Error fetching teams from API: {e}")
-        return None
+        logger.error(f"Unexpected error fetching teams from API: {e}")
+        raise ConnectionError(f"Unexpected error fetching teams from API: {e}") from e
 
 
 def store_teams(teams_data: list[dict[str, Any]]) -> int:

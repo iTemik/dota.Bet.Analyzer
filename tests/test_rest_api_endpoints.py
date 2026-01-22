@@ -8,6 +8,16 @@ import pytest
 from backend import create_app
 
 
+def raise_connection_error():
+    """Helper function to raise ConnectionError for mocking."""
+    raise ConnectionError("Failed to connect to OpenDota API")
+
+
+def raise_value_error():
+    """Helper function to raise ValueError for mocking."""
+    raise ValueError("Invalid response format")
+
+
 @pytest.fixture
 def app():
     """Create and configure a test Flask application."""
@@ -226,15 +236,29 @@ class TestProPlayersEndpoint:
         rv = client.post("/pro-players/sync")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
-    def test_pro_players_returns_500_on_fetch_failure(self, monkeypatch):
-        """Test that /pro-players/sync returns 500 when fetch fails."""
-        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_pro_players_from_api", lambda: None)
+    def test_pro_players_returns_503_on_connection_error(self, monkeypatch):
+        """Test that /pro-players/sync returns 503 when connection error occurs."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_pro_players_from_api", raise_connection_error)
 
         app = create_app(test_config={})
         client = app.test_client()
 
         rv = client.post("/pro-players/sync")
-        assert rv.status_code == 500, f"Expected 500, got {rv.status_code}"
+        assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
+        data = rv.get_json()
+        assert "error_code" in data
+
+    def test_pro_players_returns_502_on_invalid_response(self, monkeypatch):
+        """Test that /pro-players/sync returns 502 when API response is invalid."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_pro_players_from_api", raise_value_error)
+
+        app = create_app(test_config={})
+        client = app.test_client()
+
+        rv = client.post("/pro-players/sync")
+        assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
+        data = rv.get_json()
+        assert "error_code" in data
 
     def test_pro_players_returns_json_response(self, monkeypatch):
         """Test that /pro-players/sync returns valid JSON."""
@@ -265,15 +289,29 @@ class TestTeamsEndpoint:
         rv = client.post("/teams/sync")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
-    def test_teams_returns_500_on_fetch_failure(self, monkeypatch):
-        """Test that /teams/sync returns 500 when fetch fails."""
-        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", lambda: None)
+    def test_teams_returns_503_on_connection_error(self, monkeypatch):
+        """Test that /teams/sync returns 503 when connection error occurs."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", raise_connection_error)
 
         app = create_app(test_config={})
         client = app.test_client()
 
         rv = client.post("/teams/sync")
-        assert rv.status_code == 500, f"Expected 500, got {rv.status_code}"
+        assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
+        data = rv.get_json()
+        assert "error_code" in data
+
+    def test_teams_returns_502_on_invalid_response(self, monkeypatch):
+        """Test that /teams/sync returns 502 when API response is invalid."""
+        monkeypatch.setattr("backend.dota_bet_analyzer.fetch_teams_from_api", raise_value_error)
+
+        app = create_app(test_config={})
+        client = app.test_client()
+
+        rv = client.post("/teams/sync")
+        assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
+        data = rv.get_json()
+        assert "error_code" in data
 
     def test_teams_returns_json_response(self, monkeypatch):
         """Test that /teams/sync returns valid JSON."""
