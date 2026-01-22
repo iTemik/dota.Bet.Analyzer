@@ -156,7 +156,7 @@ class TestTeamsSearch:
             for i in range(15):
                 cursor.execute(
                     "INSERT INTO teams (team_id, rating, name, tag, logo_url) VALUES (?, ?, ?, ?, ?)",
-                    (400 + i, 1500.0, f"Team {i}", f"T{i}", f"https://example.com/t{i}.png"),
+                    (400 + i, 1500.0, f"Team {i:02d}", f"T{i:02d}", f"https://example.com/t{i:02d}.png"),
                 )
             db.commit()
 
