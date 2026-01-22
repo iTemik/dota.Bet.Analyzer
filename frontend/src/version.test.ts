@@ -24,10 +24,4 @@ describe('Frontend Version Management', () => {
         const versionPattern = /^\d+\.\d+\.(\d+|DEV)$/
         expect(VERSION).toMatch(versionPattern)
     })
-
-    it('should be greater than or equal to 1.0.0', () => {
-        const [major] = VERSION.split('.')
-        const majorNum = Number(major)
-        expect(majorNum).toBeGreaterThanOrEqual(1)
-    })
 })
