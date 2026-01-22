@@ -66,7 +66,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
     assert team.task_id is not None  # task_id should be generated
-    assert team.task_id.startswith("task_Alpha_")  # Verify task_id includes team name
+    assert team.task_id.startswith("task_42_")  # Verify task_id includes team_id
     assert team.error_code is None
     assert team.message is None
 
