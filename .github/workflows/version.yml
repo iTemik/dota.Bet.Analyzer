@@ -72,7 +72,7 @@ jobs:
           echo "Backend version: $BACKEND_VERSION"
 
           # Create tag combining both frontend and backend versions
-          RELEASE_VERSION="${FRONTEND_VERSION}-be${BACKEND_VERSION}"
+          RELEASE_VERSION="${FRONTEND_VERSION}-${BACKEND_VERSION}"
           echo "Creating release tag: v${RELEASE_VERSION}"
           git tag -a "v${RELEASE_VERSION}" -m "Release v${RELEASE_VERSION}" || (echo "Tag already exists, skipping tag creation"; exit 0)
           git push origin "v${RELEASE_VERSION}" || echo "Tag push completed"
