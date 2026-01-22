@@ -593,7 +593,8 @@ def search_teams():
     search_query = request.args.get("q", "").strip()
     limit_param = request.args.get("limit", 10)
     try:
-        limit = min(int(limit_param), 50)  # Cap at 50
+        # Clamp limit between 1 and 50 to avoid negative or excessively large values
+        limit = max(1, min(int(limit_param), 50))
     except (TypeError, ValueError):
         return (
             jsonify(
