@@ -69,7 +69,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.task_id is not None  # task_id should be generated
     assert team.task_id.startswith("task_Alpha_")  # Verify task_id includes team name
     assert team.error_code is None
-    assert team.error_message is None
+    assert team.message is None
 
 
 def test_compute_statistics_invalid_team():
@@ -78,7 +78,7 @@ def test_compute_statistics_invalid_team():
     assert len(res.teams) == 1
     team = res.teams[0]
     assert team.error_code == "INVALID_TEAM_NAME"
-    assert team.error_message == "Invalid team name"
+    assert team.message == "Invalid team name"
     assert team.team_id is None
 
 
@@ -95,7 +95,7 @@ def test_compute_statistics_network_error(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "NETWORK_ERROR"
-    assert team.error_message is not None and "connection failed" in team.error_message
+    assert team.message is not None and "connection failed" in team.message
     assert team.team_id is None
 
 
@@ -111,7 +111,7 @@ def test_compute_statistics_non_200(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "HTTP_ERROR"
-    assert team.error_message is not None and "500" in team.error_message
+    assert team.message is not None and "500" in team.message
     assert team.team_id is None
 
 
@@ -128,5 +128,5 @@ def test_compute_statistics_malformed_response(monkeypatch):
     team = res.teams[0]
     assert team.team == "A"
     assert team.error_code == "RESPONSE_PARSE_ERROR"
-    assert team.error_message is not None and "No rows" in team.error_message
+    assert team.message is not None and "No rows" in team.message
     assert team.team_id is None

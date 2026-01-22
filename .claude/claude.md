@@ -77,7 +77,7 @@ Backend: `backend/VERSION`, Frontend: `frontend/src/version.ts`
 Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql), Session: [backend/db.py](backend/db.py)
 
 ## Error Handling
-Always catch exceptions, return JSON `{error_code, error_message}` with proper HTTP status code
+Always catch exceptions, return JSON `{error_code, message, details}` with proper HTTP status code
 
 ## Examples
 
