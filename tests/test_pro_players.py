@@ -103,7 +103,6 @@ def test_pro_players_endpoint_success(client, sample_pro_players_data):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["status"] == "ok"
         assert data["count"] == 2
         assert "Stored 2 pro players" in data["message"]
 
@@ -145,7 +144,7 @@ def test_pro_players_endpoint_api_failure(client):
 
         assert response.status_code == 500
         data = json.loads(response.data)
-        assert "error" in data
+        assert "error_code" in data
 
 
 def test_pro_players_endpoint_empty_response(client):
@@ -157,7 +156,6 @@ def test_pro_players_endpoint_empty_response(client):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["status"] == "ok"
         assert data["count"] == 0
 
 
@@ -500,7 +498,6 @@ def test_teams_endpoint_sync_success(client, sample_teams_data):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["status"] == "ok"
         assert data["count"] == 2
         assert "Stored 2 teams" in data["message"]
 
@@ -547,7 +544,7 @@ def test_teams_endpoint_api_failure(client):
 
         assert response.status_code == 500
         data = json.loads(response.data)
-        assert "error" in data
+        assert "error_code" in data
 
 
 def test_teams_endpoint_empty_response(client):
@@ -559,7 +556,7 @@ def test_teams_endpoint_empty_response(client):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["status"] == "ok"
+
         assert data["count"] == 0
 
 

@@ -13,7 +13,6 @@ interface Player {
 
 interface TeamData {
   error_code: null | string
-  error_message: null | string
   rating: null | number
   delta: number
   logo_url?: string
@@ -100,7 +99,14 @@ function App() {
       const response = await fetch(`/api/statistics?${params.toString()}`)
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Try to extract error message from response body
+        try {
+          const errorData = await response.json()
+          const errorMsg = errorData.message || `HTTP error! status: ${response.status}`
+          throw new Error(errorMsg)
+        } catch {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
       }
 
       const data = await response.json()

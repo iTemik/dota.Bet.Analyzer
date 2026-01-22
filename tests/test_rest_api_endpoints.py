@@ -118,7 +118,8 @@ class TestResultsEndpoint:
             rv = client.get("/results/nonexistent")
             assert rv.status_code == 404
             data = rv.get_json()
-            assert "error" in data
+            assert "error_code" in data
+            assert "message" in data
 
 
 class TestStatisticsEndpoint:
@@ -172,7 +173,8 @@ class TestStatisticsEndpoint:
         rv = client.get("/statistics")
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
         data = rv.get_json()
-        assert "error" in data
+        assert "error_code" in data
+        assert "message" in data
 
     def test_statistics_post_returns_400_when_no_teams(self):
         """Test that POST /statistics returns 400 when no teams provided."""
@@ -182,7 +184,8 @@ class TestStatisticsEndpoint:
         rv = client.post("/statistics", json={})
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
         data = rv.get_json()
-        assert "error" in data
+        assert "error_code" in data
+        assert "message" in data
 
     def test_statistics_returns_400_when_too_many_teams(self, monkeypatch):
         """Test that /statistics returns 400 when more than 10 teams."""
@@ -245,7 +248,7 @@ class TestProPlayersEndpoint:
         assert rv.status_code == 200
         data = rv.get_json()
         assert isinstance(data, dict)
-        assert "status" in data or "error" in data
+        assert "message" in data or "error_code" in data
 
 
 class TestTeamsEndpoint:
@@ -284,4 +287,4 @@ class TestTeamsEndpoint:
         assert rv.status_code == 200
         data = rv.get_json()
         assert isinstance(data, dict)
-        assert "status" in data or "error" in data
+        assert "message" in data or "error_code" in data

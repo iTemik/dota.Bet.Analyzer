@@ -19,7 +19,7 @@
 ## Code Rules
 - Type hints: All functions
 - Docstrings: All public functions (Args, Returns)
-- Error JSON: `{error_code: str, error_message: str}`
+- Error JSON: `{error_code: str, message: str, details: {url: str}}`
 - REST prefix: `/api/`
 - Python naming: snake_case functions, PascalCase classes
 - TS naming: PascalCase components, camelCase functions

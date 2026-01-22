@@ -252,6 +252,59 @@ See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed 
 
 ---
 
+## 📡 API Response Format
+
+The backend uses **RFC 7807-compliant** error responses with HTTP status codes as the primary success/error indicator.
+
+**Success Response (HTTP 200):**
+```json
+{
+  "count": 32,
+  "message": "Stored 32 pro players"
+}
+```
+
+**Error Response (HTTP 4xx/5xx):**
+```json
+{
+  "error_code": "FAILED_TO_FETCH_TEAMS",
+  "message": "Failed to fetch teams from OpenDota API",
+  "details": {
+    "url": "/api/teams/sync"
+  }
+}
+```
+
+**Error Response with Additional Details:**
+```json
+{
+  "error_code": "INVALID_ACCOUNT_ID",
+  "message": "Invalid account_id: abc123",
+  "details": {
+    "url": "/api/statistics/players",
+    "value": "abc123"
+  }
+}
+```
+
+**Available Error Codes:**
+- `MISSING_ACCOUNT_IDS` - No account IDs provided
+- `TOO_MANY_PLAYERS` - More than 10 players requested
+- `INVALID_ACCOUNT_ID` - Account ID is not a valid integer
+- `FAILED_TO_START_TASK` - Celery task start failed
+- `INVALID_REQUEST` - Invalid request parameters
+- `RESULTS_NOT_FOUND` - Task results not found (404)
+- `FAILED_TO_RETRIEVE_RESULTS` - Internal error retrieving results
+- `MISSING_TEAMS` - No teams provided
+- `UNSUPPORTED_METHOD` - HTTP method not supported for endpoint
+- `TOO_MANY_TEAMS` - More than 10 teams requested
+- `FAILED_TO_FETCH_PRO_PLAYERS` - OpenDota API fetch failed
+- `FAILED_TO_STORE_PRO_PLAYERS` - Database store failed
+- `FAILED_TO_FETCH_TEAMS` - OpenDota API teams fetch failed
+- `FAILED_TO_STORE_TEAMS` - Database teams store failed
+
+---
+
 ## ▶️ Starting All Services (One Click)
 
 ### Option 1: PowerShell (Windows)

@@ -52,8 +52,8 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 400
         data = rv.get_json()
-        assert "error" in data
-        assert "no account_ids provided" in data["error"].lower()
+        assert "error_code" in data
+        assert "no account_ids provided" in data["message"].lower()
 
     def test_returns_400_when_too_many_account_ids(self, client):
         """Test that endpoint returns 400 when more than 10 account_ids provided."""
@@ -62,8 +62,8 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 400
         data = rv.get_json()
-        assert "error" in data
-        assert "max 10" in data["error"].lower() or "too many" in data["error"].lower()
+        assert "error_code" in data
+        assert "max 10" in data["message"].lower() or "too many" in data["message"].lower()
 
     def test_returns_400_on_invalid_account_id(self, client):
         """Test that endpoint returns 400 when account_id is not a valid integer."""
@@ -71,8 +71,8 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 400
         data = rv.get_json()
-        assert "error" in data
-        assert "invalid account_id" in data["error"].lower()
+        assert "error_code" in data
+        assert "invalid account_id" in data["message"].lower()
 
     def test_returns_400_when_no_valid_account_ids(self, client):
         """Test that endpoint returns 400 when all account_ids are invalid."""
@@ -80,8 +80,8 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 400
         data = rv.get_json()
-        assert "error" in data
-        assert "invalid account_id" in data["error"].lower()
+        assert "error_code" in data
+        assert "invalid account_id" in data["message"].lower()
 
     def test_converts_string_account_ids_to_integers(self, client):
         """Test that string account_ids are converted to integers."""
@@ -131,8 +131,8 @@ class TestPlayersStatisticsEndpoint:
 
             assert rv.status_code == 500
             data = rv.get_json()
-            assert "error" in data
-            assert "Failed to start task" in data["error"]
+            assert "error_code" in data
+            assert "Failed to start task" in data["message"]
 
     def test_handles_whitespace_in_account_ids(self, client):
         """Test that whitespace in account_ids is properly trimmed."""
@@ -185,4 +185,4 @@ class TestPlayersStatisticsIntegration:
 
         assert rv.status_code == 400
         data = rv.get_json()
-        assert "error" in data
+        assert "error_code" in data
