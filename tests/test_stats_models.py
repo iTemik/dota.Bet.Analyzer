@@ -50,7 +50,6 @@ def test_compute_statistics_returns_model(monkeypatch):
 
     mock_dota_bet = MagicMock()
     mock_dota_bet.players_statistics_task = MockPlayersStatisticsTask()
-    sys.modules["backend.dota_bet_analyzer"] = mock_dota_bet
     monkeypatch.setitem(sys.modules, "backend.dota_bet_analyzer", mock_dota_bet)
 
     res = compute_statistics(["A"])
