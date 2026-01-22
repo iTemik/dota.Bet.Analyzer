@@ -591,7 +591,19 @@ def search_teams():
     from backend.db import get_db
 
     search_query = request.args.get("q", "").strip()
-    limit = min(int(request.args.get("limit", 10)), 50)  # Cap at 50
+    limit_param = request.args.get("limit", 10)
+    try:
+        limit = min(int(limit_param), 50)  # Cap at 50
+    except (TypeError, ValueError):
+        return (
+            jsonify(
+                {
+                    "error_code": ErrorCode.INVALID_REQUEST,
+                    "message": "Limit parameter must be a valid integer",
+                }
+            ),
+            400,
+        )
 
     # Validate search query
     if not search_query or len(search_query) < 2:
