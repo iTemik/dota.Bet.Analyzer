@@ -56,7 +56,7 @@ def _configure_app(app, test_config=None):
     # Default configuration
     app.config.from_mapping(
         SECRET_KEY="dev",
-        DATABASE_FILENAME="opendota.sqlite",
+        DATABASE_FILENAME="d2ba.sqlite",
     )
 
     # Load environment-aware config
@@ -70,7 +70,7 @@ def _configure_app(app, test_config=None):
 
     # Setup database path
     os.makedirs(app.instance_path, exist_ok=True)
-    db_filename = app.config.get("DATABASE_FILENAME", "opendota.sqlite")
+    db_filename = app.config.get("DATABASE_FILENAME", "d2ba.sqlite")
     app.config["DATABASE"] = os.path.join(app.instance_path, db_filename)
 
 

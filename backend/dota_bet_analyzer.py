@@ -644,12 +644,12 @@ def search_teams():
             LIMIT ?
             """,
             (
-                f"{search_query}%",   # name starts with (WHERE)
-                f"{search_query}%",   # tag starts with (WHERE)
+                f"{search_query}%",  # name starts with (WHERE)
+                f"{search_query}%",  # tag starts with (WHERE)
                 f"%{search_query}%",  # name contains (WHERE)
                 f"%{search_query}%",  # tag contains (WHERE)
-                f"{search_query}%",   # name starts with (ORDER BY)
-                f"{search_query}%",   # tag starts with (ORDER BY)
+                f"{search_query}%",  # name starts with (ORDER BY)
+                f"{search_query}%",  # tag starts with (ORDER BY)
                 f"%{search_query}%",  # name contains (ORDER BY)
                 f"%{search_query}%",  # tag contains (ORDER BY)
                 limit,
