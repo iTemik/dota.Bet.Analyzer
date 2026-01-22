@@ -1,4 +1,3 @@
-
 class TestTeamsSearch:
     """Test the /api/teams/search endpoint"""
 
