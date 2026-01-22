@@ -346,9 +346,13 @@ def statistics() -> tuple[Response, int]:
     return jsonify(stats.model_dump()), 200
 
 
-@bp.route("/ProPlayers", methods=["GET"])
-def pro_players() -> tuple[Response, int]:
-    """Fetch pro players from OpenDota API and store in database.
+@bp.route("/pro-players/sync", methods=["POST"])
+def sync_pro_players() -> tuple[Response, int]:
+    """Sync pro players from OpenDota API and update database.
+
+    This is a write operation (POST) that fetches fresh pro player data from OpenDota API
+    and updates the local database. It's intended to run infrequently (once daily during
+    initialization/maintenance).
 
     Returns:
         JSON response with status and count of players stored.
