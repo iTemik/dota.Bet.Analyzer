@@ -627,21 +627,31 @@ def search_teams():
             """
             SELECT team_id, name, tag, logo_url, rating
             FROM teams
-            WHERE LOWER(name) LIKE LOWER(?) OR LOWER(tag) LIKE LOWER(?)
+            WHERE
+              LOWER(name) LIKE LOWER(?) OR
+              LOWER(tag) LIKE LOWER(?) OR
+              LOWER(name) LIKE LOWER(?) OR
+              LOWER(tag) LIKE LOWER(?)
             ORDER BY
               CASE
                 WHEN LOWER(name) LIKE LOWER(?) THEN 0
                 WHEN LOWER(tag) LIKE LOWER(?) THEN 1
-                ELSE 2
+                WHEN LOWER(name) LIKE LOWER(?) THEN 2
+                WHEN LOWER(tag) LIKE LOWER(?) THEN 3
+                ELSE 4
               END,
               name
             LIMIT ?
             """,
             (
-                f"{search_query}%",  # Starts with
-                f"%{search_query}%",  # Contains
-                f"{search_query}%",
-                f"{search_query}%",
+                f"{search_query}%",   # name starts with (WHERE)
+                f"{search_query}%",   # tag starts with (WHERE)
+                f"%{search_query}%",  # name contains (WHERE)
+                f"%{search_query}%",  # tag contains (WHERE)
+                f"{search_query}%",   # name starts with (ORDER BY)
+                f"{search_query}%",   # tag starts with (ORDER BY)
+                f"%{search_query}%",  # name contains (ORDER BY)
+                f"%{search_query}%",  # tag contains (ORDER BY)
                 limit,
             ),
         )
