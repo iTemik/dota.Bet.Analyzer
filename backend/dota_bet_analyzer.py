@@ -22,6 +22,7 @@ from backend.schemas import (
     PlayerStatisticsQuerySchema,
     StatisticsErrorSchema,
     StatisticsResultSchema,
+    StatsResponseSchema,
     SyncErrorSchema,
     SyncResponseSchema,
     TaskResponseSchema,
@@ -242,15 +243,19 @@ def get_version() -> tuple[Response, int]:
 
 
 @bp.route("/statistics", methods=["GET"])
+@bp.response(200, StatsResponseSchema)
 @bp.alt_response(400, schema=StatisticsErrorSchema, description="Invalid parameters")
 @bp.alt_response(500, schema=StatisticsErrorSchema, description="Computation failed")
 def statistics() -> tuple[Response, int]:
     """Compute team statistics.
 
     Query parameters:
-    - team: Team name (can be specified multiple times for multiple teams)
+    - team: Team name (supports multiple values: ?team=Alpha&team=Beta)
+    - team1, team2, ...: Alternative numbered format (legacy support)
 
-    Returns computed statistics for the specified teams.
+    Returns computed statistics for the specified teams (1-10 teams).
+    Includes team ratings, tags, IDs, rating deltas, player lists, and task_id
+    for asynchronous player statistics computation.
     """
     teams = request.args.getlist("team")
     if not teams:

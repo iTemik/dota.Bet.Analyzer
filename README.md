@@ -395,10 +395,10 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 ### Core Features
 
 #### Team Statistics (`/statistics`)
-- Compare two Dota 2 teams side-by-side
+- Compare Dota 2 teams side-by-side (1-10 teams)
 - Returns team ratings, tags, IDs, and rating deltas
-- Processes match history data and calculates aggregate statistics
-- Supports both GET and POST requests with team names
+- Initiates async tasks to fetch player match statistics
+- Supports GET requests with query parameters: `?team=Alpha&team=Beta` or `?team1=Alpha&team2=Beta`
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:

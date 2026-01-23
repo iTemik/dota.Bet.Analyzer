@@ -9,3 +9,9 @@ profile = "black"
 line-length = 120
 lint.select = ["E", "F", "W", "I", "B", "C", "RUF"]
 # you can add ignore or extend-select based on project preference
+
+[tool.mypy]
+mypy_path = "stubs"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
