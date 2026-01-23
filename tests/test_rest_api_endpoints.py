@@ -128,7 +128,7 @@ class TestResultsEndpoint:
             rv = client.get("/api/results/nonexistent")
             assert rv.status_code == 404
             data = rv.get_json()
-            assert "error_code" in data
+            assert "code" in data
             assert "message" in data
 
 
@@ -155,26 +155,6 @@ class TestStatisticsEndpoint:
         rv = client.get("/api/statistics?team=TestTeam")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
-    def test_statistics_post_returns_200_on_success(self, monkeypatch):
-        """Test that POST /statistics returns 200 on success."""
-        from backend.stats import Player, StatsResponse, TeamStats
-
-        def fake_compute(teams):
-            return StatsResponse(
-                teams=[
-                    TeamStats(team=team, team_id=idx + 1, players=[Player(name=f"{team}Player", id=idx + 1)])
-                    for idx, team in enumerate(teams)
-                ]
-            )
-
-        monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
-
-        app = create_app(test_config={})
-        client = app.test_client()
-
-        rv = client.post("/api/statistics", json={"teams": ["Team1"]})
-        assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
-
     def test_statistics_get_returns_400_when_no_teams(self):
         """Test that GET /statistics returns 400 when no teams provided."""
         app = create_app(test_config={})
@@ -183,18 +163,7 @@ class TestStatisticsEndpoint:
         rv = client.get("/api/statistics")
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
         data = rv.get_json()
-        assert "error_code" in data
-        assert "message" in data
-
-    def test_statistics_post_returns_400_when_no_teams(self):
-        """Test that POST /statistics returns 400 when no teams provided."""
-        app = create_app(test_config={})
-        client = app.test_client()
-
-        rv = client.post("/api/statistics", json={})
-        assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
-        data = rv.get_json()
-        assert "error_code" in data
+        assert "code" in data
         assert "message" in data
 
     def test_statistics_returns_400_when_too_many_teams(self, monkeypatch):
@@ -209,14 +178,17 @@ class TestStatisticsEndpoint:
         app = create_app(test_config={})
         client = app.test_client()
 
-        teams = [f"Team{i}" for i in range(11)]
-        rv = client.post("/api/statistics", json={"teams": teams})
+        teams_query = "&".join([f"team=Team{i}" for i in range(11)])
+        rv = client.get(f"/api/statistics?{teams_query}")
         assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
 
     def test_statistics_unsupported_method_returns_405(self):
-        """Test that unsupported HTTP method returns 405 Method Not Allowed."""
+        """Test that unsupported HTTP methods return 405 Method Not Allowed."""
         app = create_app(test_config={})
         client = app.test_client()
+
+        rv = client.post("/api/statistics", json={"teams": ["Team1"]})
+        assert rv.status_code == 405
 
         rv = client.put("/api/statistics", json={"teams": ["Team1"]})
         assert rv.status_code == 405
@@ -246,7 +218,7 @@ class TestProPlayersEndpoint:
         rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
         data = rv.get_json()
-        assert "error_code" in data
+        assert "code" in data
 
     def test_pro_players_returns_502_on_invalid_response(self, monkeypatch):
         """Test that /pro-players/sync returns 502 when API response is invalid."""
@@ -258,7 +230,7 @@ class TestProPlayersEndpoint:
         rv = client.post("/api/pro-players/sync")
         assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
         data = rv.get_json()
-        assert "error_code" in data
+        assert "code" in data
 
     def test_pro_players_returns_json_response(self, monkeypatch):
         """Test that /pro-players/sync returns valid JSON."""
@@ -299,7 +271,7 @@ class TestTeamsEndpoint:
         rv = client.post("/api/teams/sync")
         assert rv.status_code == 503, f"Expected 503, got {rv.status_code}"
         data = rv.get_json()
-        assert "error_code" in data
+        assert "code" in data
 
     def test_teams_returns_502_on_invalid_response(self, monkeypatch):
         """Test that /teams/sync returns 502 when API response is invalid."""
@@ -311,7 +283,7 @@ class TestTeamsEndpoint:
         rv = client.post("/api/teams/sync")
         assert rv.status_code == 502, f"Expected 502, got {rv.status_code}"
         data = rv.get_json()
-        assert "error_code" in data
+        assert "code" in data
 
     def test_teams_returns_json_response(self, monkeypatch):
         """Test that /teams/sync returns valid JSON."""

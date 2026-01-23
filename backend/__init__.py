@@ -57,6 +57,13 @@ def _configure_app(app, test_config=None):
     app.config.from_mapping(
         SECRET_KEY="dev",
         DATABASE_FILENAME="d2ba.sqlite",
+        # OpenAPI/Swagger configuration
+        API_TITLE="Dota Bet Analyzer API",
+        API_VERSION=__version__,
+        OPENAPI_VERSION="3.0.2",
+        OPENAPI_URL_PREFIX="/api",
+        OPENAPI_SWAGGER_UI_PATH="/swagger-ui",
+        OPENAPI_SWAGGER_UI_URL="https://cdn.jsdelivr.net/npm/swagger-ui-dist/",
     )
 
     # Load environment-aware config
@@ -76,6 +83,11 @@ def _configure_app(app, test_config=None):
 
 def _init_extensions(app):
     """Initialize Flask extensions and register blueprints."""
+    # Initialize flask-smorest API
+    from flask_smorest import Api
+
+    api = Api(app)
+
     # Initialize database
     from . import db
 
@@ -90,7 +102,7 @@ def _init_extensions(app):
     from .dota_bet_analyzer import bp as dota_bp
     from .dota_bet_analyzer import celery as celery_app
 
-    app.register_blueprint(dota_bp, url_prefix="/api")
+    api.register_blueprint(dota_bp)
     celery_app.conf.update(app.config or {})
 
     # Sync pro players on app startup (only in production, not in test mode)

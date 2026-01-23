@@ -22,29 +22,36 @@ class TestTeamsSearch:
             db.commit()
 
     def test_search_teams_missing_query(self, client):
-        """Test search without query parameter"""
+        """Test search without query parameter returns 422"""
         response = client.get("/api/teams/search")
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.get_json()
-        assert "message" in data
-        assert "at least 2 characters" in data["message"].lower()
+        assert "errors" in data
 
     def test_search_teams_too_short_query(self, client):
-        """Test search with query less than 2 characters"""
+        """Test search with query less than 2 characters returns 422"""
         response = client.get("/api/teams/search?q=L")
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.get_json()
-        assert "at least 2 characters" in data["message"].lower()
+        assert "errors" in data
 
     def test_search_teams_empty_query(self, client):
-        """Test search with empty query"""
+        """Test search with empty query returns 422"""
         response = client.get("/api/teams/search?q=")
-        assert response.status_code == 400
+        assert response.status_code == 422
 
-    def test_search_teams_whitespace_only(self, client):
-        """Test search with whitespace-only query"""
+    def test_search_teams_whitespace_only(self, client, app):
+        """Test search with whitespace-only query (passes validation, returns no results)"""
+        # Insert a team to ensure empty result is from query, not empty DB
+        test_teams = [(1, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        self._insert_teams(app, test_teams)
+
         response = client.get("/api/teams/search?q=%20%20")
-        assert response.status_code == 400
+        # Whitespace passes min length validation (2 chars)
+        assert response.status_code == 200
+        data = response.get_json()
+        # But returns no results (no team names match whitespace)
+        assert len(data) == 0
 
     def test_search_teams_successful_search(self, client, app):
         """Test successful team search with valid query"""
@@ -155,10 +162,9 @@ class TestTeamsSearch:
 
         # Test with non-numeric limit
         response = client.get("/api/teams/search?q=Team&limit=abc")
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.get_json()
-        assert "message" in data
-        assert "valid integer" in data["message"].lower()
+        assert "errors" in data
 
     def test_search_teams_limit_negative(self, client, app):
         """Test limit parameter with negative value"""
@@ -167,10 +173,9 @@ class TestTeamsSearch:
 
         # Test with negative limit
         response = client.get("/api/teams/search?q=Team&limit=-1")
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.get_json()
-        assert "message" in data
-        assert "positive" in data["message"].lower() or "greater than" in data["message"].lower()
+        assert "errors" in data
 
     def test_search_teams_limit_zero(self, client, app):
         """Test limit parameter with zero value"""
@@ -179,13 +184,12 @@ class TestTeamsSearch:
 
         # Test with zero limit
         response = client.get("/api/teams/search?q=Team&limit=0")
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.get_json()
-        assert "message" in data
-        assert "positive" in data["message"].lower() or "greater than" in data["message"].lower()
+        assert "errors" in data
 
     def test_search_teams_limit_exceeds_max(self, client, app):
-        """Test that limit is capped at maximum (50)"""
+        """Test that limit exceeding max (50) is rejected with 422"""
         # Insert more than 50 teams
         test_teams = [
             (900 + i, 1500.0, f"Team {i+1:03d}", f"T{i+1:03d}", f"https://example.com/t{i+1:03d}.png")
@@ -193,8 +197,8 @@ class TestTeamsSearch:
         ]
         self._insert_teams(app, test_teams)
 
-        # Test with limit=100 (should be capped at 50)
+        # Test with limit=100 (exceeds max, should return 422)
         response = client.get("/api/teams/search?q=Team&limit=100")
-        assert response.status_code == 200
+        assert response.status_code == 422
         data = response.get_json()
-        assert len(data) <= 50  # Should be capped at 50
+        assert "errors" in data
