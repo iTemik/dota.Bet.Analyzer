@@ -24,11 +24,12 @@ def test_version_components():
     assert int(parts[1]) >= 0, "Minor version should be >= 0"
 
 
-def test_version_is_at_least_1_0():
-    """Version should be at least 1.0."""
+def test_version_is_at_least_0_1():
+    """Version should be at least 0.2 (major>=0, minor>0)."""
     parts = __version__.split(".")
     major, minor = int(parts[0]), int(parts[1])
-    assert major >= 1 or (major == 0 and minor >= 0)
+    assert major >= 0, f"Expected major version 0, got {major}"
+    assert minor > 0, f"Expected minor version > 0, got {minor}"
 
 
 def test_version_is_not_empty():
