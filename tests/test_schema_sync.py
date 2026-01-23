@@ -86,8 +86,10 @@ def test_stats_response_serialization_compatibility():
     # Verify Marshmallow can load it (validates schema compatibility)
     schema = StatsResponseSchema()
     loaded = schema.load(dumped)
+    assert isinstance(loaded, dict)
 
     # Should be able to round-trip without errors
+    assert loaded is not None
     assert loaded["teams"][0]["team"] == "Test Team"
     assert loaded["teams"][0]["team_id"] == 1
     assert len(loaded["teams"][0]["players"]) == 1
