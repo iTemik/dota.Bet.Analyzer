@@ -25,7 +25,7 @@ def test_version_components():
 
 
 def test_version_is_at_least_0_1():
-    """Version should be at least 0.2 (major>=0, minor>0)."""
+    """Version should be at least 0.1 (major>=0, minor>0)."""
     parts = __version__.split(".")
     major, minor = int(parts[0]), int(parts[1])
     assert major >= 0, f"Expected major version 0, got {major}"
