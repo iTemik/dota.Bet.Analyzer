@@ -2,7 +2,7 @@ name: Version and Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   version:
@@ -18,7 +18,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Set version in files
         run: |
@@ -31,7 +31,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           # Add VERSION files and updated source files
-          git add frontend/VERSION backend/VERSION frontend/src/version.ts
+          git add backend/VERSION frontend/src/version.ts
           RELEASE_VERSION=$(node scripts/version.js release get)
           git commit -m "chore: bump version to ${RELEASE_VERSION}" || echo "No changes to commit"
 
