@@ -62,7 +62,20 @@ def pydantic_to_marshmallow_field(field_info, field_type) -> fields.Field:  # no
             # Handle Optional[BaseModel]
             elif isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
                 nested_schema = pydantic_to_marshmallow(inner_type)
-                return fields.Nested(nested_schema, allow_none=True, required=False)
+                # Add example metadata for better OpenAPI documentation
+                example = None
+                if inner_type.__name__ == "ApiError":
+                    example = {
+                        "status": 503,
+                        "code": "NETWORK_ERROR",
+                        "message": "Failed to fetch data",
+                        "details": {"url": "/api/url"},
+                    }
+                metadata = {"example": example} if example else {}
+                # Use dump_default=None instead of allow_none=True for cleaner OpenAPI spec
+                return fields.Nested(
+                    nested_schema, required=False, dump_default=None, load_default=None, metadata=metadata
+                )
 
             # Handle Optional[basic types]
             else:
@@ -105,7 +118,7 @@ def _make_field_for_type(field_type, required=False, allow_none=False, load_defa
     """Create a Marshmallow field for a basic Python type.
 
     Args:
-        field_type: Python type (str, int, float, bool)
+        field_type: Python type (str, int, float, bool, dict)
         required: Whether the field is required
         allow_none: Whether the field allows None values
         load_default: Default value when loading
@@ -132,6 +145,8 @@ def _make_field_for_type(field_type, required=False, allow_none=False, load_defa
         return fields.Float(**kwargs)
     elif field_type is bool:
         return fields.Bool(**kwargs)
+    elif field_type is dict:
+        return fields.Dict(keys=fields.Str(), values=fields.Raw(), **kwargs)
     else:
         return fields.Raw(**kwargs)
 
@@ -234,18 +249,6 @@ class TeamSearchErrorSchema(ErrorSchema):
     pass
 
 
-class PlayerStatisticsErrorSchema(ErrorSchema):
-    """Error response schema for player statistics endpoint."""
-
-    pass
-
-
-class TaskResultsErrorSchema(ErrorSchema):
-    """Error response schema for task results endpoint."""
-
-    pass
-
-
 class SyncErrorSchema(ErrorSchema):
     """Error response schema for sync endpoints."""
 
@@ -256,6 +259,21 @@ class StatisticsErrorSchema(ErrorSchema):
     """Error response schema for statistics endpoint."""
 
     pass
+
+
+class TeamStatisticsQuerySchema(Schema):
+    """Query parameters for team statistics endpoint."""
+
+    team = fields.List(
+        fields.Str(),
+        required=False,
+        validate=validate.Length(min=1, max=10),
+        metadata={
+            "description": (
+                "Team names to analyze (1-10 teams). " "Can be specified multiple times: `?team=Alpha&team=Beta`"
+            )
+        },
+    )
 
 
 class PlayerStatisticsQuerySchema(Schema):
@@ -344,40 +362,62 @@ class StatisticsBodySchema(Schema):
     )
 
 
-class MatchSummarySchema(Schema):
-    """Match summary information schema."""
+class MatchStatsSchema(Schema):
+    """Schema for individual match statistics."""
 
     match_id = fields.Int(required=True, metadata={"description": "Unique match identifier"})
-    start_time = fields.Int(required=True, metadata={"description": "Match start timestamp"})
-    duration = fields.Int(required=True, metadata={"description": "Match duration in seconds"})
+    player_slot = fields.Int(required=True, metadata={"description": "Player slot number (0-127)"})
     radiant_win = fields.Bool(required=True, metadata={"description": "True if Radiant won"})
-    radiant_score = fields.Int(required=True, metadata={"description": "Radiant team kills"})
-    dire_score = fields.Int(required=True, metadata={"description": "Dire team kills"})
+    game_mode = fields.Int(required=True, metadata={"description": "Game mode ID"})
+    lobby_type = fields.Int(required=True, metadata={"description": "Lobby type ID"})
+    hero_id = fields.Int(required=True, metadata={"description": "Hero ID played"})
+    average_rank = fields.Int(allow_none=True, metadata={"description": "Average rank tier of the match"})
 
 
-class PlayerMatchStatsSchema(Schema):
-    """Player statistics for a match."""
+class PlayerResultSchema(Schema):
+    """Schema for individual player result entry."""
 
     account_id = fields.Int(required=True, metadata={"description": "Player account ID"})
-    hero_id = fields.Int(required=True, metadata={"description": "Hero ID played"})
-    kills = fields.Int(required=True, metadata={"description": "Player kills"})
-    deaths = fields.Int(required=True, metadata={"description": "Player deaths"})
-    assists = fields.Int(required=True, metadata={"description": "Player assists"})
-    gold_per_min = fields.Int(required=True, metadata={"description": "Gold per minute"})
-    xp_per_min = fields.Int(required=True, metadata={"description": "Experience per minute"})
+    match_count = fields.Int(metadata={"description": "Number of matches fetched for this player"})
+    matches = fields.List(
+        fields.Nested(MatchStatsSchema),
+        metadata={"description": "List of match statistics for this player"},
+    )
+    error = fields.Str(metadata={"description": "Error message if player data fetch failed"})
+
+
+class MatchesSummarySchema(Schema):
+    """Schema for match collection summary statistics."""
+
+    rating_matches = fields.Int(load_default=0, metadata={"description": "Number of rating matches (ranked games)"})
+    tournament_matches = fields.Int(
+        load_default=0, metadata={"description": "Number of tournament matches (competitive games)"}
+    )
+    other_matches = fields.Int(load_default=0, metadata={"description": "Number of other matches"})
+    matches_median = fields.Float(allow_none=True, metadata={"description": "Median number of matches per player"})
+    matches_avg = fields.Float(allow_none=True, metadata={"description": "Average number of matches per player"})
+    win_percentage = fields.Float(allow_none=True, metadata={"description": "Team win percentage across all matches"})
+    avg_rank = fields.Float(allow_none=True, metadata={"description": "Average player rank"})
+    bad_rank_players = fields.Int(allow_none=True, metadata={"description": "Number of players with rank > 1000"})
 
 
 class StatisticsResultSchema(Schema):
-    """Complete statistics computation result schema."""
+    """Complete statistics computation result schema.
 
-    team_id = fields.Int(required=True, metadata={"description": "Team ID analyzed"})
-    matches = fields.List(fields.Nested(MatchSummarySchema), metadata={"description": "List of matches analyzed"})
-    player_stats = fields.Dict(
-        keys=fields.Str(),
-        values=fields.Nested(PlayerMatchStatsSchema),
-        metadata={"description": "Player statistics by account_id"},
+    This is the final result structure returned by /api/results/<task_id>
+    after the background task completes.
+    """
+
+    results = fields.List(
+        fields.Nested(PlayerResultSchema),
+        required=True,
+        metadata={"description": "List of per-player results (may include errors for failed fetches)"},
     )
-    team_stats = fields.Dict(keys=fields.Str(), values=fields.Raw(), metadata={"description": "Team-level statistics"})
+    successful = fields.Int(required=True, metadata={"description": "Number of players successfully fetched"})
+    total = fields.Int(required=True, metadata={"description": "Total number of players requested"})
+    summary = fields.Nested(
+        MatchesSummarySchema, required=True, metadata={"description": "Aggregated match statistics across all players"}
+    )
 
 
 # Auto-generated schemas from Pydantic models

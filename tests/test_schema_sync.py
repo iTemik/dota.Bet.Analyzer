@@ -73,9 +73,7 @@ def test_stats_response_serialization_compatibility():
                 players=[Player(name="TestPlayer", id=12345)],
                 other_players=[],
                 task_id="task_123",
-                error_code=None,
-                message=None,
-                details=None,
+                error=None,
             )
         ]
     )
@@ -131,12 +129,11 @@ def test_pydantic_to_marshmallow_utility():
                 "players",
                 "other_players",
                 "task_id",
-                "error_code",
-                "message",
-                "details",
+                "error",
             },
         ),
         ("Player", {"name", "id"}),
+        ("ApiError", {"status", "code", "message", "details"}),
     ],
 )
 def test_all_pydantic_models_have_schemas(pydantic_class, expected_fields):
@@ -155,10 +152,198 @@ def test_all_pydantic_models_have_schemas(pydantic_class, expected_fields):
     # Verify expected fields match
     assert pydantic_fields == expected_fields, f"{pydantic_class} fields changed - update tests!"
 
-    # Import Marshmallow schema
+    # Import or generate Marshmallow schema
     schemas_module = importlib.import_module("backend.schemas")
-    schema_class = getattr(schemas_module, f"{pydantic_class}Schema")
+    try:
+        schema_class = getattr(schemas_module, f"{pydantic_class}Schema")
+    except AttributeError:
+        # Schema not exported, generate it
+        from backend.schemas import pydantic_to_marshmallow
+
+        schema_class = pydantic_to_marshmallow(pydantic_model)
+
     schema_fields = set(schema_class().fields.keys())
 
     # Verify alignment
     assert pydantic_fields == schema_fields, f"{pydantic_class}Schema not in sync with Pydantic model!"
+
+
+def test_api_error_schema_generation():
+    """Verify ApiError schema is generated with all fields including details."""
+    from backend.schemas import pydantic_to_marshmallow
+    from backend.stats import ApiError
+
+    # Generate schema for ApiError
+    ApiErrorSchema = pydantic_to_marshmallow(ApiError)
+    schema = ApiErrorSchema()
+
+    # Verify all fields are present
+    assert "status" in schema.fields, "status field missing from ApiError schema"
+    assert "code" in schema.fields, "code field missing from ApiError schema"
+    assert "message" in schema.fields, "message field missing from ApiError schema"
+    assert "details" in schema.fields, "details field missing from ApiError schema"
+
+    # Verify field types
+    from marshmallow import fields
+
+    assert isinstance(schema.fields["status"], fields.Int)
+    assert isinstance(schema.fields["code"], fields.Str)
+    assert isinstance(schema.fields["message"], fields.Str)
+    assert isinstance(schema.fields["details"], fields.Dict)
+
+    # Verify all fields are optional (allow_none=True)
+    assert schema.fields["status"].allow_none is True
+    assert schema.fields["code"].allow_none is True
+    assert schema.fields["message"].allow_none is True
+    assert schema.fields["details"].allow_none is True
+
+
+def test_api_error_schema_serialization():
+    """Verify ApiError schema can serialize and deserialize correctly."""
+    from backend.schemas import pydantic_to_marshmallow
+    from backend.stats import ApiError
+
+    ApiErrorSchema = pydantic_to_marshmallow(ApiError)
+    schema = ApiErrorSchema()
+
+    # Test with all fields populated
+    error = ApiError(
+        status=400,
+        code="TEST_ERROR",
+        message="Test error message",
+        details={"url": "http://test.com", "status_code": 500},
+    )
+    dumped = error.model_dump()
+    loaded = schema.load(dumped)
+
+    assert loaded["status"] == 400
+    assert loaded["code"] == "TEST_ERROR"
+    assert loaded["message"] == "Test error message"
+    assert loaded["details"]["url"] == "http://test.com"
+    assert loaded["details"]["status_code"] == 500
+
+    # Test with None values
+    error_none = ApiError(status=None, code=None, message=None, details=None)
+    dumped_none = error_none.model_dump()
+    loaded_none = schema.load(dumped_none)
+
+    assert loaded_none["status"] is None
+    assert loaded_none["code"] is None
+    assert loaded_none["message"] is None
+    assert loaded_none["details"] is None
+
+
+def test_team_stats_error_field_nested_schema():
+    """Verify TeamStats error field contains properly nested ApiError schema."""
+    from marshmallow import fields
+
+    from backend.schemas import TeamStatsSchema
+
+    schema = TeamStatsSchema()
+
+    # Verify error field exists and is a Nested field
+    assert "error" in schema.fields, "error field missing from TeamStats schema"
+    error_field = schema.fields["error"]
+    assert isinstance(error_field, fields.Nested), "error field should be Nested type"
+
+    # Verify the nested schema is for ApiError
+    nested_schema = error_field.nested()
+    assert "status" in nested_schema.fields
+    assert "code" in nested_schema.fields
+    assert "message" in nested_schema.fields
+    assert "details" in nested_schema.fields
+
+    # Verify it allows None (optional field)
+    assert error_field.allow_none is True
+
+
+def test_stats_response_with_api_error_serialization():
+    """Verify StatsResponse correctly serializes TeamStats with ApiError."""
+    from backend.pro_players import Player
+    from backend.schemas import StatsResponseSchema
+    from backend.stats import ApiError, StatsResponse, TeamStats
+
+    # Create response with error
+    sample_response = StatsResponse(
+        teams=[
+            TeamStats(
+                team_id=1,
+                team="Success Team",
+                tag="ST",
+                players=[Player(name="Player1", id=111)],
+                error=None,
+            ),
+            TeamStats(
+                team="Error Team",
+                error=ApiError(
+                    status=503,
+                    code="NETWORK_ERROR",
+                    message="Failed to fetch team data",
+                    details={"url": "https://api.example.com/teams/999", "timeout": 5},
+                ),
+            ),
+        ]
+    )
+
+    # Serialize using Pydantic
+    dumped = sample_response.model_dump()
+
+    # Deserialize using Marshmallow
+    schema = StatsResponseSchema()
+    loaded = schema.load(dumped)
+
+    # Verify successful team
+    assert loaded["teams"][0]["team"] == "Success Team"
+    assert loaded["teams"][0]["error"] is None
+
+    # Verify error team - all ApiError fields should be present
+    error_team = loaded["teams"][1]
+    assert error_team["team"] == "Error Team"
+    assert error_team["error"] is not None
+    assert error_team["error"]["status"] == 503
+    assert error_team["error"]["code"] == "NETWORK_ERROR"
+    assert error_team["error"]["message"] == "Failed to fetch team data"
+    assert error_team["error"]["details"]["url"] == "https://api.example.com/teams/999"
+    assert error_team["error"]["details"]["timeout"] == 5
+
+
+def test_openapi_spec_has_error_example():
+    """Verify OpenAPI spec includes proper example for error field."""
+    from apispec import APISpec
+    from apispec.ext.marshmallow import MarshmallowPlugin
+
+    from backend.schemas import StatsResponseSchema
+
+    # Create APISpec like flask-smorest does
+    spec = APISpec(title="Test API", version="1.0.0", openapi_version="3.0.0", plugins=[MarshmallowPlugin()])
+
+    # Register schema
+    spec.components.schema("StatsResponse", schema=StatsResponseSchema())
+
+    # Get the generated spec
+    spec_dict = spec.to_dict()
+
+    # Verify ApiError schema is registered
+    assert "ApiError" in spec_dict["components"]["schemas"]
+    api_error_schema = spec_dict["components"]["schemas"]["ApiError"]
+    assert "status" in api_error_schema["properties"]
+    assert "code" in api_error_schema["properties"]
+    assert "message" in api_error_schema["properties"]
+    assert "details" in api_error_schema["properties"]
+
+    # Verify TeamStats error field has proper structure
+    assert "TeamStats" in spec_dict["components"]["schemas"]
+    team_stats_schema = spec_dict["components"]["schemas"]["TeamStats"]
+    error_field = team_stats_schema["properties"]["error"]
+
+    # Verify error field has example metadata
+    assert "example" in error_field
+    assert error_field["example"]["status"] == 503
+    assert error_field["example"]["code"] == "NETWORK_ERROR"
+    assert error_field["example"]["message"] == "Failed to fetch data"
+    assert "url" in error_field["example"]["details"]
+
+    # Verify error field references ApiError schema (in anyOf for nullable support)
+    assert "anyOf" in error_field
+    refs = [item.get("$ref") for item in error_field["anyOf"] if "$ref" in item]
+    assert "#/components/schemas/ApiError" in refs

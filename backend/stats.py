@@ -5,8 +5,10 @@ import time
 from typing import List, Optional
 
 import requests
+from flask import Response
 from pydantic import BaseModel, Field
 
+from backend.helpers import ErrorDefinition, Errors
 from backend.logging_config import setup_logging
 from backend.pro_players import Player, get_players_by_team
 
@@ -17,6 +19,106 @@ GAME_MODE_TOURNAMENT = [2]
 
 # Setup logger
 logger = setup_logging(__name__)
+
+
+class ApiError(BaseModel):
+    """API error information following REST API best practices.
+
+    Provides consistent error reporting across different response models.
+    Can be instantiated directly to represent API errors.
+
+    Attributes:
+        status: HTTP status code (e.g., 400, 404, 500)
+        code: Machine-readable error code (e.g., NETWORK_ERROR, HTTP_ERROR)
+        message: Human-readable error message
+        details: Additional error context as a dictionary (e.g., {"url": "..."})
+    """
+
+    status: Optional[int] = Field(default=None, description="HTTP status code")
+    code: Optional[str] = Field(default=None, description="Machine-readable error code")
+    message: Optional[str] = Field(default=None, description="Human-readable error message")
+    details: Optional[dict] = Field(default=None, description="Additional error context")
+
+    def set_error(self, status: int, code: str, message: str, details: Optional[dict] = None) -> None:
+        """Set error fields on this instance.
+
+        Args:
+            status: HTTP status code
+            code: Error code identifier
+            message: Error message
+            details: Optional additional error context
+        """
+        self.status = status
+        self.code = code
+        self.message = message
+        self.details = details
+
+    @staticmethod
+    def create_response(
+        status: int,
+        *,
+        error: Optional[ErrorDefinition] = None,
+        code: Optional[str] = None,
+        message: Optional[str] = None,
+        details: Optional[dict] = None,
+    ) -> tuple[Response, int]:
+        """Create a jsonified error response (Flask Response, status_code tuple).
+
+        Args:
+            status: HTTP status code
+            error: ErrorDefinition from helpers (mutually exclusive with code)
+            code: Machine-readable error code string (mutually exclusive with error)
+            message: Human-readable error message (required with code, optional with error)
+            details: Optional additional error context
+
+        Returns:
+            Tuple of (Flask Response with JSON, status code)
+
+        Raises:
+            ValueError: If both error and code are provided, or neither is provided
+
+        Examples:
+            # Using ErrorDefinition from helpers
+            return ApiError.create_response(400, error=Errors.MISSING_TEAMS, details={"url": request.path})
+
+            # Using ErrorDefinition with custom message override:
+            return ApiError.create_response(400, error=Errors.INVALID_TEAM_NAME, message="Custom message")
+
+            # Using string code and message:
+            return ApiError.create_response(400, code="CUSTOM_ERROR", message="Something went wrong")
+        """
+        from flask import jsonify
+
+        # Validate mutually exclusive parameters
+        if error is not None and code is not None:
+            raise ValueError("Cannot specify both 'error' and 'code' parameters")
+
+        if error is None and code is None:
+            raise ValueError("Must specify either 'error' or 'code' parameter")
+
+        # Extract code and message based on parameter type
+        if error is not None:
+            error_code: str = error.code
+            error_message: str = message if message is not None else error.message
+        else:
+            if code is None:
+                raise ValueError("Must specify either 'error' or 'code' parameter")
+            if message is None:
+                raise ValueError("'message' is required when using 'code' parameter")
+            error_code = code
+            error_message = message
+
+        return (
+            jsonify(
+                {
+                    "status": status,
+                    "code": error_code,
+                    "message": error_message,
+                    "details": details or {},
+                }
+            ),
+            status,
+        )
 
 
 class TeamStats(BaseModel):
@@ -32,9 +134,7 @@ class TeamStats(BaseModel):
         players: List of active team players
         other_players: List of inactive/substitute players
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
-        error_code: Error code if team data fetch failed (e.g., NETWORK_ERROR, HTTP_ERROR)
-        message: Detailed error message if error_code is set
-        details: Additional error context (e.g., API URLs that caused the error)
+        error: Error information if team data fetch failed
     """
 
     team_id: Optional[int] = None
@@ -46,9 +146,7 @@ class TeamStats(BaseModel):
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     task_id: Optional[str] = None
-    error_code: Optional[str] = None
-    message: Optional[str] = None
-    details: Optional[dict] = None
+    error: Optional[ApiError] = None
 
 
 class MatchStats(BaseModel):
@@ -109,7 +207,7 @@ class StatisticsError(Exception):
     """Raised when fetching or parsing statistics for a team fails."""
 
 
-def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional[tuple[str, str]]]:
+def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional[ApiError]]:
     """Safely perform GET request and parse JSON response.
 
     Args:
@@ -119,27 +217,27 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
     Returns:
         Tuple of (json_data, error) where:
         - json_data is the parsed JSON response (None if error)
-        - error is (error_code, message) tuple (None if success)
+        - error is an ApiError instance (None if success)
     """
     try:
         resp = requests.get(url, timeout=timeout)
     except Exception as exc:
-        return None, ("NETWORK_ERROR", f"Network error fetching data: {exc}")
+        return None, ApiError(status=503, code="NETWORK_ERROR", message=f"Network error fetching data: {exc}")
 
     if resp.status_code != 200:
-        return None, ("HTTP_ERROR", f"HTTP {resp.status_code} from API")
+        return None, ApiError(status=resp.status_code, code="HTTP_ERROR", message=f"HTTP {resp.status_code} from API")
 
     try:
         payload = resp.json()
         # print(f"Url: {url} Payload: {payload}")
         return payload, None
     except Exception as exc:
-        return None, ("JSON_DECODE_ERROR", f"Invalid JSON response: {exc}")
+        return None, ApiError(status=502, code="JSON_DECODE_ERROR", message=f"Invalid JSON response: {exc}")
 
 
 def _fetch_team_info_from_explorer(
     team: str,
-) -> tuple[Optional[tuple[int, str, str, float | None, float | None]], Optional[tuple[str, str, dict]]]:
+) -> tuple[Optional[tuple[int, str, str, float | None, float | None]], Optional[ApiError]]:
     """Fetch team info including rating and delta from OpenDota explorer API.
 
     Args:
@@ -148,7 +246,7 @@ def _fetch_team_info_from_explorer(
     Returns:
         Tuple of (team_info, error) where:
         - team_info is (team_id, team_name, tag, rating, delta) tuple (None if error)
-        - error is (error_code, message, details) tuple (None if success)
+        - error is an ApiError instance (None if success)
     """
     from backend.helpers import (
         get_percent_encoded_str,
@@ -162,8 +260,8 @@ def _fetch_team_info_from_explorer(
 
     payload, error = _safe_get_json(explore_team_url)
     if error:
-        error_code, message = error
-        return None, (error_code, message, {"url": explore_team_url})
+        error.details = {"url": explore_team_url}
+        return None, error
 
     assert payload is not None
 
@@ -171,10 +269,15 @@ def _fetch_team_info_from_explorer(
         team_id, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
         return (team_id, team_name, tag, rating, delta), None
     except ValueError as exc:
-        return None, ("RESPONSE_PARSE_ERROR", f"Malformed response: {exc}", {"url": explore_team_url})
+        return None, ApiError(
+            status=502,
+            code="RESPONSE_PARSE_ERROR",
+            message=f"Malformed response: {exc}",
+            details={"url": explore_team_url},
+        )
 
 
-def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, str, dict]]]:
+def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
     """Fetch team statistics from OpenDota teams API.
 
     Args:
@@ -183,19 +286,19 @@ def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, 
     Returns:
         Tuple of (data, error) where:
         - data is the team information (None if error or not available)
-        - error is (error_code, message, details) tuple (None if success)
+        - error is an ApiError instance (None if success)
     """
     team_info_url = f"https://api.opendota.com/api/teams/{team_id}"
     data, error = _safe_get_json(team_info_url)
 
     if error:
-        error_code, message = error
-        return None, (error_code, message, {"url": team_info_url})
+        error.details = {"url": team_info_url}
+        return None, error
 
     return data, None
 
 
-def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[tuple[str, str, dict]]]:
+def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
     """Fetch team logo URL from OpenDota teams API.
 
     Args:
@@ -204,7 +307,7 @@ def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[tuple[str,
     Returns:
         Tuple of (stats_data, error) where:
         - stats_data is json with team stats (None if error)
-        - error is (error_code, message, details) tuple (None if success)
+        - error is an ApiError instance (None if success)
     """
     stats_data, error = _fetch_team_info(team_id)
 
@@ -256,8 +359,12 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             result.append(
                 TeamStats(
                     team=team if isinstance(team, str) else str(team),
-                    error_code="INVALID_TEAM_NAME",
-                    message="Invalid team name",
+                    error=ApiError(
+                        status=400,
+                        code=Errors.INVALID_TEAM_NAME.code,
+                        message=Errors.INVALID_TEAM_NAME.message,
+                        details={"team": team},
+                    ),
                 )
             )
             continue
@@ -266,8 +373,7 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             # Fetch team info from explorer API (now includes rating and delta)
             team_info1, error = _fetch_team_info_from_explorer(team)
             if error:
-                error_code, message, details = error
-                result.append(TeamStats(team=team, error_code=error_code, message=message, details=details))
+                result.append(TeamStats(team=team, error=error))
                 continue
 
             if team_info1 is None:
@@ -279,8 +385,7 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             # Fetch team logo URL
             team_info2, error = _fetch_team_stats(team_id)
             if error:
-                error_code, message, details = error
-                result.append(TeamStats(team=team, error_code=error_code, message=message, details=details))
+                result.append(TeamStats(team=team, error=error))
                 continue
 
             # Initiate Celery task for player match statistics if players exist
@@ -308,8 +413,12 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
             result.append(
                 TeamStats(
                     team=team,
-                    error_code="UNEXPECTED_ERROR",
-                    message=f"Unexpected error: {exc} during compute_statistics for team {team}",
+                    error=ApiError(
+                        status=500,
+                        code=Errors.UNEXPECTED_ERROR.code,
+                        message=Errors.UNEXPECTED_ERROR.message,
+                        details={"exception": f"The exception {exc} occured during compute_statistics for team {team}"},
+                    ),
                 )
             )
 
@@ -387,8 +496,7 @@ def get_rank(account_id: int) -> Optional[int]:
     data, error = _safe_get_json(url)
 
     if error:
-        error_code, message = error
-        logger.debug(f"Failed to fetch rank for account {account_id}: {error_code} - {message}")
+        logger.debug(f"Failed to fetch rank for account {account_id}: {error.code} - {error.message}")
         return None
 
     if data is None:

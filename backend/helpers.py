@@ -52,23 +52,29 @@ def error_response(
 class Errors:
     """Standard error codes with human-readable messages for API responses."""
 
-    MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
-    TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
-    INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
-    FAILED_TO_START_TASK = ErrorDefinition("FAILED_TO_START_TASK", "Failed to start background task")
-    INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
-    RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
-    FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
-    MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
-    UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
-    TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
+    COMPUTATION_ERROR = ErrorDefinition(
+        "COMPUTATION_ERROR", "An unexpected error occurred during statistics computation"
+    )
     FAILED_TO_FETCH_PRO_PLAYERS = ErrorDefinition("FAILED_TO_FETCH_PRO_PLAYERS", "Failed to fetch pro players from API")
+    FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
+    FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
+    FAILED_TO_START_TASK = ErrorDefinition("FAILED_TO_START_TASK", "Failed to start background task")
     FAILED_TO_STORE_PRO_PLAYERS = ErrorDefinition(
         "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
     )
-    FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
     FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
+    INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
+    INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
+    INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
+    MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
+    MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
+    NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
+    RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
+    TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
+    TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
+    UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")
+    UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
 
 
 def prepare_sql_for_team_explore(team: str) -> str:

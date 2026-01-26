@@ -166,8 +166,8 @@ class TestStatisticsEndpoint:
         assert "code" in data
         assert "message" in data
 
-    def test_statistics_returns_400_when_too_many_teams(self, monkeypatch):
-        """Test that /statistics returns 400 when more than 10 teams."""
+    def test_statistics_returns_422_when_too_many_teams(self, monkeypatch):
+        """Test that /statistics returns 422 when more than 10 teams."""
         from backend.stats import StatsResponse
 
         def fake_compute(teams):
@@ -180,7 +180,8 @@ class TestStatisticsEndpoint:
 
         teams_query = "&".join([f"team=Team{i}" for i in range(11)])
         rv = client.get(f"/api/statistics?{teams_query}")
-        assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
+        # flask-smorest returns 422 for schema validation errors
+        assert rv.status_code == 422, f"Expected 422, got {rv.status_code}"
 
     def test_statistics_unsupported_method_returns_405(self):
         """Test that unsupported HTTP methods return 405 Method Not Allowed."""

@@ -78,13 +78,14 @@ def test_get_trims_and_filters_teams(monkeypatch):
     assert data["teams"][1]["team"] == "B"
 
 
-def test_too_many_teams_returns_400():
+def test_too_many_teams_returns_422():
     app = create_app(test_config={})
     client = app.test_client()
 
     many = "&".join([f"team=T{i}" for i in range(12)])
     rv = client.get(f"/api/statistics?{many}")
-    assert rv.status_code == 400
+    # flask-smorest returns 422 for schema validation errors
+    assert rv.status_code == 422
 
 
 def test_no_teams_returns_400():
@@ -124,3 +125,51 @@ def test_response_shape_contains_expected_fields(monkeypatch):
     if team["players"]:
         p = team["players"][0]
         assert "name" in p and "id" in p
+
+
+def test_compute_statistics_exception_returns_500(monkeypatch):
+    """Test that unexpected exceptions in compute_statistics return 500 with proper error structure."""
+
+    def fake_compute_raises(teams):
+        raise RuntimeError("Database connection failed")
+
+    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
+
+    app = create_app(test_config={})
+    client = app.test_client()
+
+    rv = client.get("/api/statistics?team=TestTeam")
+    assert rv.status_code == 500
+
+    data = rv.get_json()
+    # Verify error response structure matches StatisticsErrorSchema
+    assert "status" in data
+    assert "code" in data
+    assert "message" in data
+    assert "details" in data
+    assert data["status"] == 500
+    assert data["code"] == "COMPUTATION_ERROR"
+    assert "exception" in data["details"]
+
+
+def test_compute_statistics_value_error_returns_400(monkeypatch):
+    """Test that ValueError in compute_statistics returns 400."""
+
+    def fake_compute_raises(teams):
+        raise ValueError("teams must be a list of strings")
+
+    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
+
+    app = create_app(test_config={})
+    client = app.test_client()
+
+    rv = client.get("/api/statistics?team=TestTeam")
+    assert rv.status_code == 400
+
+    data = rv.get_json()
+    # Verify error response structure
+    assert "status" in data
+    assert "code" in data
+    assert "message" in data
+    assert data["status"] == 400
+    assert data["code"] == "INVALID_REQUEST"
