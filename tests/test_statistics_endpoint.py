@@ -88,12 +88,17 @@ def test_too_many_teams_returns_422():
     assert rv.status_code == 422
 
 
-def test_no_teams_returns_400():
+def test_no_teams_returns_422():
+    """Test that missing teams returns 422 with MISSING_TEAMS error code."""
     app = create_app(test_config={})
     client = app.test_client()
 
     rv = client.get("/api/statistics")
-    assert rv.status_code == 400
+    assert rv.status_code == 422
+    data = rv.get_json()
+    assert data["code"] == "MISSING_TEAMS"
+    assert "message" in data
+    assert "details" in data
 
 
 def test_response_shape_contains_expected_fields(monkeypatch):

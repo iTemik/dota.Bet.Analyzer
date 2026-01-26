@@ -155,19 +155,20 @@ class TestStatisticsEndpoint:
         rv = client.get("/api/statistics?team=TestTeam")
         assert rv.status_code == 200, f"Expected 200, got {rv.status_code}"
 
-    def test_statistics_get_returns_400_when_no_teams(self):
-        """Test that GET /statistics returns 400 when no teams provided."""
+    def test_statistics_get_returns_422_when_no_teams(self):
+        """Test that GET /statistics returns 422 when no teams provided."""
         app = create_app(test_config={})
         client = app.test_client()
 
         rv = client.get("/api/statistics")
-        assert rv.status_code == 400, f"Expected 400, got {rv.status_code}"
+        assert rv.status_code == 422, f"Expected 422, got {rv.status_code}"
         data = rv.get_json()
         assert "code" in data
+        assert data["code"] == "MISSING_TEAMS"
         assert "message" in data
 
     def test_statistics_returns_422_when_too_many_teams(self, monkeypatch):
-        """Test that /statistics returns 422 when more than 10 teams."""
+        """Test that /statistics returns 422 when more than 10 teams (schema validation)."""
         from backend.stats import StatsResponse
 
         def fake_compute(teams):
@@ -182,6 +183,10 @@ class TestStatisticsEndpoint:
         rv = client.get(f"/api/statistics?{teams_query}")
         # flask-smorest returns 422 for schema validation errors
         assert rv.status_code == 422, f"Expected 422, got {rv.status_code}"
+        data = rv.get_json()
+        # Schema validation returns flask-smorest standard error format
+        assert data["code"] == 422
+        assert "errors" in data or "message" in data  # flask-smorest error structure
 
     def test_statistics_unsupported_method_returns_405(self):
         """Test that unsupported HTTP methods return 405 Method Not Allowed."""

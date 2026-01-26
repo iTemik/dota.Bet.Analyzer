@@ -417,7 +417,9 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
                         status=500,
                         code=Errors.UNEXPECTED_ERROR.code,
                         message=Errors.UNEXPECTED_ERROR.message,
-                        details={"exception": f"The exception {exc} occurred during compute_statistics for team {team}"},
+                        details={
+                            "exception": f"The exception {exc} occurred during compute_statistics for team {team}"
+                        },
                     ),
                 )
             )

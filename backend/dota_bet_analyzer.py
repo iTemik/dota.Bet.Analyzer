@@ -246,22 +246,22 @@ def get_version() -> tuple[Response, int]:
 @bp.alt_response(
     400,
     schema=ErrorSchema,
-    description="Invalid parameters",
+    description="Invalid request",
     example={
         "status": 400,
-        "code": "MISSING_TEAMS",
-        "message": "No teams provided",
-        "details": {"url": "/api/statistics"},
+        "code": "INVALID_REQUEST",
+        "message": "Invalid request",
+        "details": {"url": "/api/statistics", "exception": "Invalid team data"},
     },
 )
 @bp.alt_response(
     422,
     schema=ErrorSchema,
-    description="Validation failed",
+    description="Validation failed - missing teams, too many teams (>10), or invalid parameter format",
     example={
         "status": 422,
-        "code": "VALIDATION_ERROR",
-        "message": "Invalid team parameter format",
+        "code": "MISSING_TEAMS",
+        "message": "No teams provided",
         "details": {"url": "/api/statistics"},
     },
 )
