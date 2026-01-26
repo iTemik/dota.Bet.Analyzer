@@ -102,6 +102,31 @@ def _register_validation_error_handler(app):
     from flask import jsonify, request
     from werkzeug.exceptions import UnprocessableEntity
 
+    def _extract_first_error(original_errors):
+        """Extract the first field name and error message from nested validation errors.
+        
+        Args:
+            original_errors: Nested dict of validation errors
+            
+        Returns:
+            Tuple of (field_name, error_message) or (None, None) if no errors found
+        """
+        # Handle nested errors structure (e.g., {"query": {"field": ["error"]}})
+        for location, fields in original_errors.items():
+            if isinstance(fields, dict):
+                for field, errors in fields.items():
+                    if isinstance(errors, list) and errors:
+                        return field, errors[0]
+                    elif isinstance(errors, dict):
+                        # Handle deeply nested errors like {"0": ["error"]}
+                        for sub_key, sub_errors in errors.items():
+                            if isinstance(sub_errors, list) and sub_errors:
+                                return field, sub_errors[0]
+            elif isinstance(fields, list) and fields:
+                return location, fields[0]
+        
+        return None, None
+
     @app.errorhandler(422)
     @app.errorhandler(UnprocessableEntity)
     def handle_validation_error(error):
@@ -119,34 +144,7 @@ def _register_validation_error_handler(app):
         # Format human-readable message from validation errors
         message = "Validation failed"
         if original_errors:
-            # Extract first error message for the main message field
-            first_field = None
-            first_error = None
-            
-            # Handle nested errors structure (e.g., {"query": {"field": ["error"]}})
-            for location, fields in original_errors.items():
-                if isinstance(fields, dict):
-                    for field, errors in fields.items():
-                        if isinstance(errors, list) and errors:
-                            first_field = field
-                            first_error = errors[0]
-                            break
-                        elif isinstance(errors, dict):
-                            # Handle deeply nested errors like {"0": ["error"]}
-                            for sub_key, sub_errors in errors.items():
-                                if isinstance(sub_errors, list) and sub_errors:
-                                    first_field = field
-                                    first_error = sub_errors[0]
-                                    break
-                        if first_field:
-                            break
-                elif isinstance(fields, list) and fields:
-                    first_field = location
-                    first_error = fields[0]
-                    break
-                if first_field:
-                    break
-            
+            first_field, first_error = _extract_first_error(original_errors)
             if first_field and first_error:
                 message = f"Validation failed: {first_field} - {first_error}"
 
