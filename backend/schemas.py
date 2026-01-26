@@ -72,9 +72,15 @@ def pydantic_to_marshmallow_field(field_info, field_type) -> fields.Field:  # no
                         "details": {"url": "/api/url"},
                     }
                 metadata = {"example": example} if example else {}
-                # Use dump_default=None instead of allow_none=True for cleaner OpenAPI spec
+                # Use dump_default=None together with allow_none=True so Optional nested models
+                # accept explicit null values while still producing a clean OpenAPI spec.
                 return fields.Nested(
-                    nested_schema, required=False, dump_default=None, load_default=None, metadata=metadata
+                    nested_schema,
+                    required=False,
+                    allow_none=True,
+                    dump_default=None,
+                    load_default=None,
+                    metadata=metadata,
                 )
 
             # Handle Optional[basic types]
