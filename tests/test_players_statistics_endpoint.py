@@ -52,8 +52,12 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 422
         data = rv.get_json()
-        # Marshmallow validation errors have 'errors' field
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_when_too_many_account_ids(self, client):
         """Test that endpoint returns 422 when more than 10 account_ids provided."""
@@ -62,7 +66,12 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 422
         data = rv.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_on_invalid_account_id(self, client):
         """Test that endpoint returns 422 when account_id is not a valid integer."""
@@ -70,7 +79,12 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 422
         data = rv.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_when_no_valid_account_ids(self, client):
         """Test that endpoint returns 422 when all account_ids are invalid."""
@@ -78,7 +92,12 @@ class TestPlayersStatisticsEndpoint:
 
         assert rv.status_code == 422
         data = rv.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_converts_string_account_ids_to_integers(self, client):
         """Test that string account_ids are converted to integers."""
@@ -182,4 +201,8 @@ class TestPlayersStatisticsIntegration:
 
         assert rv.status_code == 422
         data = rv.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
