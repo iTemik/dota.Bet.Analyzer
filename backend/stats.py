@@ -103,6 +103,8 @@ class ApiError(BaseModel):
         else:
             if message is None:
                 raise ValueError("'message' is required when using 'code' parameter")
+            if code is None:
+                raise ValueError("Must specify either 'error' or 'code' parameter")
             error_code = code
             error_message = message
 

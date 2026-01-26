@@ -184,9 +184,10 @@ class TestStatisticsEndpoint:
         # flask-smorest returns 422 for schema validation errors
         assert rv.status_code == 422, f"Expected 422, got {rv.status_code}"
         data = rv.get_json()
-        # Schema validation returns flask-smorest standard error format
-        assert data["code"] == 422
-        assert "errors" in data or "message" in data  # flask-smorest error structure
+        # Our custom error handler transforms it to ErrorSchema format
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
 
     def test_statistics_unsupported_method_returns_405(self):
         """Test that unsupported HTTP methods return 405 Method Not Allowed."""

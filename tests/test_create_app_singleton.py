@@ -30,7 +30,7 @@ def test_module_app_points_to_singleton():
     assert backend_mod._app is a
 
 
-def test_concurrent_creation_is_thread_safe():
+def test_concurrent_creation_is_thread_safe() -> None:
     # Attempt concurrent calls to create_app and ensure all callers get the same instance
     n = 12
     results: list = [None] * n

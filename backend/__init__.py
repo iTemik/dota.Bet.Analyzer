@@ -81,16 +81,75 @@ def _configure_app(app, test_config=None):
     app.config["DATABASE"] = os.path.join(app.instance_path, db_filename)
 
 
+def _extract_error_from_dict(fields):
+    """Extract error from dict structure (field -> errors mapping).
+
+    Args:
+        fields: Dict mapping field names to error lists or nested dicts
+
+    Returns:
+        Tuple of (field_name, error_message) or (None, None)
+    """
+    for field, errors in fields.items():
+        if isinstance(errors, list) and errors:
+            return field, errors[0]
+        if isinstance(errors, dict):
+            # Handle deeply nested errors like {"0": ["error"]}
+            for _, sub_errors in errors.items():
+                if isinstance(sub_errors, list) and sub_errors:
+                    return field, sub_errors[0]
+    return None, None
+
+
+def _extract_first_error(original_errors):
+    """Extract the first field name and error message from nested validation errors.
+
+    Args:
+        original_errors: Nested dict of validation errors
+
+    Returns:
+        Tuple of (field_name, error_message) or (None, None) if no errors found
+    """
+    # Handle nested errors structure (e.g., {"query": {"field": ["error"]}})
+    for location, fields in original_errors.items():
+        if isinstance(fields, dict):
+            result = _extract_error_from_dict(fields)
+            if result[0] is not None:
+                return result
+        elif isinstance(fields, list) and fields:
+            return location, fields[0]
+
+    return None, None
+
+
+def _get_validation_errors(error):
+    """Extract validation errors from error object.
+
+    Args:
+        error: Flask error object
+
+    Returns:
+        Dict of validation errors or empty dict
+    """
+    # flask-smorest/webargs stores validation errors in error.exc.messages
+    if hasattr(error, "exc") and hasattr(error.exc, "messages"):
+        return error.exc.messages
+    # Fallback to error.data if exc.messages is not available
+    if hasattr(error, "data") and isinstance(error.data, dict):
+        return error.data.get("errors", {})
+    return {}
+
+
 def _register_validation_error_handler(app):
     """Register custom error handler for validation errors to match ErrorSchema format.
-    
+
     Transforms flask-smorest/webargs validation errors (422) from the default format:
     {
         "code": 422,
         "errors": {"query": {"field": ["error message"]}},
         "status": "Unprocessable Entity"
     }
-    
+
     To our unified ErrorSchema format:
     {
         "status": 422,
@@ -102,44 +161,11 @@ def _register_validation_error_handler(app):
     from flask import jsonify, request
     from werkzeug.exceptions import UnprocessableEntity
 
-    def _extract_first_error(original_errors):
-        """Extract the first field name and error message from nested validation errors.
-        
-        Args:
-            original_errors: Nested dict of validation errors
-            
-        Returns:
-            Tuple of (field_name, error_message) or (None, None) if no errors found
-        """
-        # Handle nested errors structure (e.g., {"query": {"field": ["error"]}})
-        for location, fields in original_errors.items():
-            if isinstance(fields, dict):
-                for field, errors in fields.items():
-                    if isinstance(errors, list) and errors:
-                        return field, errors[0]
-                    elif isinstance(errors, dict):
-                        # Handle deeply nested errors like {"0": ["error"]}
-                        for sub_key, sub_errors in errors.items():
-                            if isinstance(sub_errors, list) and sub_errors:
-                                return field, sub_errors[0]
-            elif isinstance(fields, list) and fields:
-                return location, fields[0]
-        
-        return None, None
-
     @app.errorhandler(422)
     @app.errorhandler(UnprocessableEntity)
     def handle_validation_error(error):
         """Handle 422 validation errors and transform them to ErrorSchema format."""
-        # Get the original error data
-        original_errors = {}
-        
-        # flask-smorest/webargs stores validation errors in error.exc.messages
-        if hasattr(error, 'exc') and hasattr(error.exc, 'messages'):
-            original_errors = error.exc.messages
-        elif hasattr(error, 'data') and isinstance(error.data, dict):
-            # Fallback to error.data if exc.messages is not available
-            original_errors = error.data.get('errors', {})
+        original_errors = _get_validation_errors(error)
 
         # Format human-readable message from validation errors
         message = "Validation failed"
@@ -153,10 +179,7 @@ def _register_validation_error_handler(app):
             "status": 422,
             "code": "VALIDATION_ERROR",
             "message": message,
-            "details": {
-                "url": request.path,
-                "errors": original_errors
-            }
+            "details": {"url": request.path, "errors": original_errors},
         }
 
         return jsonify(response_data), 422
