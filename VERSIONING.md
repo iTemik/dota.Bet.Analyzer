@@ -14,9 +14,9 @@ Version components:
 
 ## Version Storage
 
-### Source Files (Read from VERSION at runtime/build)
-- `backend/__init__.py` - Reads from `backend/VERSION` at import time
-- `frontend/src/version.ts` - Updated by version script from `frontend/VERSION`
+### Source Files (version sources)
+- `backend/__init__.py` - Reads backend version from `backend/VERSION` at import time
+- `frontend/src/version.ts` - Exports the frontend version and is used by `scripts/version.js` as the source of truth
 
 ## Version Management Script
 
