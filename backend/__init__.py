@@ -81,12 +81,99 @@ def _configure_app(app, test_config=None):
     app.config["DATABASE"] = os.path.join(app.instance_path, db_filename)
 
 
+def _register_validation_error_handler(app):
+    """Register custom error handler for validation errors to match ErrorSchema format.
+    
+    Transforms flask-smorest/webargs validation errors (422) from the default format:
+    {
+        "code": 422,
+        "errors": {"query": {"field": ["error message"]}},
+        "status": "Unprocessable Entity"
+    }
+    
+    To our unified ErrorSchema format:
+    {
+        "status": 422,
+        "code": "VALIDATION_ERROR",
+        "message": "Validation failed",
+        "details": {"errors": {...}}
+    }
+    """
+    from flask import jsonify, request
+    from werkzeug.exceptions import UnprocessableEntity
+
+    @app.errorhandler(422)
+    @app.errorhandler(UnprocessableEntity)
+    def handle_validation_error(error):
+        """Handle 422 validation errors and transform them to ErrorSchema format."""
+        # Get the original error data
+        original_errors = {}
+        
+        # flask-smorest/webargs stores validation errors in error.exc.messages
+        if hasattr(error, 'exc') and hasattr(error.exc, 'messages'):
+            original_errors = error.exc.messages
+        elif hasattr(error, 'data') and isinstance(error.data, dict):
+            # Fallback to error.data if exc.messages is not available
+            original_errors = error.data.get('errors', {})
+
+        # Format human-readable message from validation errors
+        message = "Validation failed"
+        if original_errors:
+            # Extract first error message for the main message field
+            first_field = None
+            first_error = None
+            
+            # Handle nested errors structure (e.g., {"query": {"field": ["error"]}})
+            for location, fields in original_errors.items():
+                if isinstance(fields, dict):
+                    for field, errors in fields.items():
+                        if isinstance(errors, list) and errors:
+                            first_field = field
+                            first_error = errors[0]
+                            break
+                        elif isinstance(errors, dict):
+                            # Handle deeply nested errors like {"0": ["error"]}
+                            for sub_key, sub_errors in errors.items():
+                                if isinstance(sub_errors, list) and sub_errors:
+                                    first_field = field
+                                    first_error = sub_errors[0]
+                                    break
+                        if first_field:
+                            break
+                elif isinstance(fields, list) and fields:
+                    first_field = location
+                    first_error = fields[0]
+                    break
+                if first_field:
+                    break
+            
+            if first_field and first_error:
+                message = f"Validation failed: {first_field} - {first_error}"
+
+        # Transform to our ErrorSchema format
+        response_data = {
+            "status": 422,
+            "code": "VALIDATION_ERROR",
+            "message": message,
+            "details": {
+                "url": request.path,
+                "errors": original_errors
+            }
+        }
+
+        return jsonify(response_data), 422
+
+
 def _init_extensions(app):
     """Initialize Flask extensions and register blueprints."""
     # Initialize flask-smorest API
     from flask_smorest import Api
 
     api = Api(app)
+
+    # Register custom error handler for validation errors (422)
+    # This transforms webargs/marshmallow validation errors to match our ErrorSchema format
+    _register_validation_error_handler(app)
 
     # Initialize database
     from . import db

@@ -26,14 +26,22 @@ class TestTeamsSearch:
         response = client.get("/api/teams/search")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_search_teams_too_short_query(self, client):
         """Test search with query less than 2 characters returns 422"""
         response = client.get("/api/teams/search?q=L")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_search_teams_empty_query(self, client):
         """Test search with empty query returns 422"""
@@ -164,7 +172,11 @@ class TestTeamsSearch:
         response = client.get("/api/teams/search?q=Team&limit=abc")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_search_teams_limit_negative(self, client, app):
         """Test limit parameter with negative value"""
@@ -175,7 +187,11 @@ class TestTeamsSearch:
         response = client.get("/api/teams/search?q=Team&limit=-1")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_search_teams_limit_zero(self, client, app):
         """Test limit parameter with zero value"""
@@ -186,7 +202,11 @@ class TestTeamsSearch:
         response = client.get("/api/teams/search?q=Team&limit=0")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_search_teams_limit_exceeds_max(self, client, app):
         """Test that limit exceeding max (50) is rejected with 422"""
@@ -201,4 +221,8 @@ class TestTeamsSearch:
         response = client.get("/api/teams/search?q=Team&limit=100")
         assert response.status_code == 422
         data = response.get_json()
-        assert "errors" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]
