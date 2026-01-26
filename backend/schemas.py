@@ -243,24 +243,6 @@ class ErrorSchema(Schema):
     )
 
 
-class TeamSearchErrorSchema(ErrorSchema):
-    """Error response schema for team search endpoint."""
-
-    pass
-
-
-class SyncErrorSchema(ErrorSchema):
-    """Error response schema for sync endpoints."""
-
-    pass
-
-
-class StatisticsErrorSchema(ErrorSchema):
-    """Error response schema for statistics endpoint."""
-
-    pass
-
-
 class TeamStatisticsQuerySchema(Schema):
     """Query parameters for team statistics endpoint."""
 

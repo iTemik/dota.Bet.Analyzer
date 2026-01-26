@@ -22,11 +22,9 @@ from backend.schemas import (
     PlayerStatisticsQuerySchema,
     StatisticsResultSchema,
     StatsResponseSchema,
-    SyncErrorSchema,
     SyncResponseSchema,
     TaskResponseSchema,
     TeamSchema,
-    TeamSearchErrorSchema,
     TeamSearchQuerySchema,
     TeamStatisticsQuerySchema,
     VersionSchema,
@@ -729,7 +727,7 @@ def get_results(task_id: str) -> tuple[Response, int]:
 @bp.response(200, SyncResponseSchema)
 @bp.alt_response(
     503,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="API connection failed",
     example={
         "status": 503,
@@ -740,7 +738,7 @@ def get_results(task_id: str) -> tuple[Response, int]:
 )
 @bp.alt_response(
     502,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="Invalid API response",
     example={
         "status": 502,
@@ -751,7 +749,7 @@ def get_results(task_id: str) -> tuple[Response, int]:
 )
 @bp.alt_response(
     500,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="Database operation failed",
     example={
         "status": 500,
@@ -803,7 +801,7 @@ def sync_pro_players() -> tuple[Response, int]:
 @bp.response(200, SyncResponseSchema)
 @bp.alt_response(
     503,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="API connection failed",
     example={
         "status": 503,
@@ -814,7 +812,7 @@ def sync_pro_players() -> tuple[Response, int]:
 )
 @bp.alt_response(
     502,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="Invalid API response",
     example={
         "status": 502,
@@ -825,7 +823,7 @@ def sync_pro_players() -> tuple[Response, int]:
 )
 @bp.alt_response(
     500,
-    schema=SyncErrorSchema,
+    schema=ErrorSchema,
     description="Database operation failed",
     example={
         "status": 500,
@@ -876,8 +874,8 @@ def sync_teams() -> tuple[Response, int]:
 @bp.route("/teams/search", methods=["GET"])
 @bp.arguments(TeamSearchQuerySchema, location="query")
 @bp.response(200, TeamSchema(many=True))
-@bp.alt_response(400, schema=TeamSearchErrorSchema, description="Invalid query parameters")
-@bp.alt_response(503, schema=TeamSearchErrorSchema, description="Database connection error")
+@bp.alt_response(400, schema=ErrorSchema, description="Invalid query parameters")
+@bp.alt_response(503, schema=ErrorSchema, description="Database connection error")
 def search_teams(args):
     """Search for teams by name or tag for autocomplete.
 

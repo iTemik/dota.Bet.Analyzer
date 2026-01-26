@@ -142,7 +142,7 @@ def test_compute_statistics_exception_returns_500(monkeypatch):
     assert rv.status_code == 500
 
     data = rv.get_json()
-    # Verify error response structure matches StatisticsErrorSchema
+    # Verify error response structure
     assert "status" in data
     assert "code" in data
     assert "message" in data
