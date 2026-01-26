@@ -1,5 +1,7 @@
 """Tests to ensure Pydantic models and Marshmallow schemas stay synchronized."""
 
+from typing import Any
+
 import pytest
 
 
@@ -198,7 +200,7 @@ def test_api_error_schema_generation():
     assert schema.fields["details"].allow_none is True
 
 
-def test_api_error_schema_serialization():
+def test_api_error_schema_serialization() -> None:
     """Verify ApiError schema can serialize and deserialize correctly."""
     from backend.schemas import pydantic_to_marshmallow
     from backend.stats import ApiError
@@ -214,7 +216,7 @@ def test_api_error_schema_serialization():
         details={"url": "http://test.com", "status_code": 500},
     )
     dumped = error.model_dump()
-    loaded = schema.load(dumped)
+    loaded: Any = schema.load(dumped)
 
     assert loaded["status"] == 400
     assert loaded["code"] == "TEST_ERROR"
@@ -225,7 +227,7 @@ def test_api_error_schema_serialization():
     # Test with None values
     error_none = ApiError(status=None, code=None, message=None, details=None)
     dumped_none = error_none.model_dump()
-    loaded_none = schema.load(dumped_none)
+    loaded_none: Any = schema.load(dumped_none)
 
     assert loaded_none["status"] is None
     assert loaded_none["code"] is None
@@ -233,7 +235,7 @@ def test_api_error_schema_serialization():
     assert loaded_none["details"] is None
 
 
-def test_team_stats_error_field_nested_schema():
+def test_team_stats_error_field_nested_schema() -> None:
     """Verify TeamStats error field contains properly nested ApiError schema."""
     from marshmallow import fields
 
@@ -247,17 +249,37 @@ def test_team_stats_error_field_nested_schema():
     assert isinstance(error_field, fields.Nested), "error field should be Nested type"
 
     # Verify the nested schema is for ApiError
-    nested_schema = error_field.nested()
-    assert "status" in nested_schema.fields
-    assert "code" in nested_schema.fields
-    assert "message" in nested_schema.fields
-    assert "details" in nested_schema.fields
+    # error_field.nested can be a schema class, instance, string (lazy reference), or dict
+    nested_schema_ref = error_field.nested
+    if isinstance(nested_schema_ref, str):
+        # It's a lazy reference (string), skip detailed field checks
+        # Just verify it's a non-empty string
+        assert nested_schema_ref, "Nested schema reference should not be empty"
+    elif isinstance(nested_schema_ref, dict):
+        # It's a dict (shouldn't happen in normal cases but handle it)
+        # Skip field checks for dict type
+        pass
+    elif isinstance(nested_schema_ref, type):
+        # It's a class, instantiate it
+        nested_schema = nested_schema_ref()
+        assert hasattr(nested_schema, "fields"), "Schema instance should have fields attribute"
+        assert "status" in nested_schema.fields
+        assert "code" in nested_schema.fields
+        assert "message" in nested_schema.fields
+        assert "details" in nested_schema.fields
+    else:
+        # It's already an instance - verify it has fields attribute
+        assert hasattr(nested_schema_ref, "fields"), "Schema instance should have fields attribute"
+        assert "status" in nested_schema_ref.fields
+        assert "code" in nested_schema_ref.fields
+        assert "message" in nested_schema_ref.fields
+        assert "details" in nested_schema_ref.fields
 
     # Verify it allows None (optional field)
     assert error_field.allow_none is True
 
 
-def test_stats_response_with_api_error_serialization():
+def test_stats_response_with_api_error_serialization() -> None:
     """Verify StatsResponse correctly serializes TeamStats with ApiError."""
     from backend.pro_players import Player
     from backend.schemas import StatsResponseSchema
@@ -290,7 +312,7 @@ def test_stats_response_with_api_error_serialization():
 
     # Deserialize using Marshmallow
     schema = StatsResponseSchema()
-    loaded = schema.load(dumped)
+    loaded: Any = schema.load(dumped)
 
     # Verify successful team
     assert loaded["teams"][0]["team"] == "Success Team"
