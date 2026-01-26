@@ -1,26 +1,80 @@
+from dataclasses import dataclass
 from typing import Any
 from urllib import parse
 
+from flask import request
+
+
+@dataclass(frozen=True)
+class ErrorDefinition:
+    """Immutable error definition with code and default message."""
+
+    code: str
+    message: str
+
+
+def error_response(
+    error: ErrorDefinition | str, message: str | None = None, status_code: int = 400, **extra_details
+) -> dict:
+    """Create a standardized error response dict following REST API best practices.
+
+    Args:
+        error: ErrorDefinition instance or error code string (use ErrorCode constants)
+        message: Optional message override (uses error.message if not provided)
+        status_code: HTTP status code
+        **extra_details: Additional key-value pairs to include in details
+
+    Returns:
+        Error dictionary ready for jsonify (return with status code separately)
+
+    Example:
+        # Using ErrorDefinition with default message:
+        return jsonify(error_response(ErrorCode.MISSING_TEAMS, status_code=400)), 400
+
+        # Overriding message:
+        return jsonify(error_response(ErrorCode.MISSING_TEAMS, "Custom message", 400)), 400
+
+        # Adding extra details:
+        return jsonify(error_response(ErrorCode.TOO_MANY_TEAMS, status_code=400, limit=10)), 400
+    """
+    if isinstance(error, ErrorDefinition):
+        code = error.code
+        msg = message if message is not None else error.message
+    else:
+        code = error
+        msg = message if message is not None else error
+
+    details = {"url": request.path, **extra_details}
+    return {"status": status_code, "code": code, "message": msg, "details": details}
+
 
 # Error code constants (RFC 7807 compliant)
-class ErrorCode:
-    """Machine-readable error codes for API responses."""
+class Errors:
+    """Standard error codes with human-readable messages for API responses."""
 
-    MISSING_ACCOUNT_IDS = "MISSING_ACCOUNT_IDS"
-    TOO_MANY_PLAYERS = "TOO_MANY_PLAYERS"
-    INVALID_ACCOUNT_ID = "INVALID_ACCOUNT_ID"
-    FAILED_TO_START_TASK = "FAILED_TO_START_TASK"
-    INVALID_REQUEST = "INVALID_REQUEST"
-    RESULTS_NOT_FOUND = "RESULTS_NOT_FOUND"
-    FAILED_TO_RETRIEVE_RESULTS = "FAILED_TO_RETRIEVE_RESULTS"
-    MISSING_TEAMS = "MISSING_TEAMS"
-    UNSUPPORTED_METHOD = "UNSUPPORTED_METHOD"
-    TOO_MANY_TEAMS = "TOO_MANY_TEAMS"
-    FAILED_TO_FETCH_PRO_PLAYERS = "FAILED_TO_FETCH_PRO_PLAYERS"
-    FAILED_TO_STORE_PRO_PLAYERS = "FAILED_TO_STORE_PRO_PLAYERS"
-    FAILED_TO_FETCH_TEAMS = "FAILED_TO_FETCH_TEAMS"
-    FAILED_TO_STORE_TEAMS = "FAILED_TO_STORE_TEAMS"
-    SEARCH_ERROR = "SEARCH_ERROR"
+    COMPUTATION_ERROR = ErrorDefinition(
+        "COMPUTATION_ERROR", "An unexpected error occurred during statistics computation"
+    )
+    FAILED_TO_FETCH_PRO_PLAYERS = ErrorDefinition("FAILED_TO_FETCH_PRO_PLAYERS", "Failed to fetch pro players from API")
+    FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
+    FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
+    FAILED_TO_START_TASK = ErrorDefinition("FAILED_TO_START_TASK", "Failed to start background task")
+    FAILED_TO_STORE_PRO_PLAYERS = ErrorDefinition(
+        "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
+    )
+    FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
+    INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
+    INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
+    INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
+    MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
+    MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
+    NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
+    RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
+    SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
+    TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
+    TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
+    UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")
+    UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
 
 
 def prepare_sql_for_team_explore(team: str) -> str:

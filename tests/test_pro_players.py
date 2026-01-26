@@ -105,7 +105,7 @@ def test_pro_players_endpoint_success(client, sample_pro_players_data):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["count"] == 2
+        assert data["synced_count"] == 2
         assert "Stored 2 pro players" in data["message"]
 
 
@@ -146,7 +146,7 @@ def test_pro_players_endpoint_connection_failure(client):
 
         assert response.status_code == 503
         data = json.loads(response.data)
-        assert "error_code" in data
+        assert "code" in data
 
 
 def test_pro_players_endpoint_invalid_response(client):
@@ -158,7 +158,7 @@ def test_pro_players_endpoint_invalid_response(client):
 
         assert response.status_code == 502
         data = json.loads(response.data)
-        assert "error_code" in data
+        assert "code" in data
 
 
 def test_pro_players_endpoint_empty_response(client):
@@ -170,7 +170,7 @@ def test_pro_players_endpoint_empty_response(client):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["count"] == 0
+        assert data["synced_count"] == 0
 
 
 def test_pro_players_upsert(client, sample_pro_players_data, app):
@@ -533,7 +533,7 @@ def test_teams_endpoint_sync_success(client, sample_teams_data):
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["count"] == 2
+        assert data["synced_count"] == 2
         assert "Stored 2 teams" in data["message"]
 
 
@@ -579,7 +579,7 @@ def test_teams_endpoint_api_failure(client):
 
         assert response.status_code == 503
         data = json.loads(response.data)
-        assert "error_code" in data
+        assert "code" in data
 
 
 def test_teams_endpoint_invalid_response(client):
@@ -591,7 +591,7 @@ def test_teams_endpoint_invalid_response(client):
 
         assert response.status_code == 502
         data = json.loads(response.data)
-        assert "error_code" in data
+        assert "code" in data
 
 
 def test_teams_endpoint_empty_response(client):
@@ -604,7 +604,7 @@ def test_teams_endpoint_empty_response(client):
         assert response.status_code == 200
         data = json.loads(response.data)
 
-        assert data["count"] == 0
+        assert data["synced_count"] == 0
 
 
 def test_teams_upsert(client, sample_teams_data, app):
@@ -733,7 +733,7 @@ def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
         response = client.post("/api/teams/sync")
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["count"] == 1500
+        assert data["synced_count"] == 1500
 
         # Verify all teams are stored
         with app.app_context():

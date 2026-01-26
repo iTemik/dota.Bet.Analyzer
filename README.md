@@ -155,6 +155,13 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+**Key Dependencies:**
+- Flask 2.0+ - Web framework
+- flask-smorest 0.40+ - OpenAPI/Swagger documentation
+- marshmallow 3.20+ - Schema validation and serialization
+- Celery 5.2+ - Async task processing
+- Redis 4.0+ - Message broker and cache
 ---
 
 ## 🧪 Running Tests
@@ -252,56 +259,27 @@ See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed 
 
 ---
 
-## 📡 API Response Format
+## 📡 API Documentation
 
-The backend uses **RFC 7807-compliant** error responses with HTTP status codes as the primary success/error indicator.
+The backend provides a **Swagger UI** for interactive API documentation and testing:
 
-**Success Response (HTTP 200):**
-```json
-{
-  "count": 32,
-  "message": "Stored 32 pro players"
-}
+**🔗 Swagger UI:** http://localhost:5000/api/swagger-ui
+
+The API uses:
+- **flask-smorest** for OpenAPI 3.0.2 specification
+- **marshmallow** for request/response validation
+- **RFC 7807-inspired** error responses with structured format
+
+**Quick Example:**
+```bash
+# Sync pro players
+curl -X POST http://localhost:5000/api/pro-players/sync
+
+# Search teams
+curl "http://localhost:5000/api/teams/search?q=liquid&limit=5"
 ```
 
-**Error Response (HTTP 4xx/5xx):**
-```json
-{
-  "error_code": "FAILED_TO_FETCH_TEAMS",
-  "message": "Failed to fetch teams from OpenDota API",
-  "details": {
-    "url": "/api/teams/sync"
-  }
-}
-```
-
-**Error Response with Additional Details:**
-```json
-{
-  "error_code": "INVALID_ACCOUNT_ID",
-  "message": "Invalid account_id: abc123",
-  "details": {
-    "url": "/api/statistics/players",
-    "value": "abc123"
-  }
-}
-```
-
-**Available Error Codes:**
-- `MISSING_ACCOUNT_IDS` - No account IDs provided
-- `TOO_MANY_PLAYERS` - More than 10 players requested
-- `INVALID_ACCOUNT_ID` - Account ID is not a valid integer
-- `FAILED_TO_START_TASK` - Celery task start failed
-- `INVALID_REQUEST` - Invalid request parameters
-- `RESULTS_NOT_FOUND` - Task results not found (404)
-- `FAILED_TO_RETRIEVE_RESULTS` - Internal error retrieving results
-- `MISSING_TEAMS` - No teams provided
-- `UNSUPPORTED_METHOD` - HTTP method not supported for endpoint
-- `TOO_MANY_TEAMS` - More than 10 teams requested
-- `FAILED_TO_FETCH_PRO_PLAYERS` - OpenDota API fetch failed
-- `FAILED_TO_STORE_PRO_PLAYERS` - Database store failed
-- `FAILED_TO_FETCH_TEAMS` - OpenDota API teams fetch failed
-- `FAILED_TO_STORE_TEAMS` - Database teams store failed
+All endpoints, request schemas, response formats, and error codes are documented in Swagger UI
 
 ---
 
@@ -412,13 +390,15 @@ The app uses Redis for:
 
 The backend provides REST API endpoints for team statistics, match data, and player analytics.
 
+**📖 API Documentation:** http://localhost:5000/api/swagger-ui (when server is running)
+
 ### Core Features
 
 #### Team Statistics (`/statistics`)
-- Compare two Dota 2 teams side-by-side
+- Compare Dota 2 teams side-by-side (1-10 teams)
 - Returns team ratings, tags, IDs, and rating deltas
-- Processes match history data and calculates aggregate statistics
-- Supports both GET and POST requests with team names
+- Initiates async tasks to fetch player match statistics
+- Supports GET requests with query parameters: `?team=Alpha&team=Beta` or `?team1=Alpha&team2=Beta`
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:

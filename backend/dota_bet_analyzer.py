@@ -4,11 +4,12 @@ import time
 
 import redis
 from celery import Celery  # type: ignore[import-untyped]
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Response, jsonify, request, stream_with_context
+from flask_smorest import Blueprint
 
 from backend import __version__
 from backend.config import Config
-from backend.helpers import ErrorCode
+from backend.helpers import Errors
 from backend.logging_config import setup_logging
 from backend.pro_players import (
     fetch_pro_players_from_api,
@@ -16,7 +17,20 @@ from backend.pro_players import (
     store_pro_players,
     store_teams,
 )
+from backend.schemas import (
+    ErrorSchema,
+    PlayerStatisticsQuerySchema,
+    StatisticsResultSchema,
+    StatsResponseSchema,
+    SyncResponseSchema,
+    TaskResponseSchema,
+    TeamSchema,
+    TeamSearchQuerySchema,
+    TeamStatisticsQuerySchema,
+    VersionSchema,
+)
 from backend.stats import (
+    ApiError,
     compute_statistics,
     get_matches,
     get_rank,
@@ -27,7 +41,7 @@ from backend.stats import (
 logger = setup_logging(__name__)
 
 
-bp = Blueprint("dota", __name__)
+bp = Blueprint("dota", __name__, url_prefix="/api", description="Dota 2 Bet Analyzer API")
 
 # Initialize Celery without app-specific config; the app factory will update it
 celery = Celery(__name__)
@@ -203,11 +217,13 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
 
 
 @bp.route("/version", methods=["GET"])
+@bp.response(200, VersionSchema)
 def get_version() -> tuple[Response, int]:
-    """Get backend and frontend versions.
+    """Get backend version.
 
-    Returns:
-        Tuple of (JSON response, HTTP status code)
+    Returns backend version including build number.
+
+    This endpoint always succeeds and returns 200 OK.
     """
     backend_version = __version__
     build_number = os.environ.get("BUILD_NUMBER", "DEV")
@@ -224,67 +240,171 @@ def get_version() -> tuple[Response, int]:
     )
 
 
-@bp.route("/statistics/players", methods=["GET"])
-def players_statistics() -> tuple[Response, int]:
-    """Start calculation and return task ID"""
+@bp.route("/statistics", methods=["GET"])
+@bp.arguments(TeamStatisticsQuerySchema, location="query")
+@bp.response(200, StatsResponseSchema)
+@bp.alt_response(
+    400,
+    schema=ErrorSchema,
+    description="Invalid request",
+    example={
+        "status": 400,
+        "code": "INVALID_REQUEST",
+        "message": "Invalid request",
+        "details": {"url": "/api/statistics", "exception": "Invalid team data"},
+    },
+)
+@bp.alt_response(
+    422,
+    schema=ErrorSchema,
+    description="Validation failed - missing teams, too many teams (>10), or invalid parameter format",
+    example={
+        "status": 422,
+        "code": "MISSING_TEAMS",
+        "message": "No teams provided",
+        "details": {"url": "/api/statistics"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Computation failed",
+    example={
+        "status": 500,
+        "code": "COMPUTATION_ERROR",
+        "message": "An unexpected error occurred during statistics computation",
+        "details": {"url": "/api/statistics", "exception": "Database connection failed"},
+    },
+)
+def statistics(args) -> tuple[Response, int]:
+    """Compute team statistics.
+
+    Query parameters:
+    - team: Team name (supports multiple values: `?team=Alpha&team=Beta`)
+    - team1, team2, ...: Alternative numbered format (legacy support)
+
+    Returns computed statistics for the specified teams (1-10 teams).
+    Includes team ratings, tags, IDs, rating deltas, player lists, and a `task_id`
+    for asynchronous player statistics computation.
+    """
+    # Get teams from validated args or fall back to legacy numbered format
+    teams = args.get("team", []) if args else []
+    if not teams:
+        teams = [v for k, v in sorted(request.args.items()) if k.startswith("team")]
+
+    # Normalize & validate
+    teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
+    if not teams:
+        return ApiError.create_response(422, error=Errors.MISSING_TEAMS, details={"url": request.path})
+    if len(teams) > 10:
+        return ApiError.create_response(422, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10})
+
+    # Wrap compute_statistics in try-except to handle unexpected errors
+    # Possible failures: database connection issues, Celery/Redis failures, unexpected exceptions
     try:
-        if request.method == "GET":
-            accounts = request.args.getlist("account_id")
-            days: int = int(request.args.get("days", 20))
+        stats = compute_statistics(teams)
+        return jsonify(stats.model_dump()), 200
+    except ValueError as e:
+        # Should not happen with current validation, but handle it defensively
+        logger.error(f"Validation error in compute_statistics: {e}")
+        return ApiError.create_response(
+            400, error=Errors.INVALID_REQUEST, details={"url": request.path, "exception": str(e)}
+        )
+    except Exception as e:
+        # Catch unexpected errors (database failures, network issues, etc.)
+        logger.error(f"Unexpected error in statistics computation: {e}", exc_info=True)
+        return ApiError.create_response(
+            500,
+            error=Errors.COMPUTATION_ERROR,
+            details={"url": request.path, "exception": str(e)},
+        )
 
-        if not accounts:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.MISSING_ACCOUNT_IDS,
-                        "message": "no account_ids provided",
-                        "details": {"url": request.path},
-                    }
-                ),
-                400,
-            )
-        if len(accounts) > 10:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.TOO_MANY_PLAYERS,
-                        "message": "too many players (account_ids) in the team (max 10)",
-                        "details": {"url": request.path, "limit": 10},
-                    }
-                ),
-                400,
-            )
 
-        # Convert accounts to integers and filter valid ones
-        accounts_int = []
-        for a in accounts:
-            if isinstance(a, str):
-                a = a.strip()
-                try:
-                    accounts_int.append(int(a))
-                except ValueError:
-                    return (
-                        jsonify(
-                            {
-                                "error_code": ErrorCode.INVALID_ACCOUNT_ID,
-                                "message": f"Invalid account_id: {a}",
-                                "details": {"url": request.path, "value": a},
-                            }
-                        ),
-                        400,
-                    )
+@bp.route("/statistics/players", methods=["GET"])
+@bp.arguments(PlayerStatisticsQuerySchema, location="query")
+@bp.response(
+    200,
+    TaskResponseSchema,
+    description="Task started successfully",
+    example={"status": "started", "task_id": "task_<team_id>_1234567890", "celery_task_id": "abc-123-def"},
+)
+@bp.alt_response(
+    400,
+    schema=ErrorSchema,
+    description="Invalid request parameters",
+    example={
+        "status": 400,
+        "code": "INVALID_REQUEST",
+        "message": "Invalid request",
+        "details": {"url": "/api/statistics/players", "exception": "Invalid account_id format"},
+    },
+)
+@bp.alt_response(
+    422,
+    schema=ErrorSchema,
+    description="Schema validation failed",
+    example={
+        "status": 422,
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid parameter: account_id must be between 1 and 10 items",
+        "details": {"url": "/api/statistics/players"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Task start failed",
+    example={
+        "status": 500,
+        "code": "FAILED_TO_START_TASK",
+        "message": "Failed to start background task",
+        "details": {
+            "url": "/api/statistics/players",
+            "task_id": "task_1234567890",
+            "exception": "Celery connection failed",
+        },
+    },
+)
+def players_statistics(args) -> tuple[Response, int]:
+    """Start asynchronous player statistics computation task.
 
-        if not accounts_int:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.MISSING_ACCOUNT_IDS,
-                        "message": "no valid account_ids provided",
-                        "details": {"url": request.path},
-                    }
-                ),
-                400,
-            )
+    Initiates a background task to fetch and analyze match history for the specified players.
+    The computation typically takes 10-20 seconds as it collects individual match statistics
+    for each team player from the OpenDota API.
+
+    Query Parameters:
+        - `account_id`: List of player account IDs (1-10 players, required)
+        - `days`: Number of days of match history to analyze (1-365, default: 20)
+
+    Returns:
+        TaskResponseSchema containing `status`, `task_id` for progress tracking, and `celery_task_id`
+
+    Workflow:
+
+        1. Call this endpoint to start the task → receive `task_id`
+        2. Monitor progress via `/api/stream-progress/{task_id}` (Server-Sent Events)
+        3. Retrieve final results via `/api/results/{task_id}` once complete
+
+
+    Example:
+        `GET /api/statistics/players?account_id=12345&account_id=67890&days=30`
+
+        Response (200):
+
+        {
+            "status": "started",
+            "task_id": "task_1234567890",
+            "celery_task_id": "abc-123-def-456"
+        }
+
+    """
+    try:
+        accounts = args["account_id"]
+        days = args.get("days", 20)
+
+        # Schema already validates: 1-10 accounts, valid integers, days 1-365
+        # Convert to int list if needed
+        accounts_int = [int(a) if not isinstance(a, int) else a for a in accounts]
 
         try:
             task = players_statistics_task.delay(
@@ -292,341 +412,479 @@ def players_statistics() -> tuple[Response, int]:
             )
             return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
         except Exception as e:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.FAILED_TO_START_TASK,
-                        "message": f"Failed to start task: {e!s}",
-                        "details": {"url": request.path},
-                    }
-                ),
+            return ApiError.create_response(
                 500,
+                error=Errors.FAILED_TO_START_TASK,
+                details={"task_id": task_id, "url": request.path, "exception": str(e)},
             )
 
     except Exception as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.INVALID_REQUEST,
-                    "message": f"Invalid request: {e!s}",
-                    "details": {"url": request.path},
-                }
-            ),
-            400,
+        return ApiError.create_response(
+            400, error=Errors.INVALID_REQUEST, details={"url": request.path, "exception": str(e)}
         )
 
 
+def _create_error_message(message: str, timeout: bool = False) -> str:
+    """Create formatted error message for SSE stream.
+
+    Args:
+        message: Error message text
+        timeout: Whether this is a timeout error
+
+    Returns:
+        JSON-formatted error message string
+    """
+    error_msg = {
+        "step": -1,
+        "message": message,
+        "progress": -1,
+        "data": {"error": True, "timeout": timeout} if timeout else {"error": True},
+    }
+    return f"{json.dumps(error_msg)}\n"
+
+
+def _check_timeouts(start_time: float, no_update_count: int, max_runtime: int, max_no_update: int) -> str | None:
+    """Check for timeout conditions.
+
+    Args:
+        start_time: Task start timestamp
+        no_update_count: Number of iterations without progress
+        max_runtime: Maximum runtime in seconds
+        max_no_update: Maximum iterations without update
+
+    Returns:
+        Error message string if timeout occurred, None otherwise
+    """
+    if time.time() - start_time > max_runtime:
+        return _create_error_message(f"Task exceeded maximum runtime ({max_runtime}s)", timeout=True)
+
+    if no_update_count >= max_no_update:
+        return _create_error_message(f"Task timed out - no progress updates for {max_no_update * 0.01}s", timeout=True)
+
+    return None
+
+
+def _generate_progress_stream(task_id: str):
+    """Generate progress updates stream for a task.
+
+    Reads lightweight progress snapshots from Redis and emits them
+    until the task reaches completion or an error state.
+
+    Args:
+        task_id: Task identifier
+
+    Yields:
+        JSON-formatted progress updates or error messages
+
+    Safety mechanisms:
+    - Max iterations: 6000 (60 seconds at 0.01s sleep)
+    - Timeout on no updates: 300 iterations (3 seconds)
+    - Max runtime: 120 seconds absolute limit
+    """
+    last_step = 0
+    no_update_count = 0
+    max_no_update = 300  # 3 seconds at 0.01s sleep
+    max_iterations = 6000  # 60 seconds at 0.01s sleep
+    max_runtime = 120  # 2 minutes absolute limit
+    start_time = time.time()
+
+    for _ in range(max_iterations):
+        # Check for timeout conditions
+        timeout_error = _check_timeouts(start_time, no_update_count, max_runtime, max_no_update)
+        if timeout_error:
+            yield timeout_error
+            return
+
+        try:
+            # Process progress data
+            progress_data, last_step, is_complete = _process_progress_data(task_id, last_step)
+
+            # No new progress
+            if progress_data is None:
+                no_update_count += 1
+                time.sleep(0.01)
+                continue
+
+            # Send progress update
+            yield f"{json.dumps(progress_data)}\n"
+            no_update_count = 0
+
+            # Check for completion
+            if is_complete:
+                return
+
+            time.sleep(0.01)
+
+        except json.JSONDecodeError as e:
+            yield _create_error_message(f"Invalid progress data: {e}")
+            return
+        except Exception as e:
+            yield _create_error_message(f"Stream error: {e}")
+            return
+
+    # Max iterations reached without completion
+    yield _create_error_message(f"Stream exceeded maximum iterations ({max_iterations})", timeout=True)
+
+
+def _process_progress_data(task_id: str, last_step: int) -> tuple[dict | None, int, bool]:
+    """Process progress data from Redis.
+
+    Args:
+        task_id: Task identifier
+        last_step: Last processed step number
+
+    Returns:
+        Tuple of (progress_data, new_last_step, is_complete)
+        - progress_data: Parsed JSON data or None if no progress
+        - new_last_step: Updated last step value
+        - is_complete: True if task is complete or errored
+    """
+    try:
+        progress_bytes = redis_client.get(f"progress:{task_id}")
+        if not progress_bytes:
+            return None, last_step, False
+
+        progress_data = json.loads(progress_bytes)
+        current_step = progress_data["step"]
+
+        # No new progress
+        if current_step <= last_step:
+            return None, last_step, False
+
+        # Check for completion or error
+        is_complete = progress_data["progress"] >= 100 or progress_data["progress"] == -1
+        return progress_data, current_step, is_complete
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error for task {task_id}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing progress for task {task_id}: {e}")
+        raise
+
+
 @bp.route("/stream-progress/<task_id>")
-def stream_progress(task_id: str) -> Response:
-    """Stream progress updates (lightweight data only)"""
+@bp.response(200, description="Server-Sent Events stream of progress updates")
+@bp.alt_response(
+    404,
+    schema=ErrorSchema,
+    description="Task not found",
+    example={
+        "status": 404,
+        "code": "RESULTS_NOT_FOUND",
+        "message": "Results not found",
+        "details": {"url": "/api/stream-progress/invalid_task_id", "task_id": "invalid_task_id"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Redis connection error",
+    example={
+        "status": 500,
+        "code": "FAILED_TO_RETRIEVE_RESULTS",
+        "message": "Failed to retrieve results",
+        "details": {"url": "/api/stream-progress/task_123", "exception": "Redis connection failed"},
+    },
+)
+def stream_progress(task_id: str) -> tuple[Response, int] | Response:
+    """Stream progress updates via Server-Sent Events.
 
-    def generate():
-        """Yield progress updates for a task.
+    Returns a continuous stream of progress data for the specified task.
+    Stream continues until task completes or encounters an error.
 
-        Reads lightweight progress snapshots from Redis and emits them
-        until the task reaches completion or an error state.
-        """
-        last_step = 0
+    Path Parameters:
+        - `task_id`: Task identifier returned from `/api/statistics/players`
 
-        while True:
-            # Get progress from Redis
-            progress_data = redis_client.get(f"progress:{task_id}")
+    Returns:
+        Server-Sent Events stream with progress updates (200) or error response (404, 500)
 
-            if progress_data:
-                current_data = json.loads(progress_data)
-                current_step = current_data["step"]
+    Example:
+        `GET /api/stream-progress/task_1234_1234567890`
 
-                # Send update if there's new progress
-                if current_step > last_step:
-                    yield f"{json.dumps(current_data)}\n"
-                    last_step = current_step
+        Stream (200):
 
-                    # Break if complete or error
-                    if current_data["progress"] >= 100 or current_data["progress"] == -1:
-                        break
+        {"step": 1, "message": "Fetching matches...", "progress": 25, "data": {...}}
+        {"step": 2, "message": "Processing...", "progress": 50, "data": {...}}
+        {"step": 3, "message": "Completed", "progress": 100, "data": {...}}
 
-            time.sleep(0.01)  # Short sleep for tests
+    """
+    # Verify task exists before starting stream
+    try:
+        initial_progress = redis_client.get(f"progress:{task_id}")
+        if initial_progress is None:
+            return ApiError.create_response(
+                404,
+                error=Errors.RESULTS_NOT_FOUND,
+                details={"url": request.path, "task_id": task_id},
+            )
+    except Exception as e:
+        logger.error(f"Redis error checking task {task_id}: {e}")
+        return ApiError.create_response(
+            500,
+            error=Errors.FAILED_TO_RETRIEVE_RESULTS,
+            details={"url": request.path, "exception": str(e)},
+        )
 
     return Response(
-        stream_with_context(generate()),
+        stream_with_context(_generate_progress_stream(task_id)),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*"},
     )
 
 
 @bp.route("/results/<task_id>")
+@bp.response(200, StatisticsResultSchema)
+@bp.alt_response(
+    404,
+    schema=ErrorSchema,
+    description="Results not found",
+    example={
+        "status": 404,
+        "code": "RESULTS_NOT_FOUND",
+        "message": "Results not found",
+        "details": {"url": "/api/results/task_123", "task_id": "task_123"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Failed to retrieve results",
+    example={
+        "status": 500,
+        "code": "FAILED_TO_RETRIEVE_RESULTS",
+        "message": "Failed to retrieve results",
+        "details": {"url": "/api/results/task_123", "exception": "Redis connection failed"},
+    },
+)
 def get_results(task_id: str) -> tuple[Response, int]:
     """Retrieve final computation results for a completed task.
 
+    Returns the complete results of a background player statistics computation task.
+    Results include detailed match statistics, player performance metrics, and aggregated summaries.
+
+    Path Parameters:
+        - `task_id`: Task identifier returned from `/api/statistics/players`
+
     Returns:
-        JSON response with detailed results including all matches and summary statistics.
-        Returns 404 if results not found or task still in progress.
+        **StatisticsResultSchema** with complete results (200), or error response (404, 500)
+
+
+    Workflow:
+
+        1. Start task via `/api/statistics/players` → receive `task_id`
+        2. Monitor progress via `/api/stream-progress/{task_id}` until complete
+        3. Retrieve results via this endpoint once task reaches 100% progress
+
+
+    Results include:
+
+        - Per-player match statistics (wins, losses, hero picks, performance metrics)
+        - Team summary statistics (average rank, win rates, common heroes)
+        - Error details for any failed player data fetches
+
+
+    Notes:
+
+        - Results expire after 1 hour (Redis TTL)
+        - Returns 404 if task not found, expired, or still in progress
+        - Results only available after task completion (progress = 100%)
+
+
+    Example:
+        `GET /api/results/task_12345_1234567890`
+
+        Response (200):
+        {
+            "results": [...],
+            "successful": 5,
+            "total": 5,
+            "summary": {...}
+        }
+
     """
     try:
         results_data = redis_client.get(f"results:{task_id}")
         if not results_data:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.RESULTS_NOT_FOUND,
-                        "message": "Results not found. Task may still be in progress.",
-                        "details": {"url": request.path, "task_id": task_id},
-                    }
-                ),
+            return ApiError.create_response(
                 404,
+                error=Errors.RESULTS_NOT_FOUND,
+                details={"url": request.path, "task_id": task_id},
             )
 
         results = json.loads(results_data)
         return jsonify(results), 200
     except Exception as e:
         logger.error(f"Error retrieving results for task {task_id}: {e}")
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_RETRIEVE_RESULTS,
-                    "message": f"Failed to retrieve results: {e}",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             500,
+            error=Errors.FAILED_TO_RETRIEVE_RESULTS,
+            details={"url": request.path, "exception": str(e)},
         )
-
-
-@bp.route("/statistics", methods=["GET", "POST"])
-def statistics() -> tuple[Response, int]:
-    """Get statistics for teams provided by arguments.
-
-    Supports:
-      - GET /statistics?team=aaa&team=bbb
-      - POST /statistics with JSON body: {"teams": ["aaa", "bbb"]}
-    """
-    teams = []
-
-    if request.method == "GET":
-        teams = request.args.getlist("team")
-        if not teams:
-            teams = [v for k, v in sorted(request.args.items()) if k.startswith("team")]
-    elif request.method == "POST":
-        body = request.get_json(silent=True)
-        if not body or "teams" not in body:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.MISSING_TEAMS,
-                        "message": "no teams provided",
-                        "details": {"url": request.path},
-                    }
-                ),
-                400,
-            )
-        teams = body.get("teams") or []
-    else:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.UNSUPPORTED_METHOD,
-                    "message": "unsupported method",
-                    "details": {"url": request.path, "method": request.method},
-                }
-            ),
-            400,
-        )
-
-    # Normalize & validate
-    teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
-    if not teams:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.MISSING_TEAMS,
-                    "message": "no teams provided",
-                    "details": {"url": request.path},
-                }
-            ),
-            400,
-        )
-    if len(teams) > 10:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.TOO_MANY_TEAMS,
-                    "message": "too many teams (max 10)",
-                    "details": {"url": request.path, "limit": 10},
-                }
-            ),
-            400,
-        )
-
-    stats = compute_statistics(teams)
-    return jsonify(stats.model_dump()), 200
 
 
 @bp.route("/pro-players/sync", methods=["POST"])
+@bp.response(200, SyncResponseSchema)
+@bp.alt_response(
+    503,
+    schema=ErrorSchema,
+    description="API connection failed",
+    example={
+        "status": 503,
+        "code": "FAILED_TO_FETCH_PRO_PLAYERS",
+        "message": "Failed to fetch pro players from API",
+        "details": {"url": "/api/pro-players/sync", "exception": "Connection timeout"},
+    },
+)
+@bp.alt_response(
+    502,
+    schema=ErrorSchema,
+    description="Invalid API response",
+    example={
+        "status": 502,
+        "code": "FAILED_TO_FETCH_PRO_PLAYERS",
+        "message": "Failed to fetch pro players from API",
+        "details": {"url": "/api/pro-players/sync", "exception": "Invalid JSON response"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Database operation failed",
+    example={
+        "status": 500,
+        "code": "FAILED_TO_STORE_PRO_PLAYERS",
+        "message": "Failed to store pro players to database",
+        "details": {"url": "/api/pro-players/sync", "exception": "Database connection error"},
+    },
+)
 def sync_pro_players() -> tuple[Response, int]:
-    """Sync pro players from OpenDota API and update database.
+    """Sync pro players from OpenDota API to local database.
 
-    This is a write operation (POST) that fetches fresh pro player data from OpenDota API
-    and updates the local database. It's intended to run infrequently (once daily during
-    initialization/maintenance).
+    Fetches fresh pro player data from OpenDota API and updates the d2ba database.
+    Intended to run infrequently (e.g., once daily during maintenance).
 
-    Returns:
-        JSON response with status and count of players stored.
+    Returns the number of players successfully synced.
     """
     # Fetch data from OpenDota API
     try:
         players_data = fetch_pro_players_from_api()
     except ConnectionError as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
-                    "message": str(e),
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             503,
+            error=Errors.FAILED_TO_FETCH_PRO_PLAYERS,
+            details={"url": request.path, "exception": str(e)},
         )
     except ValueError as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_FETCH_PRO_PLAYERS,
-                    "message": f"Invalid response from OpenDota API: {e}",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             502,
+            error=Errors.FAILED_TO_FETCH_PRO_PLAYERS,
+            details={"url": request.path, "exception": str(e)},
         )
 
     if not players_data:
-        return jsonify({"count": 0, "message": "No pro players data available"}), 200
+        return jsonify({"synced_count": 0, "message": "No pro players data available"}), 200
 
     # Store to database
     try:
         count = store_pro_players(players_data)
-        return jsonify({"count": count, "message": f"Stored {count} pro players"}), 200
+        return jsonify({"synced_count": count, "message": f"Stored {count} pro players"}), 200
     except Exception as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_STORE_PRO_PLAYERS,
-                    "message": f"Failed to store pro players: {e!s}",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             500,
+            error=Errors.FAILED_TO_STORE_PRO_PLAYERS,
+            details={"url": request.path, "exception": str(e)},
         )
 
 
 @bp.route("/teams/sync", methods=["POST"])
+@bp.response(200, SyncResponseSchema)
+@bp.alt_response(
+    503,
+    schema=ErrorSchema,
+    description="API connection failed",
+    example={
+        "status": 503,
+        "code": "FAILED_TO_FETCH_TEAMS",
+        "message": "Failed to fetch teams from API",
+        "details": {"url": "/api/teams/sync", "exception": "Connection timeout"},
+    },
+)
+@bp.alt_response(
+    502,
+    schema=ErrorSchema,
+    description="Invalid API response",
+    example={
+        "status": 502,
+        "code": "FAILED_TO_FETCH_TEAMS",
+        "message": "Failed to fetch teams from API",
+        "details": {"url": "/api/teams/sync", "exception": "Invalid JSON response"},
+    },
+)
+@bp.alt_response(
+    500,
+    schema=ErrorSchema,
+    description="Database operation failed",
+    example={
+        "status": 500,
+        "code": "FAILED_TO_STORE_TEAMS",
+        "message": "Failed to store teams to database",
+        "details": {"url": "/api/teams/sync", "exception": "Database connection error"},
+    },
+)
 def sync_teams() -> tuple[Response, int]:
-    """Sync teams from OpenDota API and update database.
+    """Sync teams from OpenDota API to local database.
 
-    This is a write operation (POST) that fetches fresh team data from OpenDota API
-    (paginated in 1000-entry pages) and updates the local database. It's intended to run
-    infrequently (once daily during initialization/maintenance).
+    Fetches fresh team data from OpenDota API (paginated, 1000 entries per page)
+    and updates the d2ba database. Intended to run infrequently (e.g., once daily).
 
-    Returns:
-        JSON response with status and count of teams stored.
+    Returns the number of teams successfully synced.
     """
     # Fetch data from OpenDota API (handles pagination internally)
     try:
         teams_data = fetch_teams_from_api()
     except ConnectionError as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
-                    "message": str(e),
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             503,
+            error=Errors.FAILED_TO_FETCH_TEAMS,
+            details={"url": request.path, "exception": str(e)},
         )
     except ValueError as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_FETCH_TEAMS,
-                    "message": f"Invalid response from OpenDota API: {e}",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             502,
+            error=Errors.FAILED_TO_FETCH_TEAMS,
+            details={"url": request.path, "exception": str(e)},
         )
 
     if not teams_data:
-        return jsonify({"count": 0, "message": "No teams data available"}), 200
+        return jsonify({"synced_count": 0, "message": "No teams data available"}), 200
 
     # Store to database
     try:
         count = store_teams(teams_data)
-        return jsonify({"count": count, "message": f"Stored {count} teams"}), 200
+        return jsonify({"synced_count": count, "message": f"Stored {count} teams"}), 200
     except Exception as e:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.FAILED_TO_STORE_TEAMS,
-                    "message": f"Failed to store teams: {e!s}",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             500,
+            error=Errors.FAILED_TO_STORE_TEAMS,
+            details={"url": request.path, "exception": str(e)},
         )
 
 
 @bp.route("/teams/search", methods=["GET"])
-def search_teams():
-    """Search for teams by name for autocomplete.
+@bp.arguments(TeamSearchQuerySchema, location="query")
+@bp.response(200, TeamSchema(many=True))
+@bp.alt_response(400, schema=ErrorSchema, description="Invalid query parameters")
+@bp.alt_response(503, schema=ErrorSchema, description="Database connection error")
+def search_teams(args):
+    """Search for teams by name or tag for autocomplete.
 
-    Query parameters:
-      - q: Search query (minimum 2 characters)
-      - limit: Maximum number of results (default: 10, max: 50)
-
-    Returns:
-      - 200: JSON array of matching teams with {team_id, name, tag, logo_url, rating}
-      - 400: Missing or invalid query parameter
-      - 503: Database connection error
+    Returns a list of matching teams ordered by relevance (starts-with matches first).
     """
     from backend.pro_players import get_d2ba_db
 
-    search_query = request.args.get("q", "").strip()
-    limit_param = request.args.get("limit", 10)
-    try:
-        limit = int(limit_param)
-        if limit <= 0:
-            return (
-                jsonify(
-                    {
-                        "error_code": ErrorCode.INVALID_REQUEST,
-                        "message": "Limit parameter must be a positive integer",
-                    }
-                ),
-                400,
-            )
-        limit = min(limit, 50)  # Cap at 50
-    except (TypeError, ValueError):
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.INVALID_REQUEST,
-                    "message": "Limit parameter must be a valid integer",
-                }
-            ),
-            400,
-        )
-
-    # Validate search query
-    if not search_query or len(search_query) < 2:
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.INVALID_REQUEST,
-                    "message": "Search query must be at least 2 characters",
-                }
-            ),
-            400,
-        )
+    search_query = args["q"]
+    limit = args.get("limit", 10)
 
     try:
         db = get_d2ba_db()
@@ -674,15 +932,10 @@ def search_teams():
 
     except Exception as e:
         logger.error(f"Error searching teams: {e!s}")
-        return (
-            jsonify(
-                {
-                    "error_code": ErrorCode.SEARCH_ERROR,
-                    "message": "Failed to search teams",
-                    "details": {"url": request.path},
-                }
-            ),
+        return ApiError.create_response(
             503,
+            error=Errors.SEARCH_ERROR,
+            details={"url": request.path, "exception": str(e)},
         )
 
 

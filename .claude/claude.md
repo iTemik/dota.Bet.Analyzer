@@ -11,15 +11,17 @@
 4. Re-run until all pass
 
 ## Stack
-- Backend: Python 3.14+ Flask + Celery (port 5000)
+- Backend: Python 3.14+ Flask + flask-smorest + Celery (port 5000)
 - Frontend: React 19.2.0 + TS 5.9.3 + Vite (port 5173)
 - DB: SQLite + Redis (localhost:6379)
+- API Docs: Swagger UI at http://localhost:5000/api/swagger-ui
 - Line length: 120 (Black/ESLint)
 
 ## Code Rules
 - Type hints: All functions
 - Docstrings: All public functions (Args, Returns)
-- Error JSON: `{error_code: str, message: str, details: {url: str}}`
+- Schemas: Use marshmallow for validation (flask-smorest integration)
+- Error JSON: `{status: int, code: str, message: str, details: dict}`
 - REST prefix: `/api/`
 - Python naming: snake_case functions, PascalCase classes
 - TS naming: PascalCase components, camelCase functions
@@ -35,7 +37,8 @@
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
 
 ## Files
-- Backend: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py), [backend/stats.py](backend/stats.py)
+- Backend: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py), [backend/stats.py](backend/stats.py), [backend/schemas.py](backend/schemas.py)
+- Helpers: [backend/helpers.py](backend/helpers.py) (Errors class, error_response)
 - Frontend: [frontend/src/App.tsx](frontend/src/App.tsx)
 - Config: [pyproject.toml](pyproject.toml), [.pre-commit-config.yaml](.pre-commit-config.yaml)
 
@@ -110,7 +113,7 @@ def update_progress(task_id: str, step: int, progress: float) -> None:
 **✅ Docstring (required for public functions):**
 ```python
 def get_version() -> tuple[Response, int]:
-    """Get backend and frontend versions.
+    """Get backend versions.
 
     Returns:
         Tuple of (JSON response, HTTP status code)

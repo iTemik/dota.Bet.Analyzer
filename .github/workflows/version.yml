@@ -2,7 +2,7 @@ name: Version and Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   version:
@@ -18,23 +18,22 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Set version in files
         run: |
           echo "Using GitHub run number as build number: $BUILD_NUMBER"
-          node scripts/version.js frontend increment-minor
-          node scripts/version.js backend increment-minor
-          node scripts/version.js frontend build $BUILD_NUMBER
-          node scripts/version.js backend build $BUILD_NUMBER
+          # Automatically increment versions only for components with changes
+          node scripts/version.js auto increment
 
       - name: Commit version update
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add package.json frontend/src/version.ts backend/__init__.py
-          FRONTEND_VERSION=$(node scripts/version.js frontend get)
-          git commit -m "chore: bump version to ${FRONTEND_VERSION}" || echo "No changes to commit"
+          # Add VERSION files and updated source files
+          git add backend/VERSION frontend/src/version.ts
+          RELEASE_VERSION=$(node scripts/version.js release get)
+          git commit -m "chore: bump version to ${RELEASE_VERSION}" || echo "No changes to commit"
 
       - name: Push changes
         if: success()
@@ -44,13 +43,7 @@ jobs:
       - name: Create Release Tag
         if: success()
         run: |
-          FRONTEND_VERSION=$(node scripts/version.js frontend get)
-          BACKEND_VERSION=$(node scripts/version.js backend get)
-          echo "Frontend version: $FRONTEND_VERSION"
-          echo "Backend version: $BACKEND_VERSION"
-
-          # Create tag combining both frontend and backend versions
-          RELEASE_VERSION="${FRONTEND_VERSION}-${BACKEND_VERSION}"
+          RELEASE_VERSION=$(node scripts/version.js release get)
           echo "Creating release tag: v${RELEASE_VERSION}"
           git tag -a "v${RELEASE_VERSION}" -m "Release v${RELEASE_VERSION}" || (echo "Tag already exists, skipping tag creation"; exit 0)
           git push origin "v${RELEASE_VERSION}" || echo "Tag push completed"

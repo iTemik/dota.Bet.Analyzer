@@ -11,6 +11,9 @@
     },
     "python.linting.enabled": true,
     "python.linting.mypyEnabled": true,
+    "python.linting.mypyArgs": [
+        "--config-file=mypy.ini"
+    ],
     "python.linting.ruffEnabled": true,
     "python.sortImports.args": [
         "--profile",

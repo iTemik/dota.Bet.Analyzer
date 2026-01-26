@@ -47,41 +47,57 @@ class TestPlayersStatisticsEndpoint:
             assert data["status"] == "started"
 
     def test_returns_400_when_no_account_ids_provided(self, client):
-        """Test that endpoint returns 400 when no account_ids are provided."""
+        """Test that endpoint returns 422 when no account_ids are provided."""
         rv = client.get("/api/statistics/players")
 
-        assert rv.status_code == 400
+        assert rv.status_code == 422
         data = rv.get_json()
-        assert "error_code" in data
-        assert "no account_ids provided" in data["message"].lower()
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_when_too_many_account_ids(self, client):
-        """Test that endpoint returns 400 when more than 10 account_ids provided."""
+        """Test that endpoint returns 422 when more than 10 account_ids provided."""
         account_ids = "&".join([f"account_id={i}" for i in range(11)])
         rv = client.get(f"/api/statistics/players?{account_ids}")
 
-        assert rv.status_code == 400
+        assert rv.status_code == 422
         data = rv.get_json()
-        assert "error_code" in data
-        assert "max 10" in data["message"].lower() or "too many" in data["message"].lower()
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_on_invalid_account_id(self, client):
-        """Test that endpoint returns 400 when account_id is not a valid integer."""
+        """Test that endpoint returns 422 when account_id is not a valid integer."""
         rv = client.get("/api/statistics/players?account_id=abc&account_id=123")
 
-        assert rv.status_code == 400
+        assert rv.status_code == 422
         data = rv.get_json()
-        assert "error_code" in data
-        assert "invalid account_id" in data["message"].lower()
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_returns_400_when_no_valid_account_ids(self, client):
-        """Test that endpoint returns 400 when all account_ids are invalid."""
+        """Test that endpoint returns 422 when all account_ids are invalid."""
         rv = client.get("/api/statistics/players?account_id=abc&account_id=xyz")
 
-        assert rv.status_code == 400
+        assert rv.status_code == 422
         data = rv.get_json()
-        assert "error_code" in data
-        assert "invalid account_id" in data["message"].lower()
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
+        assert "details" in data
+        assert "errors" in data["details"]
 
     def test_converts_string_account_ids_to_integers(self, client):
         """Test that string account_ids are converted to integers."""
@@ -131,8 +147,8 @@ class TestPlayersStatisticsEndpoint:
 
             assert rv.status_code == 500
             data = rv.get_json()
-            assert "error_code" in data
-            assert "Failed to start task" in data["message"]
+            assert "code" in data
+            assert "Failed to start background task" in data["message"]
 
     def test_handles_whitespace_in_account_ids(self, client):
         """Test that whitespace in account_ids is properly trimmed."""
@@ -180,9 +196,13 @@ class TestPlayersStatisticsIntegration:
             mock_task.delay.assert_called_once()
 
     def test_request_with_mixed_valid_and_invalid_ids(self, client):
-        """Test that one invalid ID causes entire request to fail."""
+        """Test that one invalid ID causes entire request to fail with 422."""
         rv = client.get("/api/statistics/players?account_id=123&account_id=invalid&account_id=456")
 
-        assert rv.status_code == 400
+        assert rv.status_code == 422
         data = rv.get_json()
-        assert "error_code" in data
+        # Validation errors now follow ErrorSchema format
+        assert data["status"] == 422
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "details" in data
+        assert "errors" in data["details"]

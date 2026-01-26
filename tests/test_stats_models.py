@@ -67,8 +67,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.players[0].id == 101
     assert team.task_id is not None  # task_id should be generated
     assert team.task_id.startswith("task_42_")  # Verify task_id includes team_id
-    assert team.error_code is None
-    assert team.message is None
+    assert team.error is None
 
 
 def test_compute_statistics_invalid_team():
@@ -76,8 +75,9 @@ def test_compute_statistics_invalid_team():
     assert isinstance(res, StatsResponse)
     assert len(res.teams) == 1
     team = res.teams[0]
-    assert team.error_code == "INVALID_TEAM_NAME"
-    assert team.message == "Invalid team name"
+    assert team.error is not None
+    assert team.error.code == "INVALID_TEAM_NAME"
+    assert team.error.message == "Invalid team name format"
     assert team.team_id is None
 
 
@@ -93,8 +93,9 @@ def test_compute_statistics_network_error(monkeypatch):
     assert len(res.teams) == 1
     team = res.teams[0]
     assert team.team == "A"
-    assert team.error_code == "NETWORK_ERROR"
-    assert team.message is not None and "connection failed" in team.message
+    assert team.error is not None
+    assert team.error.code == "NETWORK_ERROR"
+    assert team.error.message is not None and "connection failed" in team.error.message
     assert team.team_id is None
 
 
@@ -109,8 +110,9 @@ def test_compute_statistics_non_200(monkeypatch):
     assert len(res.teams) == 1
     team = res.teams[0]
     assert team.team == "A"
-    assert team.error_code == "HTTP_ERROR"
-    assert team.message is not None and "500" in team.message
+    assert team.error is not None
+    assert team.error.code == "HTTP_ERROR"
+    assert team.error.message is not None and "500" in team.error.message
     assert team.team_id is None
 
 
@@ -126,6 +128,7 @@ def test_compute_statistics_malformed_response(monkeypatch):
     assert len(res.teams) == 1
     team = res.teams[0]
     assert team.team == "A"
-    assert team.error_code == "RESPONSE_PARSE_ERROR"
-    assert team.message is not None and "No rows" in team.message
+    assert team.error is not None
+    assert team.error.code == "RESPONSE_PARSE_ERROR"
+    assert team.error.message is not None and "No rows" in team.error.message
     assert team.team_id is None

@@ -1,5 +1,7 @@
 # Project dependencies
 Flask>=2.0.0
+flask-smorest>=0.40.0  # OpenAPI/Swagger integration
+marshmallow>=3.20.0    # Schema validation and serialization
 celery>=5.2.0
 redis>=4.0.0
 types-redis
