@@ -295,9 +295,9 @@ def statistics(args) -> tuple[Response, int]:
     # Normalize & validate
     teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
     if not teams:
-        return ApiError.create_response(400, error=Errors.MISSING_TEAMS, details={"url": request.path})
+        return ApiError.create_response(422, error=Errors.MISSING_TEAMS, details={"url": request.path})
     if len(teams) > 10:
-        return ApiError.create_response(400, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10})
+        return ApiError.create_response(422, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10})
 
     # Wrap compute_statistics in try-except to handle unexpected errors
     # Possible failures: database connection issues, Celery/Redis failures, unexpected exceptions
