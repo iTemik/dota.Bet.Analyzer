@@ -281,7 +281,7 @@ def statistics(args) -> tuple[Response, int]:
 
     Query parameters:
     - team: Team name (supports multiple values: `?team=Alpha&team=Beta`)
-    - team1, team2, ...: Alternative numbered format (legacy support)
+    - team1, team2, ...: Alternative numbered format
 
     Returns computed statistics for the specified teams (1-10 teams).
     Includes team ratings, tags, IDs, rating deltas, player lists, and a `task_id`
