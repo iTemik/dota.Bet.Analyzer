@@ -34,6 +34,25 @@ function hasGitChanges(directory) {
             }
         }
 
+        // Check if this is a shallow clone (common in CI with fetch-depth: 1)
+        let isShallow = false;
+        try {
+            const shallowCheck = execSync('git rev-parse --is-shallow-repository', { encoding: 'utf8', stdio: 'pipe' }).trim();
+            isShallow = shallowCheck === 'true';
+        } catch {
+            // Command might not be available in older git versions
+            // Check for .git/shallow file as fallback
+            const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf8', stdio: 'pipe' }).trim();
+            isShallow = fs.existsSync(path.join(gitDir, 'shallow'));
+        }
+
+        if (isShallow) {
+            // In shallow clone (CI environment with fetch-depth: 1), we can't compare history
+            // Assume changes exist since the workflow is running
+            console.log(`Shallow repository detected for ${directory} - assuming changes exist`);
+            return true;
+        }
+
         // Then check for commits ahead of origin/main (unpushed commits)
         let baseBranch = 'origin/main';
         try {
