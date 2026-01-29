@@ -18,53 +18,20 @@ const versionTsPath = path.join(__dirname, '..', 'frontend', 'src', 'version.ts'
 
 function hasGitChanges(directory) {
     /**
-     * Check if a directory has changes (staged, unstaged, or committed but not pushed).
+     * Check if a directory has changes (staged, unstaged, or committed but not pushed) with previous commit
      *
      * @param {string} directory - Directory path relative to repo root (e.g., 'frontend/', 'backend/')
      * @returns {boolean} True if directory has any changes, false otherwise
      */
     try {
-        // First check for staged or unstaged changes
-        try {
-            execSync(`git diff --quiet HEAD -- ${directory}`, { stdio: 'pipe' });
-            execSync(`git diff --cached --quiet HEAD -- ${directory}`, { stdio: 'pipe' });
-        } catch (error) {
-            if (error.status === 1) {
-                return true; // Has uncommitted changes
-            }
-        }
-
-        // Then check for commits ahead of origin/main (unpushed commits)
-        let baseBranch = 'origin/main';
-        try {
-            execSync('git rev-parse --verify origin/main', { stdio: 'pipe' });
-        } catch {
-            // Try main if origin/main doesn't exist
-            try {
-                execSync('git rev-parse --verify main', { stdio: 'pipe' });
-                baseBranch = 'main';
-            } catch {
-                // Try origin/master as fallback
-                try {
-                    execSync('git rev-parse --verify origin/master', { stdio: 'pipe' });
-                    baseBranch = 'origin/master';
-                } catch {
-                    baseBranch = 'master';
-                }
-            }
-        }
-
-        // Check for changes between current HEAD and base branch
-        execSync(`git diff --quiet ${baseBranch}..HEAD -- ${directory}`, { encoding: 'utf8', stdio: 'pipe' });
-        return false; // No changes
+        execSync(`git diff --quiet HEAD~ -- ${directory}`, { stdio: 'pipe' });
+        execSync(`git diff --cached --quiet HEAD~ -- ${directory}`, { stdio: 'pipe' });
     } catch (error) {
         if (error.status === 1) {
-            return true; // Has changes
+            return true; // Has uncommitted changes
         }
-        // Git not available or other error - assume changes exist to be safe
-        console.warn(`Warning: Could not check git status for ${directory}:`, error.message);
-        return true;
     }
+    return false; // No changes
 }
 
 function setVersionInFile(filePath, version) {
