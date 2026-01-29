@@ -7,21 +7,22 @@ describe('Frontend Version Management', () => {
         expect(typeof VERSION).toBe('string')
     })
 
-    it('should be in semantic version format (X.Y.Z)', () => {
-        const semverPattern = /^\d+\.\d+\.\d+$/
-        expect(VERSION).toMatch(semverPattern)
+    it('should be in MAJOR.MINOR format', () => {
+        const versionPattern = /^\d+\.\d+$/
+        expect(VERSION).toMatch(versionPattern)
     })
 
-    it('should have major, minor, and patch versions', () => {
+    it('should have major and minor versions only', () => {
         const parts = VERSION.split('.')
-        expect(parts).toHaveLength(3)
+        expect(parts).toHaveLength(2)
         expect(Number(parts[0])).toBeGreaterThanOrEqual(0)
         expect(Number(parts[1])).toBeGreaterThanOrEqual(0)
-        expect(Number(parts[2])).toBeGreaterThanOrEqual(0)
     })
 
-    it('should allow DEV as patch version', () => {
-        const versionPattern = /^\d+\.\d+\.(\d+|DEV)$/
-        expect(VERSION).toMatch(versionPattern)
+    it('should have valid numeric components', () => {
+        const parts = VERSION.split('.')
+        parts.forEach(part => {
+            expect(Number.isNaN(Number(part))).toBe(false)
+        })
     })
 })

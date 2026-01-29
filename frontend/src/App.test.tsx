@@ -29,7 +29,7 @@ describe('App Component', () => {
         vi.clearAllMocks()
             // Setup default fetch mock that handles all routes
             ; (globalThis.fetch as any).mockImplementation((url: string) => {
-            if (url === '/api/version') {
+                if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
                 // Default response for other endpoints
@@ -49,7 +49,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App />)
             })
-            expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument()
+            expect(screen.getByText(/v\d+\.\d+/)).toBeInTheDocument()
         })
 
         it('should render team input fields', async () => {
