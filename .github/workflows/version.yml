@@ -13,6 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 2 # Fetch last 2 commits to compare
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node.js
