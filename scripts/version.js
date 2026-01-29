@@ -25,27 +25,35 @@ function hasGitChanges(directory) {
      * @returns {boolean} True if directory has any changes in HEAD commit, false otherwise
      */
     try {
-        // Check what files changed in the HEAD commit for this directory
-        // git diff-tree shows changes in a commit without needing parent commits
-        const diffTreeCmd = `git diff-tree --no-commit-id --name-only -r HEAD~1 HEAD -- ${directory}`;
+        // Check if HEAD is a merge commit by counting parents
+        const parents = execSync('git show --no-patch --format="%P" HEAD', { encoding: 'utf8' }).trim();
+        const isMergeCommit = parents.includes(' '); // Multiple parents means merge commit
 
-        console.log(`Checking for changes in ${directory}:`);
-        console.log(`  Running: ${diffTreeCmd}`);
+        let changedFiles;
 
-        const output = execSync(diffTreeCmd, { encoding: 'utf8', stdio: 'pipe' });
-
-        if (output.trim()) {
-            console.log(`  ✓ Changes detected in HEAD commit`);
-            console.log(`  Changed files:\n${output.trim()}`);
-            return true;
+        if (isMergeCommit) {
+            console.log('Merge commit detected');
+            // Compare merge commit with its first parent (target branch before merge)
+            changedFiles = execSync(`git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD -- ${directory}/`, { encoding: 'utf8' });
+        } else {
+            console.log('Regular commit detected');
+            // For squash merges or regular commits, compare with previous commit
+            changedFiles = execSync(`git diff-tree --no-commit-id --name-only -r HEAD~1 HEAD -- ${directory}/`, { encoding: 'utf8' });
         }
 
-        console.log(`  ✗ No changes in HEAD commit`);
-        return false;
+        const files = changedFiles.trim().split('\n').filter(file => file.length > 0);
+
+        if (files.length > 0) {
+            console.log('Backend changes detected:');
+            files.forEach(file => console.log(file));
+            return true;
+        } else {
+            console.log('No backend changes detected');
+            return false;
+        }
     } catch (error) {
-        console.log(`  ✗ Error checking changes: ${error.message}`);
-        // In case of error, assume changes exist to be safe (CI should increment)
-        return true;
+        console.error('Error checking git changes:', error.message);
+        return false;
     }
 }
 
