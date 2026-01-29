@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 # Import Pydantic models for auto-generation (imported here to avoid circular imports later)
 from backend.pro_players import Player
-from backend.stats import StatsResponse, TeamStats
+from backend.stats import ApiError, StatsResponse, TeamStats
 
 # Cache for generated schemas to avoid duplicates
 _schema_cache: dict[type[BaseModel], type[Schema]] = {}
@@ -226,29 +226,6 @@ class VersionSchema(Schema):
     build = fields.Str(required=True, metadata={"description": "Build number", "example": "DEV"})
 
 
-class ErrorSchema(Schema):
-    """Base error response schema (RFC 7807-inspired)."""
-
-    class Meta:
-        """Schema metadata configuration."""
-
-        ordered = True
-
-    status = fields.Int(required=True, metadata={"description": "HTTP status code", "example": 400})
-    code = fields.Str(
-        required=True, metadata={"description": "Machine-readable error code", "example": "MISSING_TEAMS"}
-    )
-    message = fields.Str(
-        required=True, metadata={"description": "Human-readable error message", "example": "No teams provided"}
-    )
-    details = fields.Dict(
-        keys=fields.Str(),
-        values=fields.Raw(),
-        load_default=dict,
-        metadata={"description": "Additional error context", "example": {"url": "/api/statistics"}},
-    )
-
-
 class TeamStatisticsQuerySchema(Schema):
     """Query parameters for team statistics endpoint."""
 
@@ -414,6 +391,7 @@ class StatisticsResultSchema(Schema):
 # will automatically reflect those changes.
 
 # Generate schemas from Pydantic models
+ErrorSchema = pydantic_to_marshmallow(ApiError)
 PlayerSchema = pydantic_to_marshmallow(Player)
 TeamStatsSchema = pydantic_to_marshmallow(TeamStats)
 StatsResponseSchema = pydantic_to_marshmallow(StatsResponse)

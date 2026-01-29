@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom'
+import type * as matchers from '@testing-library/jest-dom/matchers'
+import { afterAll, beforeAll } from 'vitest'
+
+declare module 'vitest' {
+    interface Assertion<T = any> extends jest.Matchers<void, T>, matchers.TestingLibraryMatchers<T, void> { }
+    interface AsymmetricMatchersContaining extends matchers.TestingLibraryMatchers<any, any> { }
+}
 
 // Treat console warnings as test failures (except React development warnings)
 // Note: We don't fail on console.error since some tests intentionally trigger error handling
