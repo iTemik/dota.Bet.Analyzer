@@ -18,20 +18,35 @@ const versionTsPath = path.join(__dirname, '..', 'frontend', 'src', 'version.ts'
 
 function hasGitChanges(directory) {
     /**
-     * Check if a directory has changes (staged, unstaged, or committed but not pushed) with previous commit
+     * Check if a directory has changes in the current HEAD commit.
+     * Works with shallow clones (fetch-depth: 1) in CI.
      *
      * @param {string} directory - Directory path relative to repo root (e.g., 'frontend/', 'backend/')
-     * @returns {boolean} True if directory has any changes, false otherwise
+     * @returns {boolean} True if directory has any changes in HEAD commit, false otherwise
      */
     try {
-        execSync(`git diff --quiet HEAD~ -- ${directory}`, { stdio: 'pipe' });
-        execSync(`git diff --cached --quiet HEAD~ -- ${directory}`, { stdio: 'pipe' });
-    } catch (error) {
-        if (error.status === 1) {
-            return true; // Has uncommitted changes
+        // Check what files changed in the HEAD commit for this directory
+        // git diff-tree shows changes in a commit without needing parent commits
+        const diffTreeCmd = `git diff-tree --no-commit-id --name-only -r HEAD -- ${directory}`;
+
+        console.log(`Checking for changes in ${directory}:`);
+        console.log(`  Running: ${diffTreeCmd}`);
+
+        const output = execSync(diffTreeCmd, { encoding: 'utf8', stdio: 'pipe' });
+
+        if (output.trim()) {
+            console.log(`  ✓ Changes detected in HEAD commit`);
+            console.log(`  Changed files:\n${output.trim()}`);
+            return true;
         }
+
+        console.log(`  ✗ No changes in HEAD commit`);
+        return false;
+    } catch (error) {
+        console.log(`  ✗ Error checking changes: ${error.message}`);
+        // In case of error, assume changes exist to be safe (CI should increment)
+        return true;
     }
-    return false; // No changes
 }
 
 function setVersionInFile(filePath, version) {
@@ -140,10 +155,6 @@ function incrementChangedComponents() {
         incrementComponentMinor('backend');
     } else {
         console.log('No backend changes detected, skipping version increment');
-    }
-
-    if (!frontendChanged && !backendChanged) {
-        console.log('No changes detected in frontend or backend');
     }
 }
 
