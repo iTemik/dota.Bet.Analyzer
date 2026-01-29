@@ -27,7 +27,7 @@ function hasGitChanges(directory) {
     try {
         // Check what files changed in the HEAD commit for this directory
         // git diff-tree shows changes in a commit without needing parent commits
-        const diffTreeCmd = `git diff-tree --no-commit-id --name-only -r HEAD -- ${directory}`;
+        const diffTreeCmd = `git diff-tree --no-commit-id --name-only -r HEAD~1 HEAD -- ${directory}`;
 
         console.log(`Checking for changes in ${directory}:`);
         console.log(`  Running: ${diffTreeCmd}`);
