@@ -59,63 +59,11 @@ Select-String "pattern" backend/*.py    # Search
 ## Redis Setup (REQUIRED for `npm run dev`)
 Redis must be running. **`npm run dev` will check automatically.**
 
-Start Redis (choose one):
-```powershell
-# Option 1 - Docker (recommended)
-docker run -d -p 6379:6379 redis:latest
-
-# Option 2 - Local install: https://github.com/microsoftarchive/redis/releases
-redis-server
-```
-
-Then run: `npm run dev` (will verify Redis is running first)
-
 ## Pre-Commit Checks
 Black (format 120), isort (imports), Ruff (lint E,F,W,I,B,C,RUF), type hints, trailing whitespace, YAML/JSON validation
-
-## Versions
-Backend: `backend/VERSION`, Frontend: `frontend/src/version.ts`
 
 ## DB
 Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql), Session: [backend/db.py](backend/db.py)
 
 ## Error Handling
 Always catch exceptions, return JSON `{error_code, message, details}` with proper HTTP status code
-
-## Examples
-
-**✅ Type hints (required):**
-```python
-def update_progress(task_id: str, step: int, progress: float) -> None:
-    """Update progress in Redis."""
-```
-
-**❌ Missing type hints (fix this):**
-```python
-def update_progress(task_id, step, progress):
-```
-
-**✅ Minimize changes (only fix what's asked):**
-```python
-# Task: Add type hint to update_progress
-# GOOD: Change only the function signature
-def update_progress(task_id: str, step: int, progress: float) -> None:
-
-# BAD: Refactor the whole function unnecessarily
-def update_progress(task_id: str, step: int, progress: float) -> None:
-    try:
-        data = {"step": step}
-        redis_client.setex(...)
-    except Exception as e:
-        logger.warning(str(e))
-```
-
-**✅ Docstring (required for public functions):**
-```python
-def get_version() -> tuple[Response, int]:
-    """Get backend versions.
-
-    Returns:
-        Tuple of (JSON response, HTTP status code)
-    """
-```
