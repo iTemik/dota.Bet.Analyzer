@@ -52,8 +52,8 @@ function hasGitChanges(directory) {
             return false;
         }
     } catch (error) {
-        console.error('Error checking git changes:', error.message);
-        return false;
+        console.error('Error checking git changes, incrementing version anyway. Error:', error.message);
+        return true;
     }
 }
 
