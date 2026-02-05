@@ -239,6 +239,19 @@ class TeamStatisticsQuerySchema(Schema):
             )
         },
     )
+    # TODO: Check if this is needed
+    team_id = fields.List(
+        fields.Int(),
+        required=False,
+        validate=validate.Length(min=1, max=10),
+        metadata={
+            "description": (
+                "Team IDs to analyze (1-10 teams). "
+                "Can be specified multiple times: `?team_id=123&team_id=456`. "
+                "If provided, team_id takes precedence over team names."
+            )
+        },
+    )
 
 
 class PlayerStatisticsQuerySchema(Schema):

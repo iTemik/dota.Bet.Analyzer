@@ -280,38 +280,51 @@ def statistics(args) -> tuple[Response, int]:
     """Compute team statistics.
 
     Query parameters:
+    - team_id: Team ID (supports multiple values: `?team_id=123&team_id=456`)
     - team: Team name (supports multiple values: `?team=Alpha&team=Beta`)
     - team1, team2, ...: Alternative numbered format
 
-    Returns computed statistics for the specified teams (1-10 teams).
+    Returns computed statistics for the specified teams (1-10 teams combined).
     Includes team ratings, tags, IDs, rating deltas, player lists, and a `task_id`
     for asynchronous player statistics computation.
     """
-    # Get teams from validated args or fall back to legacy numbered format
-    teams = args.get("team", []) if args else []
-    if not teams:
-        teams = [v for k, v in sorted(request.args.items()) if k.startswith("team")]
-
-    # Normalize & validate
-    teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
-    if not teams:
-        return ApiError.create_response(422, error=Errors.MISSING_TEAMS, details={"url": request.path})
-    if len(teams) > 10:
-        return ApiError.create_response(422, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10})
-
-    # Wrap compute_statistics in try-except to handle unexpected errors
-    # Possible failures: database connection issues, Celery/Redis failures, unexpected exceptions
     try:
-        stats = compute_statistics(teams)
+        # Get team IDs
+        team_ids = args.get("team_id", []) if args else []
+        team_ids_int: list[int] = [int(tid) if not isinstance(tid, int) else tid for tid in team_ids if tid]
+
+        # Get team names
+        teams = args.get("team", []) if args else []
+        if not teams:
+            teams = [v for k, v in sorted(request.args.items()) if k.startswith("team") and not k.endswith("_id")]
+
+        # Normalize team names
+        teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
+
+        # Validate at least one is provided
+        if not teams and not team_ids_int:
+            return ApiError.create_response(422, error=Errors.MISSING_TEAMS, details={"url": request.path})
+
+        # Validate total count doesn't exceed limit
+        total_teams = len(teams) + len(team_ids_int)
+        if total_teams > 10:
+            return ApiError.create_response(
+                422, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10}
+            )
+
+        # Compute statistics with both lists
+        stats = compute_statistics(
+            teams=teams if teams else None,
+            team_ids=team_ids_int if team_ids_int else None,
+        )
         return jsonify(stats.model_dump()), 200
+
     except ValueError as e:
-        # Should not happen with current validation, but handle it defensively
         logger.error(f"Validation error in compute_statistics: {e}")
         return ApiError.create_response(
             400, error=Errors.INVALID_REQUEST, details={"url": request.path, "exception": str(e)}
         )
     except Exception as e:
-        # Catch unexpected errors (database failures, network issues, etc.)
         logger.error(f"Unexpected error in statistics computation: {e}", exc_info=True)
         return ApiError.create_response(
             500,

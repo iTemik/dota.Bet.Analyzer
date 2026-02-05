@@ -138,7 +138,7 @@ class TeamStats(BaseModel):
     """
 
     team_id: Optional[int] = None
-    team: str
+    team: Optional[str] = None
     tag: Optional[str] = None
     rating: Optional[float] = None
     delta: Optional[float] = None
@@ -235,46 +235,112 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
         return None, ApiError(status=502, code="JSON_DECODE_ERROR", message=f"Invalid JSON response: {exc}")
 
 
-def _fetch_team_info_from_explorer(
-    team: str,
-) -> tuple[Optional[tuple[int, str, str, float | None, float | None]], Optional[ApiError]]:
-    """Fetch team info including rating and delta from OpenDota explorer API.
+def _fetch_team_from_explorer_api(
+    team_str: str | None = None,
+    team_id: int | None = None,
+) -> TeamStats:
+    """Fetch team info including rating, delta, and logo from OpenDota APIs.
 
     Args:
-        team: Team name or tag to search for
+        team_str: Team name or tag to search for (mutually exclusive with team_id)
+        team_id: Team ID to search for (mutually exclusive with team_str)
 
     Returns:
-        Tuple of (team_info, error) where:
-        - team_info is (team_id, team_name, tag, rating, delta) tuple (None if error)
-        - error is an ApiError instance (None if success)
+        TeamStats instance with all fetched data and empty players lists (or error if fetch failed)
     """
     from backend.helpers import (
+        build_explorer_query,
         get_percent_encoded_str,
         get_team_id_from_explore_response,
-        prepare_sql_for_team_explore,
     )
 
-    sql = prepare_sql_for_team_explore(team)
+    # Validate input parameters
+    if team_str is not None and (not isinstance(team_str, str) or not team_str.strip()):
+        return TeamStats(
+            team=team_str,
+            error=ApiError(
+                status=400,
+                code=Errors.INVALID_TEAM_NAME.code,
+                message=Errors.INVALID_TEAM_NAME.message,
+                details={"team": team_str},
+            ),
+        )
+
+    if team_id is not None and (not isinstance(team_id, int) or team_id < 0):
+        return TeamStats(
+            team_id=team_id,
+            error=ApiError(
+                status=400,
+                code=Errors.INVALID_TEAM_ID.code,
+                message=Errors.INVALID_TEAM_ID.message,
+                details={"team_id": team_id},
+            ),
+        )
+
+    try:
+        sql = build_explorer_query(team=team_str, team_id=team_id)
+    except ValueError as e:
+        return TeamStats(
+            team=team_str,
+            team_id=team_id,
+            error=ApiError(
+                status=400,
+                code="INVALID_PARAMETER",
+                message=str(e),
+                details={"team": team_str, "team_id": team_id},
+            ),
+        )
+
     team_request = get_percent_encoded_str(sql)
     explore_team_url = f"https://api.opendota.com/api/explorer?sql={team_request}"
 
     payload, error = _safe_get_json(explore_team_url)
     if error:
         error.details = {"url": explore_team_url}
-        return None, error
+        return TeamStats(
+            team=team_str,
+            team_id=team_id,
+            error=error,
+        )
 
     assert payload is not None
 
     try:
-        team_id, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
-        return (team_id, team_name, tag, rating, delta), None
+        team_id_result, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
     except ValueError as exc:
-        return None, ApiError(
-            status=502,
-            code="RESPONSE_PARSE_ERROR",
-            message=f"Malformed response: {exc}",
-            details={"url": explore_team_url},
+        return TeamStats(
+            team=team_str,
+            team_id=team_id,
+            error=ApiError(
+                status=502,
+                code="RESPONSE_PARSE_ERROR",
+                message=f"Malformed response: {exc}",
+                details={"url": explore_team_url},
+            ),
         )
+
+    # Fetch team logo URL
+    team_info, error = _fetch_team_info(team_id_result)
+    if error:
+        return TeamStats(
+            team_id=team_id_result,
+            team=team_name,
+            tag=tag,
+            rating=rating,
+            delta=delta,
+            error=error,
+        )
+
+    logo_url = team_info.get("logo_url") if team_info else None
+
+    return TeamStats(
+        team_id=team_id_result,
+        team=team_name,
+        tag=tag,
+        rating=rating,
+        delta=delta,
+        logo_url=logo_url,
+    )
 
 
 def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
@@ -317,26 +383,131 @@ def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]
     return stats_data, None
 
 
-# Implement compute_statistics here for testability and reuse
-def compute_statistics(teams: List[str]) -> StatsResponse:
-    """Fetch and compute statistics for multiple Dota 2 teams.
-
-    This function queries the OpenDota API to retrieve team information and statistics.
-    For each team with players, it initiates a Celery task to fetch player match statistics.
-    Errors are handled gracefully - if a team's data cannot be fetched, the response
-    will include that team with error_code and message fields populated.
+def _validate_item(item: int | str, is_id_based: bool) -> tuple[bool, Optional[ApiError]]:
+    """Validate a single team item (ID or name).
 
     Args:
-        teams: List of team names or tags to fetch statistics for
+        item: Team ID (int) or team name (str) to validate
+        is_id_based: Whether validation is for team ID (True) or team name (False)
+
+    Returns:
+        Tuple of (is_valid, error) where:
+        - is_valid: True if valid, False if not
+        - error: ApiError instance if invalid, None if valid
+    """
+    if is_id_based:
+        if not isinstance(item, int) or item < 0:
+            return False, ApiError(
+                status=400,
+                code=Errors.INVALID_TEAM_NAME.code,
+                message="Team ID must be a non-negative integer",
+                details={"team_id": item},
+            )
+    else:
+        if not isinstance(item, str) or not item.strip():
+            return False, ApiError(
+                status=400,
+                code=Errors.INVALID_TEAM_NAME.code,
+                message=Errors.INVALID_TEAM_NAME.message,
+                details={"team": item},
+            )
+    return True, None
+
+
+def _create_team_stats(
+    team_stats: TeamStats,
+    players_statistics_task,
+) -> TeamStats:
+    """Populate TeamStats with player data and task initialization.
+
+    Args:
+        team_stats: TeamStats instance with team info (empty player lists)
+        players_statistics_task: Celery task for player statistics
+
+    Returns:
+        TeamStats object with players and task_id populated
+    """
+    pro_players, other_players = get_players_by_team(team_id=team_stats.team_id)
+
+    # Initiate Celery task for player match statistics if players exist
+    task_id = None
+    if pro_players:
+        account_ids = [player.id for player in pro_players]
+        task_id = f"task_{team_stats.team_id}_{int(time.time())}"
+        players_statistics_task.delay(task_id=task_id, accounts=account_ids)
+
+    # Update the team stats with players and task_id
+    team_stats.players = pro_players
+    team_stats.other_players = other_players
+    team_stats.task_id = task_id
+
+    return team_stats
+
+
+def _process_single_team(
+    team_str: str | None = None,
+    team_id: int | None = None,
+    players_statistics_task=None,
+) -> TeamStats:
+    """Process a single team item and return TeamStats with players populated.
+
+    Args:
+        team_str: Team name to search for (mutually exclusive with team_id)
+        team_id: Team ID to search for (mutually exclusive with team_str)
+        players_statistics_task: Celery task for player statistics
+
+    Returns:
+        TeamStats object with all data populated, or error if fetch failed
+    """
+    try:
+        team_stats = _fetch_team_from_explorer_api(team_str=team_str, team_id=team_id)
+        if team_stats.error:
+            return team_stats
+
+        # Populate player data and create final team stats
+        return _create_team_stats(
+            team_stats=team_stats,
+            players_statistics_task=players_statistics_task,
+        )
+
+    except Exception as exc:
+        return TeamStats(
+            team=team_str,
+            team_id=team_id,
+            error=ApiError(
+                status=500,
+                code=Errors.UNEXPECTED_ERROR.code,
+                message=Errors.UNEXPECTED_ERROR.message,
+                details={"exception": str(exc)},
+            ),
+        )
+
+
+# Implement compute_statistics here for testability and reuse
+def compute_statistics(
+    teams: Optional[List[str]] = None,
+    team_ids: Optional[List[int]] = None,
+) -> StatsResponse:
+    """Fetch and compute statistics for multiple Dota 2 teams.
+
+    This function queries the OpenDota API to retrieve team information and statistics
+    by team names and/or team IDs. For each team with players, it initiates
+    a Celery task to fetch player match statistics. Errors are handled gracefully -
+    if a team's data cannot be fetched, the response will include that team with
+    error information populated.
+
+    Args:
+        teams: List of team names or tags to fetch statistics for (optional)
+        team_ids: List of team IDs to fetch statistics for (optional)
 
     Returns:
         StatsResponse containing a list of TeamStats objects. Each TeamStats may
         represent either:
         - Successful fetch: team_id, players, task_id, and other data populated
-        - Failed fetch: error_code and message populated
+        - Failed fetch: error field populated
 
     Raises:
-        ValueError: If teams is not a list
+        ValueError: If neither parameter is provided
 
     Error Codes:
         - INVALID_TEAM_NAME: Team name is empty or invalid
@@ -349,80 +520,26 @@ def compute_statistics(teams: List[str]) -> StatsResponse:
     # Import here to avoid circular imports
     from backend.dota_bet_analyzer import players_statistics_task
 
-    if not isinstance(teams, list):
-        raise ValueError("teams must be a list of strings")
+    # Validate parameters - at least one must be provided
+    if (teams is None and team_ids is None) or (not teams and not team_ids):
+        raise ValueError("Either 'teams' or 'team_ids' must be provided")
+
+    if teams is not None and not isinstance(teams, list):
+        raise ValueError("teams must be a list")
+    if team_ids is not None and not isinstance(team_ids, list):
+        raise ValueError("team_ids must be a list")
 
     result: List[TeamStats] = []
 
-    for team in teams:
-        if not isinstance(team, str) or not team.strip():
-            result.append(
-                TeamStats(
-                    team=team if isinstance(team, str) else str(team),
-                    error=ApiError(
-                        status=400,
-                        code=Errors.INVALID_TEAM_NAME.code,
-                        message=Errors.INVALID_TEAM_NAME.message,
-                        details={"team": team},
-                    ),
-                )
-            )
-            continue
+    # Process teams by name
+    if teams:
+        for team_str in teams:
+            result.append(_process_single_team(team_str=team_str, players_statistics_task=players_statistics_task))
 
-        try:
-            # Fetch team info from explorer API (now includes rating and delta)
-            team_info1, error = _fetch_team_info_from_explorer(team)
-            if error:
-                result.append(TeamStats(team=team, error=error))
-                continue
-
-            if team_info1 is None:
-                continue
-
-            team_id, team_name, tag, rating, delta = team_info1
-            pro_players, other_players = get_players_by_team(team_id=team_id)
-
-            # Fetch team logo URL
-            team_info2, error = _fetch_team_stats(team_id)
-            if error:
-                result.append(TeamStats(team=team, error=error))
-                continue
-
-            # Initiate Celery task for player match statistics if players exist
-            task_id = None
-            if pro_players:
-                account_ids = [player.id for player in pro_players]
-                task_id = f"task_{team_id}_{int(time.time())}"
-                players_statistics_task.delay(task_id=task_id, accounts=account_ids)
-
-            stats = TeamStats(
-                team_id=team_id,
-                team=team_name,
-                tag=tag,
-                rating=rating,
-                delta=delta,
-                logo_url=team_info2.get("logo_url") if team_info2 else None,
-                players=pro_players,
-                other_players=other_players,
-                task_id=task_id,
-            )
-            result.append(stats)
-
-        except Exception as exc:
-            # Catch-all for any unexpected errors
-            result.append(
-                TeamStats(
-                    team=team,
-                    error=ApiError(
-                        status=500,
-                        code=Errors.UNEXPECTED_ERROR.code,
-                        message=Errors.UNEXPECTED_ERROR.message,
-                        details={
-                            "exception": f"The exception {exc} occurred during compute_statistics for team {team}"
-                        },
-                    ),
-                )
-            )
+    # Process teams by ID
+    if team_ids:
+        for team_id in team_ids:
+            result.append(_process_single_team(team_id=team_id, players_statistics_task=players_statistics_task))
 
     return StatsResponse(teams=result)
 

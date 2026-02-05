@@ -139,11 +139,16 @@ class TestStatisticsEndpoint:
         """Test that GET /statistics returns 200 on success."""
         from backend.stats import Player, StatsResponse, TeamStats
 
-        def fake_compute(teams):
+        def fake_compute(teams=None, team_ids=None):
+            items = (team_ids or []) + (teams or [])
             return StatsResponse(
                 teams=[
-                    TeamStats(team=team, team_id=idx + 1, players=[Player(name=f"{team}Player", id=idx + 1)])
-                    for idx, team in enumerate(teams)
+                    TeamStats(
+                        team=f"Team {item}" if isinstance(item, int) else item,
+                        team_id=item if isinstance(item, int) else idx + 1,
+                        players=[Player(name=f"Player{idx}", id=idx + 1)],
+                    )
+                    for idx, item in enumerate(items)
                 ]
             )
 

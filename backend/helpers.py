@@ -66,6 +66,7 @@ class Errors:
     INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
     INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
     INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
+    INVALID_TEAM_ID = ErrorDefinition("INVALID_TEAM_ID", "Team ID must be a non-negative integer")
     MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
     MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
     NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
@@ -77,33 +78,52 @@ class Errors:
     UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
 
 
-def prepare_sql_for_team_explore(team: str) -> str:
-    """Prepare SQL query to find team by name or tag with rating info.
+def build_explorer_query(team: str | None = None, team_id: int | None = None) -> str:
+    """Prepare SQL query to find team by name/tag or ID with rating info.
 
     Args:
-        team: Team name or tag to search for
+        team: Team name or tag to search for (mutually exclusive with team_id)
+        team_id: Team ID to search for (mutually exclusive with team)
 
     Returns:
         SQL query string with the team value embedded and properly escaped.
 
     Raises:
-        ValueError: If team name is invalid
+        ValueError: If neither or both parameters are provided, or if values are invalid
     """
-    if not team or not isinstance(team, str):
-        raise ValueError("Invalid team name")
+    if (team is None and team_id is None) or (team is not None and team_id is not None):
+        raise ValueError("Either 'team' or 'team_id' must be provided, but not both")
 
-    # Escape single quotes and backslashes for SQL
-    escaped_team = team.replace("\\", "\\\\").replace("'", "''")
+    if team_id is not None:
+        # ID-based query: direct lookup by team_id
+        if not isinstance(team_id, int) or team_id < 0:
+            raise ValueError("Invalid team_id: must be a non-negative integer")
 
-    sql = (
-        "SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
-        "FROM teams t "
-        "LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
-        f"WHERE t.name ILIKE '{escaped_team}' ESCAPE '\\' "
-        f"OR t.tag ILIKE '{escaped_team}' ESCAPE '\\' "
-        "ORDER BY tr.rating DESC "
-        "LIMIT 1"
-    )
+        sql = (
+            "SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
+            "FROM teams t "
+            "LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
+            f"WHERE t.team_id = {team_id} "
+            "LIMIT 1"
+        )
+    else:
+        # Name-based query: search by name or tag
+        if not team or not isinstance(team, str):
+            raise ValueError("Invalid team name")
+
+        # Escape single quotes and backslashes for SQL
+        escaped_team = team.replace("\\", "\\\\").replace("'", "''")
+
+        sql = (
+            "SELECT t.team_id, t.name, t.tag, tr.rating, tr.delta "
+            "FROM teams t "
+            "LEFT JOIN team_rating tr ON t.team_id = tr.team_id "
+            f"WHERE t.name ILIKE '{escaped_team}' ESCAPE '\\' "
+            f"OR t.tag ILIKE '{escaped_team}' ESCAPE '\\' "
+            "ORDER BY tr.rating DESC "
+            "LIMIT 1"
+        )
+
     return sql
 
 
