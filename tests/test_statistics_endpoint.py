@@ -142,6 +142,44 @@ def test_too_many_team_ids_returns_422():
     assert rv.status_code == 422
 
 
+def test_combined_teams_and_ids_exceeds_limit_returns_422():
+    """Test that combined count of teams and team_ids exceeding 10 returns 422.
+
+    This validates the edge case where neither parameter alone exceeds 10,
+    but combined they do. For example: 6 teams + 6 team_ids = 12 total.
+    """
+    app = create_app(test_config={})
+    client = app.test_client()
+
+    # 6 teams + 6 team_ids = 12 total (exceeds limit of 10)
+    teams_part = "&".join([f"team=T{i}" for i in range(6)])
+    ids_part = "&".join([f"team_id={i}" for i in range(100, 106)])
+    rv = client.get(f"/api/statistics?{teams_part}&{ids_part}")
+    assert rv.status_code == 422
+    data = rv.get_json()
+    assert data["code"] == "TOO_MANY_TEAMS"
+
+
+def test_combined_teams_and_ids_at_limit_returns_200(monkeypatch):
+    """Test that combined count of exactly 10 teams and team_ids returns 200.
+
+    This validates the edge case where combining teams and team_ids equals
+    exactly 10, which should be allowed.
+    """
+    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+
+    app = create_app(test_config={})
+    client = app.test_client()
+
+    # 5 teams + 5 team_ids = 10 total (at limit, should succeed)
+    teams_part = "&".join([f"team=T{i}" for i in range(5)])
+    ids_part = "&".join([f"team_id={i}" for i in range(100, 105)])
+    rv = client.get(f"/api/statistics?{teams_part}&{ids_part}")
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert len(data["teams"]) == 10
+
+
 def test_no_teams_returns_422():
     """Test that missing teams returns 422 with MISSING_TEAMS error code."""
     app = create_app(test_config={})
