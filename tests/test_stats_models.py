@@ -41,7 +41,7 @@ def test_compute_statistics_returns_model(monkeypatch):
         "backend.stats.get_players_by_team", lambda team_id: ([Player(name="Alpha_Player1", id=101)], [])
     )
     monkeypatch.setattr(
-        "backend.stats._fetch_team_stats", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
+        "backend.stats._fetch_team_info", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
     )
     monkeypatch.setattr("backend.stats.time.time", fake_time)
     # Mock the import inside compute_statistics by patching dota_bet_analyzer module

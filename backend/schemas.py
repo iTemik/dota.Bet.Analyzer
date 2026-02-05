@@ -235,7 +235,21 @@ class TeamStatisticsQuerySchema(Schema):
         validate=validate.Length(min=1, max=10),
         metadata={
             "description": (
-                "Team names to analyze (1-10 teams). " "Can be specified multiple times: `?team=Alpha&team=Beta`"
+                "Team names to analyze (1-10 teams combined with team_ids). "
+                "Can be specified multiple times: `?team=Alpha&team=Beta`. "
+                "Both team and team_id parameters can be used together; combined count must not exceed 10."
+            )
+        },
+    )
+    team_id = fields.List(
+        fields.Int(),
+        required=False,
+        validate=validate.Length(min=1, max=10),
+        metadata={
+            "description": (
+                "Team IDs to analyze (1-10 teams combined with team names). "
+                "Can be specified multiple times: `?team_id=123&team_id=456`. "
+                "Both team and team_id parameters can be used together; combined count must not exceed 10."
             )
         },
     )

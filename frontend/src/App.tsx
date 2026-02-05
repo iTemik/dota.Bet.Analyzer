@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { VERSION } from './version'
 import TeamAutocomplete from './components/TeamAutocomplete'
+import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
 const COLOR_POSITIVE = '#6b9d7a'
@@ -40,6 +40,10 @@ interface ProgressData {
 function App() {
   const [team1, setTeam1] = useState('')
   const [team2, setTeam2] = useState('')
+  const [team1Id, setTeam1Id] = useState<number | null>(null)
+  const [team2Id, setTeam2Id] = useState<number | null>(null)
+  const [team1SelectedName, setTeam1SelectedName] = useState<string>('')
+  const [team2SelectedName, setTeam2SelectedName] = useState<string>('')
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [summaryData, setSummaryData] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
@@ -96,8 +100,20 @@ function App() {
 
     try {
       const params = new URLSearchParams()
-      params.append('team', team1)
-      params.append('team', team2)
+
+      // For team1: Only send team_id if the user selected from the list (name matches selected name)
+      if (team1Id !== null && team1 === team1SelectedName) {
+        params.append('team_id', String(team1Id))
+      } else {
+        params.append('team', team1)
+      }
+
+      // For team2: Only send team_id if the user selected from the list (name matches selected name)
+      if (team2Id !== null && team2 === team2SelectedName) {
+        params.append('team_id', String(team2Id))
+      } else {
+        params.append('team', team2)
+      }
 
       const response = await fetch(`/api/statistics?${params.toString()}`)
 
@@ -414,7 +430,16 @@ function App() {
             <label htmlFor="team1">Team #1</label>
             <TeamAutocomplete
               value={team1}
-              onChange={setTeam1}
+              onChange={(value) => {
+                setTeam1(value)
+                // Mark that no explicit selection is active
+                // onSelect will set the selectedName if user picks from list
+                setTeam1SelectedName('')
+              }}
+              onSelect={(team) => {
+                setTeam1Id(team.team_id)
+                setTeam1SelectedName(team.name)
+              }}
               placeholder="Enter first team name"
               autoFocus
             />
@@ -424,7 +449,16 @@ function App() {
             <label htmlFor="team2">Team #2</label>
             <TeamAutocomplete
               value={team2}
-              onChange={setTeam2}
+              onChange={(value) => {
+                setTeam2(value)
+                // Mark that no explicit selection is active
+                // onSelect will set the selectedName if user picks from list
+                setTeam2SelectedName('')
+              }}
+              onSelect={(team) => {
+                setTeam2Id(team.team_id)
+                setTeam2SelectedName(team.name)
+              }}
               placeholder="Enter second team name"
             />
           </div>
