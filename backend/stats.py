@@ -383,37 +383,6 @@ def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]
     return stats_data, None
 
 
-def _validate_item(item: int | str, is_id_based: bool) -> tuple[bool, Optional[ApiError]]:
-    """Validate a single team item (ID or name).
-
-    Args:
-        item: Team ID (int) or team name (str) to validate
-        is_id_based: Whether validation is for team ID (True) or team name (False)
-
-    Returns:
-        Tuple of (is_valid, error) where:
-        - is_valid: True if valid, False if not
-        - error: ApiError instance if invalid, None if valid
-    """
-    if is_id_based:
-        if not isinstance(item, int) or item < 0:
-            return False, ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_NAME.code,
-                message="Team ID must be a non-negative integer",
-                details={"team_id": item},
-            )
-    else:
-        if not isinstance(item, str) or not item.strip():
-            return False, ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_NAME.code,
-                message=Errors.INVALID_TEAM_NAME.message,
-                details={"team": item},
-            )
-    return True, None
-
-
 def _create_team_stats(
     team_stats: TeamStats,
     players_statistics_task,

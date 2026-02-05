@@ -239,7 +239,6 @@ class TeamStatisticsQuerySchema(Schema):
             )
         },
     )
-    # TODO: Check if this is needed
     team_id = fields.List(
         fields.Int(),
         required=False,
