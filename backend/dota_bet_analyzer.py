@@ -96,6 +96,50 @@ def store_results(task_id: str, results_data: dict) -> None:
         logger.warning(f"Failed to store results for task {task_id}: {e}")
 
 
+def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response, int] | None]:
+    """Parse and validate team IDs from query arguments.
+
+    Args:
+        team_ids: List of team ID values from query parameters
+
+    Returns:
+        Tuple of (parsed_team_ids_int, error_response) where:
+        - parsed_team_ids_int is the list of validated integer team IDs
+        - error_response is an ApiError response tuple if validation failed, None otherwise
+    """
+    team_ids_int: list[int] = []
+    for tid in team_ids:
+        if tid is None or tid == "":
+            continue
+        if isinstance(tid, int):
+            team_ids_int.append(tid)
+            continue
+        if isinstance(tid, str):
+            tid_str = tid.strip()
+            if not tid_str:
+                continue
+            if not tid_str.isdigit():
+                return [], (
+                    ApiError.create_response(
+                        422,
+                        error=Errors.INVALID_REQUEST,
+                        details={"url": request.path, "invalid_team_id": tid},
+                    )
+                )
+            team_ids_int.append(int(tid_str))
+            continue
+        # Unsupported type for team_id
+        return [], (
+            ApiError.create_response(
+                422,
+                error=Errors.INVALID_REQUEST,
+                details={"url": request.path, "invalid_team_id": tid},
+            )
+        )
+
+    return team_ids_int, None
+
+
 @celery.task(bind=True)
 def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
     """Celery task to fetch match statistics for multiple players.
@@ -291,31 +335,9 @@ def statistics(args) -> tuple[Response, int]:
     try:
         # Get team IDs
         team_ids = args.get("team_id", []) if args else []
-        team_ids_int: list[int] = []
-        for tid in team_ids:
-            if tid is None or tid == "":
-                continue
-            if isinstance(tid, int):
-                team_ids_int.append(tid)
-                continue
-            if isinstance(tid, str):
-                tid_str = tid.strip()
-                if not tid_str:
-                    continue
-                if not tid_str.isdigit():
-                    return ApiError.create_response(
-                        422,
-                        error=Errors.INVALID_REQUEST,
-                        details={"url": request.path, "invalid_team_id": tid},
-                    )
-                team_ids_int.append(int(tid_str))
-                continue
-            # Unsupported type for team_id
-            return ApiError.create_response(
-                422,
-                error=Errors.INVALID_REQUEST,
-                details={"url": request.path, "invalid_team_id": tid},
-            )
+        team_ids_int, parse_error = _parse_team_ids_from_args(team_ids)
+        if parse_error:
+            return parse_error
 
         # Get team names
         teams = args.get("team", []) if args else []
