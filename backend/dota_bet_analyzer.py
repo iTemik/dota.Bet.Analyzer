@@ -291,7 +291,31 @@ def statistics(args) -> tuple[Response, int]:
     try:
         # Get team IDs
         team_ids = args.get("team_id", []) if args else []
-        team_ids_int: list[int] = [int(tid) if not isinstance(tid, int) else tid for tid in team_ids if tid]
+        team_ids_int: list[int] = []
+        for tid in team_ids:
+            if tid is None or tid == "":
+                continue
+            if isinstance(tid, int):
+                team_ids_int.append(tid)
+                continue
+            if isinstance(tid, str):
+                tid_str = tid.strip()
+                if not tid_str:
+                    continue
+                if not tid_str.isdigit():
+                    return ApiError.create_response(
+                        422,
+                        error=Errors.INVALID_REQUEST,
+                        details={"url": request.path, "invalid_team_id": tid},
+                    )
+                team_ids_int.append(int(tid_str))
+                continue
+            # Unsupported type for team_id
+            return ApiError.create_response(
+                422,
+                error=Errors.INVALID_REQUEST,
+                details={"url": request.path, "invalid_team_id": tid},
+            )
 
         # Get team names
         teams = args.get("team", []) if args else []
