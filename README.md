@@ -12,42 +12,213 @@ The web application provides analytic services and highlights about the Dota 2 t
 
 ---
 
+## 🚀 Quick Start
+
+Get the project running **from scratch**. Choose your platform:
+
+### Windows (PowerShell)
+
+```powershell
+# 1. Install prerequisites (if not already installed)
+# - Python 3.14: https://www.python.org/downloads/
+# - Node.js LTS: https://nodejs.org/
+# - Docker Desktop: https://www.docker.com/products/docker-desktop/
+
+# 2. Clone and navigate
+git clone <repository-url>
+cd dota.Bet.Analyzer
+
+# 3. Set execution policy (once per machine)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 4. Create virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# 5. Install dependencies
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+npm install
+
+# 6. Start Redis (in a new terminal)
+docker run -d --name redis-dota -p 6379:6379 redis:latest
+
+# 7. Run all services ⭐
+npm run dev
+```
+
+✅ Open browser to **http://localhost:5173**
+- Backend: http://localhost:5000
+- Frontend: http://localhost:5173
+
+---
+
+### Linux (Bash)
+
+```bash
+# 1. Install prerequisites
+# Linux: sudo apt install python3.14 nodejs docker.io
+
+# 2. Clone and navigate
+git clone <repository-url>
+cd dota.Bet.Analyzer
+
+# 3. Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 4. Install dependencies
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+npm install
+
+# 5. Start Redis (in a new terminal)
+docker run -d --name redis-dota -p 6379:6379 redis:latest
+
+# 6. Run all services ⭐
+npm run dev
+```
+
+✅ Open browser to **http://localhost:5173**
+- Backend: http://localhost:5000
+- Frontend: http://localhost:5173
+
+---
+
+### ✅ Verification Checklist
+
+After running the commands above:
+
+- [ ] **Backend** at http://localhost:5000 shows OpenAPI spec
+- [ ] **Frontend** at http://localhost:5173 displays the UI
+- [ ] **Terminal log shows** "ready to accept tasks" (Celery worker)
+- [ ] **No connection errors** for Redis
+- [ ] **Try it** → Enter two team names and click "Compare Teams"
+
+**❌ Something not working?** Jump to **[🆘 Troubleshooting](#-troubleshooting)** →
+
+---
+
+### 📖 Next Steps (After Quick Start)
+
+1. **Explore the UI** - Try searching for teams like "Liquid" or "Alliance"
+2. **Check the API** - Visit http://localhost:5000/api/swagger-ui to see all endpoints
+3. **Run the tests** - `npm test` to ensure everything works
+4. **Read the code** - Start with [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py) and [frontend/src/App.tsx](frontend/src/App.tsx)
+5. **Check git workflow** - See **[VERSIONING.md](VERSIONING.md)** for development practices
+
+---
+
+### 🎯 Common Commands (Quick Reference)
+
+Once your environment is set up, these are the commands you'll use most:
+
+| Task | Command |
+|------|---------|
+| **Start everything** | `npm run dev` |
+| **Run tests** | `npm test` |
+| **Start backend only** | `npm run backend` |
+| **Start frontend only** | `npm run frontend` |
+| **Activate Python venv** | `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (Linux) |
+| **Initialize databases** | `flask --app backend init-db` then `python scripts/init_d2ba_db.py` |
+| **View API docs** | Open http://localhost:5000/api/swagger-ui |
+| **Stop Redis** | `docker stop redis-dota && docker rm redis-dota` |
+
+---
+
+## 📚 Table of Contents
+
+- **🚀 [Quick Start](#-quick-start)** ← Start here!
+- **[Project Structure](#-project-structure-first-look)** - Understand the codebase layout
+- **[Common Commands](#-common-commands-quick-reference)** - Frequently used commands
+- **[Prerequisites](#-prerequisites)** - What you need to install
+- **[Setup](#-setup-venv--dependencies)** - Detailed setup instructions
+- **[Docker & Redis](#-docker--redis-setup-required-for-celery)** - Message broker setup
+- **[Running Services](#-starting-all-services-recommended)** - How to start the app
+- **[Testing](#-running-tests)** - Running the test suite
+- **[Backend](#-backend-flask--python)** - Backend documentation
+- **[Frontend](#-frontend-react--vite--typescript)** - Frontend documentation
+- **[Getting Help](#-getting-help)** - Where to find answers
+- **[Troubleshooting](#-troubleshooting)** - Fix common issues
+- **[Tips & Notes](#-notes--tips)** - Useful knowledge
+
+---
+
+## 📂 Project Structure (First Look)
+
+```
+dota.Bet.Analyzer/
+├── backend/                 # Flask API + Celery tasks
+│   ├── dota_bet_analyzer.py # Main app & routes
+│   ├── stats.py            # Statistics logic
+│   ├── pro_players.py      # Pro player management
+│   └── db.py               # Database initialization
+├── frontend/               # React + Vite + TypeScript UI
+│   ├── src/
+│   │   ├── App.tsx         # Main component
+│   │   └── components/     # React components
+│   └── vite.config.ts      # Build configuration
+├── scripts/                # Utility scripts
+│   ├── generate_schema.py  # Generate DB schema
+│   └── init_d2ba_db.py     # Initialize pro players DB
+├── tests/                  # Test suite
+│   ├── test_*.py           # Backend tests
+│   └── conftest.py         # Test configuration
+├── instance/               # Runtime data (git ignored)
+│   ├── opendota.sqlite     # Main database
+│   └── d2ba.sqlite         # Pro players/teams database
+├── package.json            # npm scripts & dependencies
+├── requirements.txt        # Python dependencies
+└── README.md              # You are here!
+```
+
+**Key files to explore:**
+- **Backend entry**: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py)
+- **Frontend entry**: [frontend/src/App.tsx](frontend/src/App.tsx)
+- **Tests config**: [tests/conftest.py](tests/conftest.py)
+
+---
+
 ## ✅ Prerequisites
 
-1. Install Git
-   - Windows: Install Git for Windows (https://git-scm.com/download/win) and use PowerShell or Git Bash.
-   - macOS / Linux: Install via package manager (e.g., `brew install git` or `sudo apt install git`).
+> **New to the project?** Jump to **[🚀 Quick Start](#-quick-start)** instead - it covers everything below!
 
-2. Install Python (3.14 recommended)
-   - Download from https://www.python.org/downloads/ or use your package manager.
-   - Verify: `python --version` (or `python3 --version`).
+### Required
 
-3. Install Node.js and npm
-   - Download from https://nodejs.org/ (LTS version recommended).
-   - Verify: `npm --version` and `node --version`.
+1. **Python 3.14** (or 3.11+)
+   - Download: https://www.python.org/downloads/
+   - Verify: `python --version`
 
-4. Install Docker (for running Redis)
-   - **Windows/macOS:** Download [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-     - After install, restart your computer
-     - Verify: `docker --version` in terminal
-   - **Linux:** `sudo apt install docker.io` and enable with `sudo systemctl start docker`
-   - **Alternative (no Docker):** Install Redis locally from https://redis.io/download
+2. **Node.js LTS**
+   - Download: https://nodejs.org/
+   - Verify: `npm --version` and `node --version`
 
-5. Install Visual Studio Code (optional but recommended)
-   - Download from https://code.visualstudio.com/
+3. **Docker Desktop** (for Redis)
+   - Download: https://www.docker.com/products/docker-desktop/
+   - Verify: `docker --version`
+   - Alternative: Install Redis locally (https://redis.io/download)
+
+4. **Git**
+   - Download: https://git-scm.com/download
+   - Verify: `git --version`
+
+### Optional
+
+5. **Visual Studio Code** (recommended for development)
+   - Download: https://code.visualstudio.com/
+   - Install extensions listed in **[🛠️ Recommended VS Code Extensions](#-recommended-vs-code-extensions)** section
 
 ---
 
 ## 🛠️ Recommended VS Code Extensions
 
-- **GitLens — Git supercharged** (eamodio.gitlens) ✅
-- **GitHub Copilot** (GitHub.copilot) ✅
-- **Python** (ms-python.python) ✅
-- **JSON Tools** (eriklynd.json-tools) or any **JSON formatter** ✅
-- **SQLite** (alexcvzz.vscode-sqlite) — view and edit SQLite DBs ✅
+- **GitLens — Git supercharged** (eamodio.gitlens) - Better Git visualization
+- **GitHub Copilot** (GitHub.copilot) - AI code assistant
+- **Python** (ms-python.python) - Python support and debugging
+- **JSON Tools** (eriklynd.json-tools) - JSON formatting
+- **SQLite** (alexcvzz.vscode-sqlite) - View and edit SQLite databases
 
-
-Tip: install the extensions above from the Extensions Marketplace in VS Code.
+> Tip: Open VS Code Extensions Marketplace (`Ctrl+Shift+X`) and search for extension names or IDs
 
 ---
 
@@ -76,7 +247,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-macOS / Linux:
+Linux:
 
 ```bash
 python -m venv .venv
@@ -98,10 +269,15 @@ pip install -r requirements.txt
 
 ### Quick Start (Docker)
 
-**Windows/macOS:**
+**Windows:**
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-2. Start Docker Desktop (or `sudo systemctl start docker` on Linux)
-3. Run Redis:
+2. Start Docker Desktop
+
+**Linux:**
+1. Install Docker: `sudo apt install docker.io`
+2. Start Docker: `sudo systemctl start docker`
+
+**Run Redis (both platforms):**
 ```bash
 docker run -d --name redis-dota -p 6379:6379 redis:latest
 ```
@@ -115,9 +291,9 @@ docker ps  # Should list the redis-dota container
 
 ### Python Virtual Environment Setup
 
-1. Open Command Palette: `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
+1. Open Command Palette: `Ctrl+Shift+P`
 2. Search for "Python: Select Interpreter"
-3. Choose `.\.venv\Scripts\python.exe` (Windows) or `.venv/bin/python` (macOS/Linux)
+3. Choose `.\.venv\Scripts\python.exe` (Windows) or `.venv/bin/python` (Linux)
 
 ### Recommended VS Code Settings
 
@@ -321,7 +497,7 @@ This launches:
 - **Celery Worker** → processes async tasks
 - Checks for **Redis** connection
 
-### Option 3: Bash/Shell (macOS/Linux)
+### Option 3: Bash/Shell (Linux)
 
 ```bash
 chmod +x start-dev.sh
@@ -563,6 +739,31 @@ Test categories:
 - **Polling Management**: 2 tests (results clearing, polling cancellation)
 
 For more details, see [frontend/README.md](frontend/README.md) and [frontend/TEST_GUIDE.md](frontend/TEST_GUIDE.md)
+
+---
+
+## 💬 Getting Help
+
+### For New Users
+1. **First time setup trouble?** → Go to **[🆘 Troubleshooting](#-troubleshooting)** section below
+2. **Lost in the code?** → Check **[📂 Project Structure](#-project-structure)** to find files
+3. **Don't know what to do next?** → See **[📖 Next Steps](#-next-steps-after-quick-start)** in Quick Start
+4. **Need to debug?** → Add print statements or use VS Code debugger (see **[🔧 VS Code Configuration](#-vs-code-configuration)**)
+
+### For Developers
+- **Test failures?** See **[🧪 Running Tests](#-running-tests)** section
+- **Database issues?** See **[🗂️ Database initialization](#-%EF%B8%8F-database-initialization)** section
+- **API questions?** Visit http://localhost:5000/api/swagger-ui (Swagger UI) when backend is running
+- **Code questions?** Check docstrings in source files or read [Design document](https://docs.google.com/document/d/1cZAYBXYHw53i2RaiGt1aULUnfeAEof5mljG1PHHO99Q/edit?usp=sharing)
+
+### Quick Reference
+| Problem | Solution |
+|---------|----------|
+| "Module not found" | Activate venv or use `npm` commands |
+| "Redis connection error" | Start Redis: `docker run -d -p 6379:6379 redis:latest` |
+| "Port already in use" | Change port or kill existing process |
+| "Tests failing" | Clear cache: `rm -rf __pycache__ .pytest_cache` |
+| "Stuck on loading" | Check browser console (F12) for errors |
 
 ---
 
