@@ -4,8 +4,10 @@ This module sets up logging to both console and file handlers with consistent
 formatting across the entire application.
 """
 
+import io
 import logging
 import os
+import sys
 
 
 def setup_logging(logger_name: str = __name__) -> logging.Logger:
@@ -34,13 +36,15 @@ def setup_logging(logger_name: str = __name__) -> logging.Logger:
     # Set logger level
     logger.setLevel(logging.DEBUG)
 
-    # Create console handler
-    console_handler = logging.StreamHandler()
+    # Create console handler with UTF-8 encoding
+    if sys.stdout.encoding != "utf-8":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
 
-    # Create file handler with absolute path
+    # Create file handler with UTF-8 encoding
     log_file_path = os.path.join(logs_dir, "dota2_bet_analyzer.log")
-    file_handler = logging.FileHandler(log_file_path)
+    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
 
     # Create formatter

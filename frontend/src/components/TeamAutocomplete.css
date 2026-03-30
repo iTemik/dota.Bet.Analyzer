@@ -142,12 +142,26 @@
     font-style: italic;
 }
 
+.option-last-match {
+    font-size: 0.8rem;
+    color: #999;
+    font-weight: 400;
+    margin-top: 2px;
+}
+
+.option-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
 .option-rating {
     font-size: 0.9rem;
     color: #999;
     font-weight: 500;
     white-space: nowrap;
-    flex-shrink: 0;
 }
 
 /* Empty state */

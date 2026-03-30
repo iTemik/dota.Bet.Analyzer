@@ -6,7 +6,7 @@ class TestTeamsSearch:
 
         Args:
             app: Flask app instance
-            teams: List of tuples containing (team_id, rating, name, tag, logo_url)
+            teams: List of tuples containing (team_id, rating, name, tag, logo_url, last_match_time)
         """
         with app.app_context():
             from backend.pro_players import get_d2ba_db
@@ -15,10 +15,12 @@ class TestTeamsSearch:
             cursor = db.cursor()
 
             for team in teams:
-                cursor.execute(
-                    "INSERT INTO teams (team_id, rating, name, tag, logo_url) VALUES (?, ?, ?, ?, ?)",
-                    team,
+                sql = (
+                    "INSERT INTO teams "
+                    "(team_id, rating, name, tag, logo_url, last_match_time) "
+                    "VALUES (?, ?, ?, ?, ?, ?)"
                 )
+                cursor.execute(sql, team)
             db.commit()
 
     def test_search_teams_missing_query(self, client):
@@ -51,7 +53,7 @@ class TestTeamsSearch:
     def test_search_teams_whitespace_only(self, client, app):
         """Test search with whitespace-only query (passes validation, returns no results)"""
         # Insert a team to ensure empty result is from query, not empty DB
-        test_teams = [(1, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        test_teams = [(1, 1500.0, "Team Test", "TT", "https://example.com/tt.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         response = client.get("/api/teams/search?q=%20%20")
@@ -65,11 +67,11 @@ class TestTeamsSearch:
         """Test successful team search with valid query"""
         # Insert sample teams into the test database
         test_teams = [
-            (1, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png"),
-            (2, 1600.0, "Team Secret", "Secret", "https://example.com/secret.png"),
-            (3, 1400.0, "Evil Geniuses", "EG", "https://example.com/eg.png"),
-            (4, 1550.0, "OG", "OG", "https://example.com/og.png"),
-            (5, 1650.0, "Team Spirit", "Spirit", "https://example.com/spirit.png"),
+            (1, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png", 1609459200),
+            (2, 1600.0, "Team Secret", "Secret", "https://example.com/secret.png", 1609545600),
+            (3, 1400.0, "Evil Geniuses", "EG", "https://example.com/eg.png", 1609632000),
+            (4, 1550.0, "OG", "OG", "https://example.com/og.png", 1609718400),
+            (5, 1650.0, "Team Spirit", "Spirit", "https://example.com/spirit.png", 1609804800),
         ]
         self._insert_teams(app, test_teams)
 
@@ -88,7 +90,7 @@ class TestTeamsSearch:
 
     def test_search_teams_case_insensitive(self, client, app):
         """Test that search is case-insensitive"""
-        test_teams = [(100, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png")]
+        test_teams = [(100, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Test with lowercase query
@@ -100,7 +102,7 @@ class TestTeamsSearch:
 
     def test_search_teams_by_tag(self, client, app):
         """Test searching teams by their tag"""
-        test_teams = [(200, 1400.0, "Evil Geniuses", "EG", "https://example.com/eg.png")]
+        test_teams = [(200, 1400.0, "Evil Geniuses", "EG", "https://example.com/eg.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Search by tag
@@ -114,9 +116,9 @@ class TestTeamsSearch:
     def test_search_teams_prioritization(self, client, app):
         """Test that teams starting with query are prioritized"""
         test_teams = [
-            (300, 1500.0, "Alliance", "Alliance", "https://example.com/alliance.png"),
-            (301, 1500.0, "Team Alliance", "TA", "https://example.com/ta.png"),
-            (302, 1500.0, "Super Alliance", "SA", "https://example.com/sa.png"),
+            (300, 1500.0, "Alliance", "Alliance", "https://example.com/alliance.png", 1609459200),
+            (301, 1500.0, "Team Alliance", "TA", "https://example.com/ta.png", 1609545600),
+            (302, 1500.0, "Super Alliance", "SA", "https://example.com/sa.png", 1609632000),
         ]
         self._insert_teams(app, test_teams)
 
@@ -134,7 +136,14 @@ class TestTeamsSearch:
         """Test that limit parameter works correctly"""
         # Insert multiple test teams
         test_teams = [
-            (400 + i, 1500.0, f"Team {i+1:02d}", f"T{i+1:02d}", f"https://example.com/t{i+1:02d}.png")
+            (
+                400 + i,
+                1500.0,
+                f"Team {i+1:02d}",
+                f"T{i+1:02d}",
+                f"https://example.com/t{i+1:02d}.png",
+                1609459200 + i * 86400,
+            )
             for i in range(15)
         ]
         self._insert_teams(app, test_teams)
@@ -153,7 +162,7 @@ class TestTeamsSearch:
 
     def test_search_teams_no_results(self, client, app):
         """Test search with query that matches no teams"""
-        test_teams = [(500, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png")]
+        test_teams = [(500, 1500.0, "Team Liquid", "Liquid", "https://example.com/liquid.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Search for something that doesn't exist
@@ -165,7 +174,7 @@ class TestTeamsSearch:
 
     def test_search_teams_limit_non_numeric(self, client, app):
         """Test limit parameter with non-numeric value"""
-        test_teams = [(600, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        test_teams = [(600, 1500.0, "Team Test", "TT", "https://example.com/tt.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Test with non-numeric limit
@@ -180,7 +189,7 @@ class TestTeamsSearch:
 
     def test_search_teams_limit_negative(self, client, app):
         """Test limit parameter with negative value"""
-        test_teams = [(700, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        test_teams = [(700, 1500.0, "Team Test", "TT", "https://example.com/tt.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Test with negative limit
@@ -195,7 +204,7 @@ class TestTeamsSearch:
 
     def test_search_teams_limit_zero(self, client, app):
         """Test limit parameter with zero value"""
-        test_teams = [(800, 1500.0, "Team Test", "TT", "https://example.com/tt.png")]
+        test_teams = [(800, 1500.0, "Team Test", "TT", "https://example.com/tt.png", 1609459200)]
         self._insert_teams(app, test_teams)
 
         # Test with zero limit
@@ -212,7 +221,14 @@ class TestTeamsSearch:
         """Test that limit exceeding max (50) is rejected with 422"""
         # Insert more than 50 teams
         test_teams = [
-            (900 + i, 1500.0, f"Team {i+1:03d}", f"T{i+1:03d}", f"https://example.com/t{i+1:03d}.png")
+            (
+                900 + i,
+                1500.0,
+                f"Team {i+1:03d}",
+                f"T{i+1:03d}",
+                f"https://example.com/t{i+1:03d}.png",
+                1609459200 + i * 86400,
+            )
             for i in range(60)
         ]
         self._insert_teams(app, test_teams)
@@ -226,3 +242,23 @@ class TestTeamsSearch:
         assert data["code"] == "VALIDATION_ERROR"
         assert "details" in data
         assert "errors" in data["details"]
+
+    def test_search_teams_returns_last_match_time(self, client, app):
+        """Test that search results include last_match_time field"""
+        test_teams = [(1000, 1500.0, "Team Test", "TT", "https://example.com/tt.png", 1609459200)]
+        self._insert_teams(app, test_teams)
+
+        response = client.get("/api/teams/search?q=Team")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) > 0
+        team = data[0]
+
+        # Verify all expected fields are present
+        assert "team_id" in team
+        assert "name" in team
+        assert "tag" in team
+        assert "logo_url" in team
+        assert "rating" in team
+        assert "last_match_time" in team
+        assert team["last_match_time"] == 1609459200

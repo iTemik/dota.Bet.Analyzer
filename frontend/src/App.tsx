@@ -37,6 +37,14 @@ interface ProgressData {
   timestamp: number
 }
 
+/**
+ * Team roaster (account lists) is collected indirectly:
+ *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
+ *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> get_players_by_team())
+ *    - Player accounts are extracted from team roster in database
+ *    - This is a background task (players_statistics_task).
+ *    - It's needed to poll progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
+ */
 function App() {
   const [team1, setTeam1] = useState('')
   const [team2, setTeam2] = useState('')
