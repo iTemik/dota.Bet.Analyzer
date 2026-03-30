@@ -1,9 +1,14 @@
 import os
 import shutil
+import sys
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Add root directory to Python path so backend and scripts modules can be found
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import backend
 from backend import create_app
