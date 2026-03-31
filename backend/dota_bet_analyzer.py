@@ -170,11 +170,11 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
             step_num += 1
             try:
                 # Fetch match data for this account
-                players_statistics = get_matches(account_id=account_id, days=days)
-                matches_stats.append(players_statistics)  # Append as a list per player
+                player_matches = get_matches(account_id=account_id, days=days)
+                matches_stats.append(player_matches)  # Append as a list per player
 
                 # Convert MatchStats objects to dicts for JSON serialization
-                stats_data = [stat.model_dump() for stat in players_statistics]
+                stats_data = [stat.model_dump() for stat in player_matches]
 
                 # TODO: rework, why do we need these results?
                 results.append(
@@ -430,6 +430,15 @@ def players_statistics(args) -> tuple[Response, int]:
     Initiates a background task to fetch and analyze match history for the specified players.
     The computation typically takes 10-20 seconds as it collects individual match statistics
     for each team player from the OpenDota API.
+
+    Account List Sources:
+        The account list can be populated in two ways:
+        1. **Direct Frontend Call**: Account IDs passed directly via query parameters
+           (`GET /api/statistics/players?account_id=123&account_id=456`)
+        2. **Indirect via Team Statistics**: Account IDs gathered from `compute_statistics()`
+           which fetches team data and calls `_create_team_stats()` -> `get_players_by_team()`
+           to extract player account IDs from team roster data
+           (`GET /api/statistics?team=Alliance` internally triggers player stats collection)
 
     Query Parameters:
         - `account_id`: List of player account IDs (1-10 players, required)
@@ -950,10 +959,13 @@ def search_teams(args):
         cursor = db.cursor()
 
         # Search teams by name or tag (case-insensitive)
-        # WHERE uses "contains" pattern; ORDER BY prioritizes "starts with" matches
+        # WHERE uses "contains" pattern; ORDER BY:
+        #   1. Relevance tier: name starts-with (0) > tag starts-with (1) > contains (2)
+        #   2. Within each tier: most recent last_match_time first
+        #   3. Alphabetical as final tiebreaker
         cursor.execute(
             """
-            SELECT team_id, name, tag, logo_url, rating
+            SELECT team_id, name, tag, logo_url, rating, last_match_time
             FROM teams
             WHERE
               LOWER(name) LIKE LOWER(?) OR
@@ -964,6 +976,7 @@ def search_teams(args):
                 WHEN LOWER(tag) LIKE LOWER(?) THEN 1
                 ELSE 2
               END,
+              COALESCE(last_match_time, 0) DESC,
               name
             LIMIT ?
             """,
@@ -983,6 +996,7 @@ def search_teams(args):
                 "tag": row[2],
                 "logo_url": row[3],
                 "rating": row[4],
+                "last_match_time": row[5],
             }
             for row in cursor.fetchall()
         ]

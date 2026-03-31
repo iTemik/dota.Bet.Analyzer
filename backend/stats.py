@@ -389,6 +389,10 @@ def _create_team_stats(
 ) -> TeamStats:
     """Populate TeamStats with player data and task initialization.
 
+    Gathers player account list from team roster and initiates background task
+    to fetch player match statistics. This is the main source of accounts
+    when team statistics are requested (indirect path).
+
     Args:
         team_stats: TeamStats instance with team info (empty player lists)
         players_statistics_task: Celery task for player statistics

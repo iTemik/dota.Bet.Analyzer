@@ -1,7 +1,11 @@
--- Schema for d2ba.sqlite - Dota 2 Bet Analyzer database
--- Pro players data from OpenDota API
+-- Migration: 20260327_000001_initial_schema.sql
+-- Description: Create initial d2ba database schema
+-- Created: 2026-03-27
+-- Status: Applied
+
 PRAGMA foreign_keys = ON;
 
+-- Pro players data from OpenDota API
 CREATE TABLE IF NOT EXISTS pro_players (
     account_id INTEGER PRIMARY KEY,
     steamid TEXT,

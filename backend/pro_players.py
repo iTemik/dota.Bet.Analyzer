@@ -3,7 +3,8 @@
 import os
 import sqlite3
 import time
-from typing import Any, Optional
+from collections.abc import Iterable, Mapping
+from typing import Any, Optional, cast
 
 import requests
 from flask import current_app, g
@@ -163,7 +164,45 @@ def sync_pro_players_on_startup(app):
         logger.error(f"Error syncing pro players on startup: {e}")
 
 
-def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] = None, team_tag: Optional[str] = None):
+def _extract_players_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[list[Player], list[Player]]:
+    """Extract Player objects from database rows.
+
+    Processes an iterable of dict-like objects and separates them into pro and other players.
+    Works with sqlite3.Row objects, dictionaries, or any Mapping
+
+    Args:
+        rows: Iterable of Mapping objects (e.g., sqlite3.Row, dict) with keys: account_id, name, is_pro
+
+    Returns:
+        Tuple of (pro_players, other_players) where:
+        - pro_players: List of Player objects where is_pro=1
+        - other_players: List of Player objects where is_pro is missing or != 1 (any non-1 value is treated as non-pro)
+    """
+    # Import here to avoid circular imports
+    from backend.stats import Player
+
+    pro_players: list[Player] = []
+    other_players: list[Player] = []
+    total_rows = 0
+
+    for row in rows:
+        total_rows += 1
+        if row["name"]:
+            player = Player(name=row["name"], id=row["account_id"])
+            if row["is_pro"] == 1:
+                pro_players.append(player)
+            else:
+                other_players.append(player)
+
+    logger.debug(
+        f"Extracted {len(pro_players)} pro players and {len(other_players)} " f"other players from {total_rows} rows"
+    )
+    return pro_players, other_players
+
+
+def get_players_by_team(
+    team_id: Optional[int] = None, team_name: Optional[str] = None, team_tag: Optional[str] = None
+) -> tuple[list[Player], list[Player]]:
     """Get Player objects from a team by team_id, team_name, or team_tag.
 
     Args:
@@ -179,9 +218,6 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
     Raises:
         ValueError: If no search criteria provided
     """
-    # Import here to avoid circular imports
-    from backend.stats import Player
-
     if not any([team_id, team_name, team_tag]):
         raise ValueError("At least one search criterion (team_id, team_name, or team_tag) must be provided")
 
@@ -210,24 +246,8 @@ def get_players_by_team(team_id: Optional[int] = None, team_name: Optional[str] 
 
         logger.debug(f"Executing query: {query} with params: {params}")
         cursor.execute(query, params)
-        rows = cursor.fetchall()
-        logger.debug(f"Query returned {len(rows)} rows")
-
-        # Separate players into two lists based on is_pro value
-        pro_players = []
-        other_players = []
-
-        for row in rows:
-            logger.debug(f"Processing row: {dict(row)}")
-            if row["name"]:
-                player = Player(name=row["name"], id=row["account_id"])
-                if row["is_pro"] == 1:
-                    pro_players.append(player)
-                else:
-                    other_players.append(player)
-
-        logger.debug(f"Returning {len(pro_players)} pro players and {len(other_players)} other players")
-        return pro_players, other_players
+        db_rows = cast(Iterable[Mapping[str, Any]], cursor.fetchall())
+        return _extract_players_from_rows(db_rows)
 
     except sqlite3.Error as e:
         # Log error but return empty lists
@@ -331,13 +351,14 @@ def store_teams(teams_data: list[dict[str, Any]]) -> int:
             cursor.execute(
                 """
                 INSERT INTO teams (
-                    team_id, rating, name, tag, logo_url
-                ) VALUES (?, ?, ?, ?, ?)
+                    team_id, rating, name, tag, logo_url, last_match_time
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(team_id) DO UPDATE SET
                     rating = excluded.rating,
                     name = excluded.name,
                     tag = excluded.tag,
-                    logo_url = excluded.logo_url
+                    logo_url = excluded.logo_url,
+                    last_match_time = excluded.last_match_time
                 """,
                 (
                     team.get("team_id"),
@@ -345,6 +366,7 @@ def store_teams(teams_data: list[dict[str, Any]]) -> int:
                     team.get("name"),
                     team.get("tag"),
                     team.get("logo_url"),
+                    team.get("last_match_time"),
                 ),
             )
             count += 1

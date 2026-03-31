@@ -7,6 +7,7 @@ interface Team {
   tag: string
   logo_url?: string
   rating?: number
+  last_match_time?: number
 }
 
 interface TeamAutocompleteProps {
@@ -21,6 +22,16 @@ interface TeamAutocompleteProps {
 const MIN_CHARS = 2
 const DEBOUNCE_MS = 300
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Convert UNIX timestamp to UTC date string
+ * @param unixTime - UNIX timestamp in seconds
+ * @returns UTC date string"
+ */
+const formatUTCDate = (unixTime: number): string => {
+  const date = new Date(unixTime * 1000)
+  return date.toUTCString().replace('GMT', 'UTC')
+}
 
 /**
  * TeamAutocomplete Component
@@ -99,9 +110,12 @@ export function TeamAutocomplete({
       }
 
       const data = await response.json()
-      setSuggestions(data)
-      setCachedResult(query, data)
-      setIsOpen(data.length > 0)
+      // Spread into a new array so we never mutate the parsed response.
+      // Ordering is handled by the backend (relevance tier first, then recency).
+      const sortedData = [...data]
+      setSuggestions(sortedData)
+      setCachedResult(query, sortedData)
+      setIsOpen(sortedData.length > 0)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch teams'
       setError(errorMsg)
@@ -245,10 +259,17 @@ export function TeamAutocomplete({
                   <div className="option-text">
                     <div className="option-name">{team.name}</div>
                     {team.tag && <div className="option-tag">{team.tag}</div>}
+                    {team.last_match_time && (
+                      <div className="option-last-match">
+                        {formatUTCDate(team.last_match_time)}
+                      </div>
+                    )}
                   </div>
-                  {team.rating !== undefined && team.rating !== null && (
-                    <div className="option-rating">{team.rating.toFixed(0)}</div>
-                  )}
+                  <div className="option-meta">
+                    {team.rating !== undefined && team.rating !== null && (
+                      <div className="option-rating">evo: {team.rating.toFixed(0)}</div>
+                    )}
+                  </div>
                 </div>
               </li>
             ))

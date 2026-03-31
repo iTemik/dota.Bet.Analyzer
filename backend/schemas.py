@@ -295,6 +295,7 @@ class TeamSchema(Schema):
     tag = fields.Str(allow_none=True, metadata={"description": "Team tag/abbreviation"})
     logo_url = fields.Str(allow_none=True, metadata={"description": "URL to team logo"})
     rating = fields.Float(allow_none=True, metadata={"description": "Team rating"})
+    last_match_time = fields.Int(allow_none=True, metadata={"description": "Unix timestamp of last match"})
 
 
 class TeamSearchQuerySchema(Schema):

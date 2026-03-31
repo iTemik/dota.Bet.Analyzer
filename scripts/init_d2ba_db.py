@@ -1,59 +1,64 @@
 #!/usr/bin/env python3
-"""Initialize d2ba.sqlite database for Dota 2 Bet Analyzer."""
+"""Initialize d2ba.sqlite database for Dota 2 Bet Analyzer.
 
-import os
-import sqlite3
+This script initializes the database and runs all pending migrations.
+Uses the migration runner in scripts/migrate.py for best practices.
+"""
+
+import argparse
+import logging
 import sys
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def init_d2ba_db(db_path=None):
-    """Initialize the d2ba.sqlite database.
+    """Initialize the d2ba.sqlite database and run migrations.
 
     Args:
         db_path: Path to the database file. If None, uses instance/d2ba.sqlite
+
+    Returns:
+        True if successful, False otherwise
     """
-    if db_path is None:
-        # Get the project root directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(script_dir)
-        instance_dir = os.path.join(project_root, "instance")
-        os.makedirs(instance_dir, exist_ok=True)
-        db_path = os.path.join(instance_dir, "d2ba.sqlite")
-
-    # Get the schema file path
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.join(os.path.dirname(script_dir), "backend")
-    schema_path = os.path.join(backend_dir, "d2ba_schema.sql")
-
-    if not os.path.exists(schema_path):
-        print(f"Error: Schema file not found at {schema_path}")
-        return False
-
     try:
-        # Connect to database
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # Import the migration runner at runtime
+        script_dir = Path(__file__).parent
+        script_dir_str = str(script_dir)
+        if script_dir_str not in sys.path:
+            sys.path.insert(0, script_dir_str)
+        from migrate import MigrationRunner
 
-        # Read and execute schema
-        with open(schema_path, encoding="utf8") as f:
-            schema = f.read()
-            cursor.executescript(schema)
+        runner = MigrationRunner(db_path=db_path)
 
-        conn.commit()
-        conn.close()
+        logger.info("Initializing d2ba database...")
+        success = runner.run_all_pending()
 
-        print(f"Successfully initialized d2ba database at: {db_path}")
-        return True
+        if success:
+            logger.info(f"Database initialized successfully at: {runner.db_path}")
+        else:
+            logger.error("Database initialization failed. Some migrations could not be applied.")
 
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-        return False
+        return success
+
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error initializing database: {e}")
         return False
 
 
 if __name__ == "__main__":
-    db_path = sys.argv[1] if len(sys.argv) > 1 else None
-    success = init_d2ba_db(db_path)
-    sys.exit(0 if success else 1)
+    parser = argparse.ArgumentParser(description="Initialize d2ba database")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="Path to database file (default: instance/d2ba.sqlite)",
+    )
+
+    args = parser.parse_args()
+    try:
+        success = init_d2ba_db(db_path=args.db)
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        sys.exit(1)
