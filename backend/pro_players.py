@@ -176,7 +176,7 @@ def _extract_players_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[list[
     Returns:
         Tuple of (pro_players, other_players) where:
         - pro_players: List of Player objects where is_pro=1
-        - other_players: List of Player objects where is_pro is missing or !=0
+        - other_players: List of Player objects where is_pro is missing or != 1 (any non-1 value is treated as non-pro)
     """
     # Import here to avoid circular imports
     from backend.stats import Player
