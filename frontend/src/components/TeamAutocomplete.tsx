@@ -26,7 +26,7 @@ const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 /**
  * Convert UNIX timestamp to UTC date string
  * @param unixTime - UNIX timestamp in seconds
- * @returns UTC date string in format "YYYY-MM-DD HH:mm:ss"
+ * @returns UTC date string"
  */
 const formatUTCDate = (unixTime: number): string => {
   const date = new Date(unixTime * 1000)

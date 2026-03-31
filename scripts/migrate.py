@@ -6,7 +6,6 @@ Features:
 - Tracks applied migrations in migration_history table
 - Executes migrations in order based on filename (YYYYMMDD_HHMMSS style)
 - Supports idempotent migrations
-- Rollback support for reverting migrations
 """
 
 import sqlite3
