@@ -36,10 +36,20 @@ def setup_logging(logger_name: str = __name__) -> logging.Logger:
     # Set logger level
     logger.setLevel(logging.DEBUG)
 
-    # Create console handler with UTF-8 encoding
-    if sys.stdout.encoding != "utf-8":
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Create console handler with UTF-8 encoding, without reassigning sys.stdout
+    stream = sys.stdout
+    try:
+        # Prefer reconfiguring the existing text stream if supported
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+        # Fallback: wrap the underlying buffer if available and encoding differs
+        elif getattr(stream, "encoding", None) != "utf-8" and hasattr(stream, "buffer"):
+            stream = io.TextIOWrapper(stream.buffer, encoding="utf-8")
+    except Exception:
+        # If anything goes wrong, fall back to the original stream unmodified
+        stream = sys.stdout
+
+    console_handler = logging.StreamHandler(stream)
     console_handler.setLevel(logging.DEBUG)
 
     # Create file handler with UTF-8 encoding
