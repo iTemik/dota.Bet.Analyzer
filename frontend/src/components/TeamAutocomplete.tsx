@@ -24,13 +24,13 @@ const DEBOUNCE_MS = 300
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 /**
- * Convert UNIX timestamp to UTC date string
+ * Convert UNIX timestamp to date-only string (YYYY-MM-DD)
  * @param unixTime - UNIX timestamp in seconds
- * @returns UTC date string"
+ * @returns Date string in YYYY-MM-DD format
  */
-const formatUTCDate = (unixTime: number): string => {
+const formatDateOnly = (unixTime: number): string => {
   const date = new Date(unixTime * 1000)
-  return date.toUTCString().replace('GMT', 'UTC')
+  return date.toISOString().split('T')[0]
 }
 
 /**
@@ -258,17 +258,15 @@ export function TeamAutocomplete({
                   )}
                   <div className="option-text">
                     <div className="option-name">{team.name}</div>
-                    {team.tag && <div className="option-tag">{team.tag}</div>}
-                    {team.last_match_time && (
-                      <div className="option-last-match">
-                        {formatUTCDate(team.last_match_time)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="option-meta">
-                    {team.rating !== undefined && team.rating !== null && (
-                      <div className="option-rating">evo: {team.rating.toFixed(0)}</div>
-                    )}
+                    <div className="option-meta-line">
+                      {team.tag && <span className="option-tag">{team.tag}</span>}
+                      {team.last_match_time && (
+                        <span className="option-last-match">{formatDateOnly(team.last_match_time)}</span>
+                      )}
+                      {team.rating !== undefined && team.rating !== null && (
+                        <span className="option-rating">evo: {team.rating.toFixed(0)}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </li>
