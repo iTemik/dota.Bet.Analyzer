@@ -38,7 +38,7 @@ interface ProgressData {
 }
 
 /**
- * Team roaster (account lists) is collected indirectly:
+ * Team roster (account lists) is collected indirectly:
  *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
  *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> get_players_by_team())
  *    - Player accounts are extracted from team roster in database
