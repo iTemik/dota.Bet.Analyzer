@@ -8,12 +8,15 @@ Features:
 - Supports idempotent migrations (duplicate column/object errors are silently skipped)
 """
 
+import logging
 import sqlite3
 import sys
 from pathlib import Path
 from typing import List
 
 _STATEMENT_PREVIEW_LEN = 80  # characters of a statement shown in log messages
+
+logger = logging.getLogger(__name__)
 
 
 class MigrationRunner:
@@ -33,6 +36,9 @@ class MigrationRunner:
             self.db_path = str(instance_dir / "d2ba.sqlite")
         else:
             self.db_path = db_path
+            # Ensure parent directory exists for custom db_path
+            db_path_obj = Path(db_path)
+            db_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
         script_dir = Path(__file__).parent
         project_root = script_dir.parent
@@ -140,7 +146,7 @@ class MigrationRunner:
                     error_msg = str(e).lower()
                     if "already exists" in error_msg or "duplicate column" in error_msg:
                         preview = statement[:_STATEMENT_PREVIEW_LEN].splitlines()[0]
-                        print(f"  ⓘ  Skipping (idempotent): {preview}")
+                        logger.info(f"Skipping (idempotent): {preview}")
                     else:
                         raise
 
@@ -155,7 +161,7 @@ class MigrationRunner:
             return True
 
         except Exception as e:
-            print(f"✗ Failed to apply {migration_path.name}: {e}")
+            logger.error(f"Failed to apply {migration_path.name}: {e}")
             if "conn" in locals():
                 conn.close()
             return False
@@ -169,27 +175,27 @@ class MigrationRunner:
         pending = self.get_pending_migrations()
 
         if not pending:
-            print("✓ Database is up to date. No pending migrations.")
+            logger.info("Database is up to date. No pending migrations.")
             return True
 
-        print(f"Found {len(pending)} pending migration(s):")
+        logger.info(f"Found {len(pending)} pending migration(s):")
         for migration_path in pending:
-            print(f"  → {migration_path.name}")
+            logger.info(f"  -> {migration_path.name}")
 
-        print("\nApplying migrations...")
+        logger.info("Applying migrations...")
         all_succeeded = True
 
         for migration_path in pending:
             success = self.run_migration(migration_path)
             if success:
-                print(f"✓ Applied {migration_path.name}")
+                logger.info(f"Applied {migration_path.name}")
             else:
                 all_succeeded = False
 
         if all_succeeded:
-            print(f"\n✓ Successfully applied {len(pending)} migration(s)")
+            logger.info(f"Successfully applied {len(pending)} migration(s)")
         else:
-            print("\n✗ Some migrations failed")
+            logger.warning("Some migrations failed")
 
         return all_succeeded
 
@@ -205,15 +211,15 @@ class MigrationRunner:
         all_migrations = sorted(self.migrations_dir.glob("*.sql"))
         applied_names = {m[0] for m in applied}
 
-        print("Migration Status:")
-        print("-" * 60)
+        logger.info("Migration Status:")
+        logger.info("-" * 60)
 
         for migration in sorted(all_migrations, key=lambda x: x.name):
             if migration.name in applied_names:
                 timestamp = next(a[1] for a in applied if a[0] == migration.name)
-                print(f"✓ {migration.name:<45} (applied at {timestamp})")
+                logger.info(f"[OK] {migration.name:<45} (applied at {timestamp})")
             else:
-                print(f"○ {migration.name:<45} (pending)")
+                logger.info(f"[PENDING] {migration.name:<45}")
 
         conn.close()
 
@@ -247,7 +253,7 @@ def main():
             sys.exit(0)
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
 

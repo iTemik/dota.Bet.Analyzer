@@ -6,8 +6,11 @@ Uses the migration runner in scripts/migrate.py for best practices.
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def init_d2ba_db(db_path=None):
@@ -29,18 +32,18 @@ def init_d2ba_db(db_path=None):
 
         runner = MigrationRunner(db_path=db_path)
 
-        print("Initializing d2ba database...")
+        logger.info("Initializing d2ba database...")
         success = runner.run_all_pending()
 
         if success:
-            print(f"\nDatabase initialized successfully at: {runner.db_path}")
+            logger.info(f"Database initialized successfully at: {runner.db_path}")
         else:
-            print("\nDatabase initialization failed. Some migrations could not be applied.")
+            logger.error("Database initialization failed. Some migrations could not be applied.")
 
         return success
 
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        logger.error(f"Error initializing database: {e}")
         return False
 
 
@@ -57,5 +60,5 @@ if __name__ == "__main__":
         success = init_d2ba_db(db_path=args.db)
         sys.exit(0 if success else 1)
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
