@@ -110,12 +110,9 @@ export function TeamAutocomplete({
       }
 
       const data = await response.json()
-      // Sort by last_match_time descending (newest first)
-      const sortedData = data.sort((a: Team, b: Team) => {
-        const aTime = a.last_match_time ?? 0
-        const bTime = b.last_match_time ?? 0
-        return bTime - aTime
-      })
+      // Spread into a new array so we never mutate the parsed response.
+      // Ordering is handled by the backend (relevance tier first, then recency).
+      const sortedData = [...data]
       setSuggestions(sortedData)
       setCachedResult(query, sortedData)
       setIsOpen(sortedData.length > 0)

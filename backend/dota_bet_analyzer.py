@@ -959,7 +959,10 @@ def search_teams(args):
         cursor = db.cursor()
 
         # Search teams by name or tag (case-insensitive)
-        # WHERE uses "contains" pattern; ORDER BY prioritizes "starts with" matches
+        # WHERE uses "contains" pattern; ORDER BY:
+        #   1. Relevance tier: name starts-with (0) > tag starts-with (1) > contains (2)
+        #   2. Within each tier: most recent last_match_time first
+        #   3. Alphabetical as final tiebreaker
         cursor.execute(
             """
             SELECT team_id, name, tag, logo_url, rating, last_match_time
@@ -973,6 +976,7 @@ def search_teams(args):
                 WHEN LOWER(tag) LIKE LOWER(?) THEN 1
                 ELSE 2
               END,
+              COALESCE(last_match_time, 0) DESC,
               name
             LIMIT ?
             """,
