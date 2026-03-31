@@ -249,7 +249,7 @@ class TestTeamsSearch:
         # They have distinct last_match_time values so the secondary sort is observable.
         test_teams = [
             (1100, 1500.0, "Team Alpha", "TA", "https://example.com/ta.png", 1609459200),  # oldest
-            (1101, 1500.0, "Team Beta", "TB", "https://example.com/tb.png", 1609718400),   # newest
+            (1101, 1500.0, "Team Beta", "TB", "https://example.com/tb.png", 1609718400),  # newest
             (1102, 1500.0, "Team Gamma", "TG", "https://example.com/tg.png", 1609545600),  # middle
         ]
         self._insert_teams(app, test_teams)
@@ -264,7 +264,7 @@ class TestTeamsSearch:
         assert len(our_teams) == 3
 
         # Within the same relevance tier the backend must order by last_match_time DESC
-        assert our_teams[0]["name"] == "Team Beta"   # newest: 1609718400
+        assert our_teams[0]["name"] == "Team Beta"  # newest: 1609718400
         assert our_teams[1]["name"] == "Team Gamma"  # middle: 1609545600
         assert our_teams[2]["name"] == "Team Alpha"  # oldest: 1609459200
 
