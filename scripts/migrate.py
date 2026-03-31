@@ -5,8 +5,7 @@ Database migration runner following best practices.
 Features:
 - Tracks applied migrations in migration_history table
 - Executes migrations in order based on filename (YYYYMMDD_HHMMSS style)
-- Supports idempotent migrations
-- Rollback support for reverting migrations
+- Supports idempotent migrations (duplicate column/object errors are silently skipped)
 """
 
 import sqlite3
@@ -15,8 +14,11 @@ from pathlib import Path
 from typing import List
 
 
+_STATEMENT_PREVIEW_LEN = 80  # characters of a statement shown in log messages
+
+
 class MigrationRunner:
-    """Runs database migrations with tracking and rollback support."""
+    """Runs database migrations with tracking support."""
 
     def __init__(self, db_path: str | None = None):
         """Initialize migration runner.
@@ -100,11 +102,17 @@ class MigrationRunner:
     def run_migration(self, migration_path: Path) -> bool:
         """Run a single migration.
 
+        Executes each SQL statement in the migration file individually so that
+        idempotency checks are applied per-statement and all statements are
+        attempted before the migration is recorded as applied.  If any
+        non-idempotent statement raises an error the migration is aborted and
+        NOT recorded.
+
         Args:
             migration_path: Path to migration SQL file
 
         Returns:
-            True if successful, False otherwise
+            True if all statements succeeded, False otherwise
         """
         try:
             conn = self.get_connection()
@@ -116,16 +124,28 @@ class MigrationRunner:
 
             cursor = conn.cursor()
 
-            # Execute migration (ignore "column already exists" errors for idempotency)
-            try:
-                cursor.executescript(sql)
-            except sqlite3.OperationalError as e:
-                if "already exists" in str(e).lower() or "duplicate column" in str(e).lower():
-                    print(f"  ⓘ  {migration_path.name}: Already applied (idempotent)")
-                else:
-                    raise
+            # Split into individual statements and execute each one separately.
+            # This ensures that a "duplicate column / already exists" error in
+            # one statement does not silently prevent the remaining statements
+            # from running, and that the migration is only recorded once every
+            # statement has been processed successfully.
+            #
+            # Assumption: migration files contain only DDL statements (CREATE,
+            # ALTER, CREATE INDEX, PRAGMA) and do not embed semicolons inside
+            # string literals or comments, so a simple split on ";" is safe.
+            statements = [s.strip() for s in sql.split(";") if s.strip()]
+            for statement in statements:
+                try:
+                    cursor.execute(statement)
+                except sqlite3.OperationalError as e:
+                    error_msg = str(e).lower()
+                    if "already exists" in error_msg or "duplicate column" in error_msg:
+                        preview = statement[:_STATEMENT_PREVIEW_LEN].splitlines()[0]
+                        print(f"  ⓘ  Skipping (idempotent): {preview}")
+                    else:
+                        raise
 
-            # Record migration as applied
+            # Record migration as applied only after all statements succeed
             cursor.execute(
                 "INSERT OR IGNORE INTO migration_history (migration_name, status) VALUES (?, 'applied')",
                 (migration_path.name,),
