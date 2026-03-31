@@ -4,9 +4,9 @@
 -- Dependencies: initial_schema
 -- Status: Applied
 
--- UP: Add last_match_time column if it doesn't exist
--- Using IF NOT EXISTS pattern for idempotency
+-- UP: Add last_match_time column; idempotency is handled by the migration runner
+-- The runner treats duplicate-column errors as a successful no-op when the column already exists.
 ALTER TABLE teams ADD COLUMN last_match_time INTEGER;
 
--- Note: This migration is idempotent. If the column already exists,
--- SQLite will raise an error which can be ignored by the migration runner.
+-- Note: This migration relies on the migration runner to ignore the
+-- "duplicate column name: last_match_time" error if the column already exists.
