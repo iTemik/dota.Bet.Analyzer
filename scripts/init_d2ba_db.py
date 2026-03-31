@@ -22,7 +22,9 @@ def init_d2ba_db(db_path=None):
     try:
         # Import the migration runner at runtime
         script_dir = Path(__file__).parent
-        sys.path.insert(0, str(script_dir))
+        script_dir_str = str(script_dir)
+        if script_dir_str not in sys.path:
+            sys.path.insert(0, script_dir_str)
         from migrate import MigrationRunner
 
         runner = MigrationRunner(db_path=db_path)
