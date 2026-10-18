@@ -586,6 +586,15 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - Returns team ratings, tags, IDs, and rating deltas
 - Initiates async tasks to fetch player match statistics
 - Supports GET requests with query parameters: `?team=Alpha&team=Beta` or `?team1=Alpha&team2=Beta`
+- `days` (default 20) sets the window for the roster and the player match history
+
+#### Roster Calculation
+- `players`: active roster, taken from the lineup of the team's latest league match in the `days` window
+- `other_players`: others who played for the team in the window (e.g. a playing coach, a backup); former players are excluded
+- `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `league_form`: league W/L in the window (pubs excluded)
+- Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
+- Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:
@@ -654,6 +663,7 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
+- **Roster**: Active players, stand-in count (fewer is better), league record and last league match
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches
