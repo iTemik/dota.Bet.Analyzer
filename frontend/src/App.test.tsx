@@ -601,6 +601,8 @@ describe('App Component', () => {
                         matches_avg: 9,
                         matches_median: 4,
                         win_percentage: 65.0,
+                        rating_win_percentage: 62.5,
+                        tournament_win_percentage: 71.25,
                         avg_rank: 3500,
                         bad_rank_players: 2,
                     },
@@ -616,6 +618,8 @@ describe('App Component', () => {
                         matches_avg: 5.6,
                         matches_median: 4,
                         win_percentage: 55.0,
+                        rating_win_percentage: 48.0,
+                        tournament_win_percentage: null,
                         avg_rank: 4000,
                         bad_rank_players: 3,
                     },
@@ -679,6 +683,14 @@ describe('App Component', () => {
                 expect(screen.getByText('28')).toBeInTheDocument()
                 expect(screen.getByText('15')).toBeInTheDocument()
             }, { timeout: 5000 })
+
+            // Pub and lobby win rates are shown separately; a missing lobby rate shows '-'
+            const pubRow = screen.getByText('Pub Win %').closest('tr') as HTMLElement
+            expect(pubRow).toHaveTextContent('62.5%')
+            expect(pubRow).toHaveTextContent('48.0%')
+            const lobbyRow = screen.getByText('Lobby Win %').closest('tr') as HTMLElement
+            expect(lobbyRow).toHaveTextContent('71.3%')
+            expect(lobbyRow.querySelectorAll('td')[2]).toHaveTextContent('-')
         }, 10000)
     })
 
@@ -1294,6 +1306,104 @@ describe('App Component', () => {
             })
 
             clearIntervalSpy.mockRestore()
+        })
+    })
+
+    describe('Players and Tournaments Rows', () => {
+        const baseTeam = {
+            error_code: null,
+            rating: 2500,
+            delta: 0,
+            tag: 'T',
+            task_id: null,
+            other_players: [],
+        }
+
+        const renderComparison = async (teams: unknown[]) => {
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                }
+                return Promise.resolve(createMockResponse({ teams }))
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+            await waitFor(() => expect(screen.getByText(/Team Comparison/i)).toBeInTheDocument())
+        }
+
+        const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
+
+        it('shows players from recent tournament matches with stand-ins in gray', async () => {
+            await renderComparison([
+                {
+                    ...baseTeam,
+                    team: 'Team A',
+                    team_id: 1,
+                    players: [
+                        { id: 11, name: 'Rain', is_standin: false },
+                        { id: 12, name: 'NewGuy', is_standin: true },
+                    ],
+                    roster_source: 'recent_matches',
+                    roster_last_match_time: 1792244896,
+                    standins_count: 1,
+                    league_form: { days: 20, matches: 10, wins: 7, losses: 3, win_percentage: 70, last_match_time: 1792244896 },
+                },
+                {
+                    ...baseTeam,
+                    team: 'Team B',
+                    team_id: 2,
+                    players: [{ id: 21, name: 'Kiseki', is_standin: false }],
+                    roster_source: 'recent_matches',
+                    roster_last_match_time: 1792244896,
+                    standins_count: 0,
+                    league_form: { days: 20, matches: 4, wins: 1, losses: 3, win_percentage: 25, last_match_time: 1792244896 },
+                },
+            ])
+
+            expect(screen.getByText('Players')).toBeInTheDocument()
+            expect(screen.getByText('Rain')).not.toHaveClass('standin')
+            const standin = screen.getByText('NewGuy')
+            expect(standin).toHaveClass('standin')
+            expect(standin).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
+            expect(screen.getAllByText(/from tournament match on/i)).toHaveLength(2)
+
+            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
+            expect(standinsCells[1]).toHaveTextContent('1')
+            expect(standinsCells[2]).toHaveTextContent('0')
+
+            const recordRow = rowOf('Tournaments Record (20d)')
+            expect(recordRow).toHaveTextContent('7-3 (70.0%)')
+            expect(recordRow).toHaveTextContent('1-3 (25.0%)')
+            expect(screen.getByText('Last Tournament Match')).toBeInTheDocument()
+        })
+
+        it('marks the players as unconfirmed when there was no recent tournament match', async () => {
+            await renderComparison([
+                {
+                    ...baseTeam,
+                    team: 'Team A',
+                    team_id: 1,
+                    players: [{ id: 11, name: 'OldMember' }],
+                    roster_source: 'pro_players',
+                    standins_count: 0,
+                    league_form: { days: 20, matches: 0, wins: 0, losses: 0, win_percentage: null, last_match_time: null },
+                },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
+            ])
+
+            expect(screen.getByText('OldMember')).toBeInTheDocument()
+            expect(screen.getByText('unconfirmed: no recent tournament match')).toBeInTheDocument()
+
+            // Stand-in count is unknown for unconfirmed players, and there is no tournament record
+            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
+            expect(standinsCells[1]).toHaveTextContent('-')
+            expect(standinsCells[2]).toHaveTextContent('-')
+            const recordCells = rowOf('Tournaments Record (20d)').querySelectorAll('td')
+            expect(recordCells[1]).toHaveTextContent('-')
+            expect(recordCells[2]).toHaveTextContent('-')
         })
     })
 })
