@@ -426,8 +426,8 @@ in the window (a playing coach, a backup). Former players are left out. `standin
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
-or even monthly when results are poor, so OpenDota's team assignments are often stale. Recent lineups and time on
-the team (stand-in ≤ 20 days, core ≥ 60 days) are the reliable signal.
+or even monthly when results are poor, so OpenDota's team assignments are often stale. The thresholds
+(stand-in ≤ 20 days, core ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
 
 **Sync Pro Players Data:**
 
