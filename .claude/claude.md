@@ -33,6 +33,12 @@
 - Reports: `test-results/*/junit.xml`
 - Prod and tests db are separated
 
+## Change Rules
+- UI change → add/update vitest tests in same PR; if tests would be large, ask user before skipping
+- New feature → add to README Core Features
+- DB: minimize new tables/columns; add only fields read by current code, extend later via migration
+- OpenDota: minimize requests; cache frequent/immutable responses (SQLite for finished matches, Redis TTL for volatile data)
+
 ## PowerShell Only
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
 
