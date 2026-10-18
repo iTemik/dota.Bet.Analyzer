@@ -26,8 +26,11 @@ logger = setup_logging(__name__)
 OPENDOTA_API = "https://api.opendota.com/api"
 TEAM_MATCHES_TTL = 2 * 60 * 60  # 2 hours
 TEAM_MATCHES_KEEP_DAYS = 365  # Older league matches are not stored
-ROSTER_DAYS = 20  # Same default as the match history window (`days`) used for player stats
-ROSTER_SERIES = 3
+ROSTER_DAYS = 20  # Activity window; same default as the match history window (`days`) used for player stats
+ACTIVE_SERIES_LIMIT = 6  # At most this many series inside the activity window are looked up
+STANDIN_MAX_TENURE_DAYS = 20  # Playing for the team this long or less = stand-in
+CORE_MIN_TENURE_DAYS = 60  # Playing for the team this long or more = core player
+DAY_SECONDS = 24 * 60 * 60
 SERIES_GAP_SECONDS = 8 * 60 * 60  # Games against the same opponent closer than this belong to one series
 RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 REQUEST_TIMEOUT = 30
@@ -85,19 +88,25 @@ class LeagueForm(BaseModel):
 
 
 class TeamRoster(BaseModel):
-    """Roster resolved from the team's recent league matches.
+    """Active roster resolved from the team's recent league matches.
 
     Attributes:
-        players: Lineup of the latest league match (empty when no recent league match was found)
-        standins: Players of the latest lineup who did not play the older checked series
+        players: Active roster: lineup of the latest league match in the activity window
+            (empty when there was no league match in the window or the API failed)
+        other_players: Other active players: played for the team in the window but not in the latest lineup
+            (a playing coach, a backup). Former players are not included.
+        standins_count: How many of `players` have played for the team for STANDIN_MAX_TENURE_DAYS or less
+        core_count: How many of `players` have played for the team for CORE_MIN_TENURE_DAYS or more
         series_checked: Number of distinct series whose lineup was looked at
-        last_match_id: Latest league match the lineup was taken from
+        last_match_id: Latest league match the roster was taken from
         last_match_time: Start time of that match (unix seconds)
-        league_form: League results over the roster period
+        league_form: League results over the activity window
     """
 
     players: List[Player] = Field(default_factory=list)
-    standins: List[Player] = Field(default_factory=list)
+    other_players: List[Player] = Field(default_factory=list)
+    standins_count: int = 0
+    core_count: int = 0
     series_checked: int = 0
     last_match_id: Optional[int] = None
     last_match_time: Optional[int] = None
@@ -393,58 +402,94 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
     )
 
 
-def resolve_roster(
-    team_id: int,
-    days: int = ROSTER_DAYS,
-    series: int = ROSTER_SERIES,
-    now: Optional[int] = None,
-) -> TeamRoster:
-    """Resolve the team's current lineup from its latest league matches.
+def _first_match_older_than(matches: list[TeamMatch], max_time: int) -> Optional[TeamMatch]:
+    """Return the newest match that started at or before `max_time` (matches are sorted newest first)."""
+    return next((m for m in matches if m.start_time <= max_time), None)
 
-    The roster is the lineup of the latest league match within `days`. The latest match of up to
-    `series` recent series is checked; players of the latest lineup who did not appear in any of the
-    older checked series are reported as possible stand-ins.
 
-    Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus at most `series`
-    lineup requests (cached forever).
+def _lineups(matches: Iterable[TeamMatch]) -> list[tuple[TeamMatch, list[int]]]:
+    """Look up the team's side of each match, skipping matches with an incomplete lineup."""
+    result = []
+    for match in matches:
+        accounts = _team_side_accounts(get_match_lineup(match.match_id), match.radiant)
+        if len(accounts) >= 5:
+            result.append((match, accounts))
+    return result
+
+
+def _other_active_players(window: list[tuple[TeamMatch, list[int]]], active_ids: set[int]) -> list[int]:
+    """Players of older window lineups who are not in the active roster, most appearances first."""
+    appearances: dict[int, int] = {}
+    for _, accounts in window[1:]:
+        for account_id in accounts:
+            if account_id not in active_ids:
+                appearances[account_id] = appearances.get(account_id, 0) + 1
+    return sorted(appearances, key=lambda a: -appearances[a])
+
+
+def _tenure_samples(matches: list[TeamMatch], looked_up: set[int], now: int) -> list[tuple[TeamMatch, list[int]]]:
+    """Lineups of the newest games older than the stand-in and core thresholds (not already looked up)."""
+    picked: list[TeamMatch] = []
+    for threshold in (STANDIN_MAX_TENURE_DAYS, CORE_MIN_TENURE_DAYS):
+        older = _first_match_older_than(matches, now - threshold * DAY_SECONDS)
+        if older is not None and older.match_id not in looked_up:
+            looked_up = looked_up | {older.match_id}
+            picked.append(older)
+    return _lineups(picked)
+
+
+def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = None) -> TeamRoster:
+    """Resolve the team's active roster and other active players from its league matches.
+
+    - Activity window: the last `days` days. The newest game of each series in the window is looked up
+      (at most ACTIVE_SERIES_LIMIT series).
+    - `players` is the lineup of the latest of those games. Players who played another series in the
+      window but not the latest one go to `other_players`.
+    - Time on the team is estimated from two extra lineups: the newest game older than
+      STANDIN_MAX_TENURE_DAYS and the newest game older than CORE_MIN_TENURE_DAYS. A roster player seen in
+      neither (nor in an older game of the window) has been on the team for STANDIN_MAX_TENURE_DAYS or less
+      and counts as a stand-in. When the team has no league game older than that, nobody is counted as a
+      stand-in because time on the team is unknown.
+
+    Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus at most
+    ACTIVE_SERIES_LIMIT + 2 lineup requests the first time; lineups are cached forever.
 
     Args:
         team_id: Team identifier
-        days: Only matches newer than this many days are used
-        series: Number of recent series to check
+        days: Activity window in days
         now: Current unix time (for tests)
 
     Returns:
-        TeamRoster; `players` is empty when there was no league match in the period or the API failed
+        TeamRoster; `players` is empty when there was no league match in the window or the API failed
     """
     now = now if now is not None else int(time.time())
     matches = get_team_league_matches(team_id, now=now)
     roster = TeamRoster(league_form=compute_league_form(matches, days, now=now))
 
-    min_time = now - days * 24 * 60 * 60
-    recent = [m for m in matches if m.start_time >= min_time]
-
-    lineups: list[list[int]] = []
-    latest: Optional[TeamMatch] = None
-    for match in _latest_match_per_series(recent, series):
-        accounts = _team_side_accounts(get_match_lineup(match.match_id), match.radiant)
-        if len(accounts) < 5:
-            continue
-        if latest is None:
-            latest = match
-        lineups.append(accounts)
-
-    if latest is None:
+    recent = [m for m in matches if m.start_time >= now - days * DAY_SECONDS]
+    window = _lineups(_latest_match_per_series(recent, ACTIVE_SERIES_LIMIT))
+    if not window:
         return roster
 
-    newest, older = lineups[0], lineups[1:]
-    older_accounts = {account_id for lineup in older for account_id in lineup}
-    standin_ids = [account_id for account_id in newest if older and account_id not in older_accounts]
+    latest, active = window[0]
+    others = _other_active_players(window, set(active))
+    samples = window + _tenure_samples(matches, {m.match_id for m, _ in window}, now)
 
-    names = _player_names(newest)
-    roster.players = _to_players(newest, names)
-    roster.standins = _to_players(standin_ids, names)
-    roster.series_checked = len(lineups)
+    first_seen: dict[int, int] = {}
+    for match, accounts in samples:
+        for account_id in accounts:
+            first_seen[account_id] = min(first_seen.get(account_id, match.start_time), match.start_time)
+
+    standin_limit = now - STANDIN_MAX_TENURE_DAYS * DAY_SECONDS
+    core_limit = now - CORE_MIN_TENURE_DAYS * DAY_SECONDS
+    tenure_known = any(match.start_time <= standin_limit for match, _ in samples)
+
+    names = _player_names([*active, *others])
+    roster.players = _to_players(active, names)
+    roster.other_players = _to_players(others, names)
+    roster.standins_count = sum(1 for a in active if tenure_known and first_seen[a] > standin_limit)
+    roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
+    roster.series_checked = len(window)
     roster.last_match_id = latest.match_id
     roster.last_match_time = latest.start_time
     return roster

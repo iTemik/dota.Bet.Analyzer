@@ -132,11 +132,13 @@ class TeamStats(BaseModel):
         rating: Team's Elo ranking
         delta: Recent rating change
         logo_url: URL to team's logo image
-        players: List of active team players
-        other_players: List of inactive/substitute players
+        players: Active roster; player statistics are calculated from it
+        other_players: Other active players (a playing coach, a backup) for supplementary hints.
+            Former players are not included when the roster comes from recent matches.
         roster_source: Where `players` came from: "recent_matches" (latest league lineup) or "pro_players"
             (OpenDota team membership, may be stale)
-        standins: Players of the latest lineup who did not play the team's previous series
+        standins_count: How many of `players` have played for the team for 20 days or less
+        core_count: How many of `players` have played for the team for 60 days or more
         roster_last_match_time: Start time of the league match the roster was taken from (unix seconds)
         league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
@@ -152,7 +154,8 @@ class TeamStats(BaseModel):
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     roster_source: Optional[str] = None
-    standins: List[Player] = Field(default_factory=list)
+    standins_count: int = 0
+    core_count: int = 0
     roster_last_match_time: Optional[int] = None
     league_form: Optional[LeagueForm] = None
     task_id: Optional[str] = None
@@ -440,12 +443,12 @@ def _create_team_stats(
     roster = _resolve_roster_safe(team_stats.team_id, days)
 
     if roster.players:
-        # Real lineup from the latest league match; OpenDota team members who didn't play it go to other_players
-        roster_ids = {player.id for player in roster.players}
+        # Active roster from the latest league match; former players are left out entirely
         team_stats.players = roster.players
-        team_stats.other_players = [p for p in [*pro_players, *other_players] if p.id not in roster_ids]
+        team_stats.other_players = roster.other_players
         team_stats.roster_source = "recent_matches"
-        team_stats.standins = roster.standins
+        team_stats.standins_count = roster.standins_count
+        team_stats.core_count = roster.core_count
         team_stats.roster_last_match_time = roster.last_match_time
     else:
         team_stats.players = pro_players

@@ -32,7 +32,8 @@ interface TeamData {
   other_players: Player[]
   players: Player[]
   roster_source?: 'recent_matches' | 'pro_players' | null
-  standins?: Player[]
+  standins_count?: number
+  core_count?: number
   roster_last_match_time?: number | null
   league_form?: LeagueForm | null
   tag: string
@@ -417,15 +418,13 @@ function App() {
 
   const renderRoster = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
-    const standinIds = new Set((team.standins ?? []).map((p) => p.id))
+    const standins = team.standins_count ?? 0
     return (
       <div className="roster">
         {team.players.map((p) => (
-          <div key={p.id}>
-            {p.name}
-            {standinIds.has(p.id) ? ' (stand-in?)' : ''}
-          </div>
+          <div key={p.id}>{p.name}</div>
         ))}
+        {standins > 0 && <div className="roster-source">{standins} stand-in{standins > 1 ? 's' : ''} (20 days or less on the team)</div>}
         <div className="roster-source">
           {team.roster_source === 'recent_matches'
             ? `from league match on ${formatDate(team.roster_last_match_time)}`

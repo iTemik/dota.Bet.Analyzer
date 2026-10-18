@@ -95,30 +95,62 @@ def test_roster_is_latest_lineup_on_team_side(ctx):
     assert [p.id for p in roster.players] == RADIANT_PLAYERS
     assert [p.name for p in roster.players][:3] == ["rincyq", "aik", "#103"]
     assert roster.last_match_id == 3
-    assert roster.standins == []
+    assert roster.other_players == []
+    assert roster.standins_count == 0  # no older league game, so time on the team is unknown
     assert roster.series_checked == 1
 
 
-def test_standin_flagged_when_missing_from_older_series(ctx):
+def test_players_others_standins_and_core_by_time_on_team(ctx):
+    """Latest lineup = players; other active players go to other_players; former players are dropped.
+
+    Time on the team: 999 first played 1 day ago (stand-in), 104 first played 25 days ago (neither),
+    101-103 already played 70 days ago (core).
+    """
     newest = [101, 102, 103, 104, 999]
     fake = FakeOpenDota(
         [
             _team_match(30, NOW - 1 * DAY, opponent=1),
             _team_match(20, NOW - 5 * DAY, opponent=2),
-            _team_match(10, NOW - 9 * DAY, opponent=3),
+            _team_match(10, NOW - 25 * DAY, opponent=3),
+            _team_match(5, NOW - 70 * DAY, opponent=4),
         ],
         {
             30: _explorer_rows(newest, DIRE_PLAYERS),
-            20: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
-            10: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
+            20: _explorer_rows([101, 102, 103, 104, 105], DIRE_PLAYERS),
+            10: _explorer_rows([101, 102, 103, 104, 105], DIRE_PLAYERS),
+            5: _explorer_rows([101, 102, 103, 401, 402], DIRE_PLAYERS),
         },
     )
     with patch("backend.rosters.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
     assert [p.id for p in roster.players] == newest
-    assert [p.id for p in roster.standins] == [999]
-    assert roster.series_checked == 3
+    assert [p.id for p in roster.other_players] == [105]  # active in the window; 401/402 are former players
+    assert roster.standins_count == 1
+    assert roster.core_count == 3
+    assert roster.series_checked == 2
+    assert sum(1 for url in fake.calls if url.endswith("/explorer")) == 4
+
+
+def test_new_player_between_thresholds_is_not_a_standin(ctx):
+    """A player who joined 30 days ago is neither a stand-in nor core."""
+    fake = FakeOpenDota(
+        [
+            _team_match(30, NOW - 1 * DAY, opponent=1),
+            _team_match(10, NOW - 30 * DAY, opponent=3),
+            _team_match(5, NOW - 70 * DAY, opponent=4),
+        ],
+        {
+            30: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
+            10: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
+            5: _explorer_rows([101, 102, 103, 104, 401], DIRE_PLAYERS),
+        },
+    )
+    with patch("backend.rosters.requests.get", side_effect=fake.get):
+        roster = resolve_roster(TEAM_ID, now=NOW)
+
+    assert roster.standins_count == 0
+    assert roster.core_count == 4
 
 
 def test_games_of_one_series_need_one_lineup_request(ctx):
@@ -231,7 +263,9 @@ def test_create_team_stats_uses_recent_lineup(ctx):
 
     roster = TeamRoster(
         players=[Player(id=1, name="a"), Player(id=2, name="b")],
-        standins=[Player(id=2, name="b")],
+        other_players=[Player(id=5, name="coach")],
+        standins_count=1,
+        core_count=1,
         last_match_time=NOW,
         league_form=LeagueForm(days=60, matches=3, wins=2, losses=1, win_percentage=66.7),
     )
@@ -247,8 +281,9 @@ def test_create_team_stats_uses_recent_lineup(ctx):
 
     assert stats.roster_source == "recent_matches"
     assert [p.id for p in stats.players] == [1, 2]
-    assert [p.id for p in stats.other_players] == [7]
-    assert [p.id for p in stats.standins] == [2]
+    assert [p.id for p in stats.other_players] == [5]  # former member 7 from pro_players is dropped
+    assert stats.standins_count == 1
+    assert stats.core_count == 1
     assert stats.league_form is not None and stats.league_form.wins == 2
     task.delay.assert_called_once()
     assert task.delay.call_args.kwargs["accounts"] == [1, 2]

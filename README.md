@@ -420,6 +420,9 @@ It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `m
 **Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
 (`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that
 period, the OpenDota team membership from `pro_players` is used and the UI marks the roster as unconfirmed.
+`players` is the active roster (stats are calculated from it); `other_players` holds other players who played for the team
+in the window (a playing coach, a backup). Former players are left out. `standins_count` counts roster players with
+20 days or less on the team, `core_count` those with 60 days or more.
 
 **Sync Pro Players Data:**
 
