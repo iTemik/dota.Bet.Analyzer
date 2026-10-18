@@ -424,6 +424,11 @@ period, the OpenDota team membership from `pro_players` is used and the UI marks
 in the window (a playing coach, a backup). Former players are left out. `standins_count` counts roster players with
 20 days or less on the team, `core_count` those with 60 days or more.
 
+*Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
+that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
+or even monthly when results are poor, so OpenDota's team assignments are often stale. Recent lineups and time on
+the team (stand-in ≤ 20 days, core ≥ 60 days) are the reliable signal.
+
 **Sync Pro Players Data:**
 
 Once the backend is running, sync the pro players database:
