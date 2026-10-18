@@ -397,11 +397,12 @@ def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]
     return stats_data, None
 
 
-def _resolve_roster_safe(team_id: Optional[int]) -> TeamRoster:
+def _resolve_roster_safe(team_id: Optional[int], days: int) -> TeamRoster:
     """Resolve the roster from recent league matches, never raising.
 
     Args:
         team_id: Team identifier
+        days: Roster window in days (same as the player match history window)
 
     Returns:
         TeamRoster (empty when team_id is missing or resolution failed)
@@ -409,7 +410,7 @@ def _resolve_roster_safe(team_id: Optional[int]) -> TeamRoster:
     if not team_id:
         return TeamRoster()
     try:
-        return resolve_roster(team_id)
+        return resolve_roster(team_id, days=days)
     except Exception as exc:
         logger.warning(f"Failed to resolve roster for team {team_id}: {exc}")
         return TeamRoster()
@@ -418,6 +419,7 @@ def _resolve_roster_safe(team_id: Optional[int]) -> TeamRoster:
 def _create_team_stats(
     team_stats: TeamStats,
     players_statistics_task,
+    days: int = 20,
 ) -> TeamStats:
     """Populate TeamStats with player data and task initialization.
 
@@ -429,12 +431,13 @@ def _create_team_stats(
     Args:
         team_stats: TeamStats instance with team info (empty player lists)
         players_statistics_task: Celery task for player statistics
+        days: Roster window and match history window in days
 
     Returns:
         TeamStats object with players and task_id populated
     """
     pro_players, other_players = get_players_by_team(team_id=team_stats.team_id)
-    roster = _resolve_roster_safe(team_stats.team_id)
+    roster = _resolve_roster_safe(team_stats.team_id, days)
 
     if roster.players:
         # Real lineup from the latest league match; OpenDota team members who didn't play it go to other_players
@@ -455,7 +458,7 @@ def _create_team_stats(
     if team_stats.players:
         account_ids = [player.id for player in team_stats.players]
         task_id = f"task_{team_stats.team_id}_{int(time.time())}"
-        players_statistics_task.delay(task_id=task_id, accounts=account_ids)
+        players_statistics_task.delay(task_id=task_id, accounts=account_ids, days=days)
 
     team_stats.task_id = task_id
 
@@ -466,6 +469,7 @@ def _process_single_team(
     team_str: str | None = None,
     team_id: int | None = None,
     players_statistics_task=None,
+    days: int = 20,
 ) -> TeamStats:
     """Process a single team item and return TeamStats with players populated.
 
@@ -486,6 +490,7 @@ def _process_single_team(
         return _create_team_stats(
             team_stats=team_stats,
             players_statistics_task=players_statistics_task,
+            days=days,
         )
 
     except Exception as exc:
@@ -505,6 +510,7 @@ def _process_single_team(
 def compute_statistics(
     teams: Optional[List[str]] = None,
     team_ids: Optional[List[int]] = None,
+    days: int = 20,
 ) -> StatsResponse:
     """Fetch and compute statistics for multiple Dota 2 teams.
 
@@ -517,6 +523,7 @@ def compute_statistics(
     Args:
         teams: List of team names or tags to fetch statistics for (optional)
         team_ids: List of team IDs to fetch statistics for (optional)
+        days: Window in days for the roster (recent league matches) and player match history
 
     Returns:
         StatsResponse containing a list of TeamStats objects. Each TeamStats may
@@ -552,12 +559,16 @@ def compute_statistics(
     # Process teams by name
     if teams:
         for team_str in teams:
-            result.append(_process_single_team(team_str=team_str, players_statistics_task=players_statistics_task))
+            result.append(
+                _process_single_team(team_str=team_str, players_statistics_task=players_statistics_task, days=days)
+            )
 
     # Process teams by ID
     if team_ids:
         for team_id in team_ids:
-            result.append(_process_single_team(team_id=team_id, players_statistics_task=players_statistics_task))
+            result.append(
+                _process_single_team(team_id=team_id, players_statistics_task=players_statistics_task, days=days)
+            )
 
     return StatsResponse(teams=result)
 

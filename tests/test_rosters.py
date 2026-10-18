@@ -270,3 +270,30 @@ def test_create_team_stats_falls_back_to_pro_players(ctx):
     assert [p.id for p in stats.players] == [7]
     assert stats.league_form is None
     assert TeamRoster().players == []
+
+
+def test_roster_window_follows_days_argument(ctx):
+    """A lineup older than the window is ignored; the default window is 20 days like the match history."""
+    fake = FakeOpenDota(
+        [_team_match(3, NOW - 30 * DAY, opponent=9)],
+        {3: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS)},
+    )
+    with patch("backend.rosters.requests.get", side_effect=fake.get):
+        assert resolve_roster(TEAM_ID, now=NOW).players == []
+        assert [p.id for p in resolve_roster(TEAM_ID, days=60, now=NOW).players] == RADIANT_PLAYERS
+
+
+def test_create_team_stats_passes_days_to_roster_and_task(ctx):
+    from backend.pro_players import Player
+    from backend.rosters import TeamRoster
+    from backend.stats import TeamStats, _create_team_stats
+
+    task = MagicMock()
+    with (
+        patch("backend.stats.resolve_roster", return_value=TeamRoster(players=[Player(id=1, name="a")])) as resolve,
+        patch("backend.stats.get_players_by_team", return_value=([], [])),
+    ):
+        _create_team_stats(TeamStats(team_id=TEAM_ID), task, days=45)
+
+    assert resolve.call_args.kwargs["days"] == 45
+    assert task.delay.call_args.kwargs["days"] == 45

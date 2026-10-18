@@ -146,7 +146,7 @@ describe('App Component', () => {
             await userEvent.click(button)
 
             await waitFor(() => {
-                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team=Nigma+Galaxy&team=Aurora')
+                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team=Nigma+Galaxy&team=Aurora&days=20')
             })
         })
 
@@ -523,7 +523,7 @@ describe('App Component', () => {
             let callCount = 0
             const mockFetch = vi.fn((url: string) => {
                 callCount++
-                if (url === '/api/statistics?team=Team+A&team=Team+B') {
+                if (url === '/api/statistics?team=Team+A&team=Team+B&days=20') {
                     return Promise.resolve({
                         ok: true,
                         json: () => Promise.resolve(mockStats),

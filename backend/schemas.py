@@ -229,6 +229,16 @@ class VersionSchema(Schema):
 class TeamStatisticsQuerySchema(Schema):
     """Query parameters for team statistics endpoint."""
 
+    days = fields.Int(
+        load_default=20,
+        validate=validate.Range(min=1, max=365),
+        metadata={
+            "description": (
+                "Window in days for the roster (latest league matches) and player match history (default: 20)"
+            )
+        },
+    )
+
     team = fields.List(
         fields.Str(),
         required=False,

@@ -417,7 +417,7 @@ python scripts/init_d2ba_db.py
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
 It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); re-run it after pulling to apply new migrations.
 
-**Rosters:** team statistics take the roster from the team's latest league match within 60 days
+**Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
 (`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that
 period, the OpenDota team membership from `pro_players` is used and the UI marks the roster as unconfirmed.
 

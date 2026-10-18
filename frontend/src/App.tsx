@@ -6,6 +6,8 @@ import { VERSION } from './version'
 // Color constants - defined in App.css as CSS variables
 const COLOR_POSITIVE = '#6b9d7a'
 const COLOR_NEGATIVE = '#9d6b6b'
+// Roster and match history window, sent to /api/statistics as `days` (same default as the backend)
+const STATS_DAYS = 20
 
 interface Player {
   name: string
@@ -135,6 +137,8 @@ function App() {
       } else {
         params.append('team', team2)
       }
+
+      params.append('days', String(STATS_DAYS))
 
       const response = await fetch(`/api/statistics?${params.toString()}`)
 
@@ -600,7 +604,7 @@ function App() {
                 <td>{renderRoster(statistics.teams?.[1])}</td>
               </tr>
               <tr>
-                <td className="row-label">League Record ({statistics.teams?.[0]?.league_form?.days ?? 60}d)</td>
+                <td className="row-label">League Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
                 <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
                   {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
                 </td>

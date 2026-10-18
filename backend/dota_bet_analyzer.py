@@ -441,6 +441,7 @@ def statistics(args) -> tuple[Response, int]:
         stats = compute_statistics(
             teams=teams if teams else None,
             team_ids=team_ids_int if team_ids_int else None,
+            days=args.get("days", 20),
         )
         return jsonify(stats.model_dump()), 200
 
