@@ -39,11 +39,9 @@ CREATE TABLE IF NOT EXISTS team_matches (
     match_id INTEGER NOT NULL,
     start_time INTEGER NOT NULL,
     leagueid INTEGER,
-    league_name TEXT,
     radiant BOOLEAN NOT NULL,
     radiant_win BOOLEAN,
     opposing_team_id INTEGER,
-    opposing_team_name TEXT,
     PRIMARY KEY (team_id, match_id)
 );
 

@@ -416,15 +416,17 @@ function App() {
     return new Date(unixTime * 1000).toLocaleDateString()
   }
 
+  // Stand-in count is only known when the roster comes from recent league matches
+  const getStandins = (team: TeamData | undefined): number | null =>
+    team?.roster_source === 'recent_matches' ? (team.standins_count ?? 0) : null
+
   const renderRoster = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
-    const standins = team.standins_count ?? 0
     return (
       <div className="roster">
         {team.players.map((p) => (
           <div key={p.id}>{p.name}</div>
         ))}
-        {standins > 0 && <div className="roster-source">{standins} stand-in{standins > 1 ? 's' : ''} (20 days or less on the team)</div>}
         <div className="roster-source">
           {team.roster_source === 'recent_matches'
             ? `from league match on ${formatDate(team.roster_last_match_time)}`
@@ -601,6 +603,15 @@ function App() {
                 <td className="row-label">Roster</td>
                 <td>{renderRoster(statistics.teams?.[0])}</td>
                 <td>{renderRoster(statistics.teams?.[1])}</td>
+              </tr>
+              <tr>
+                <td className="row-label">Stand-ins (≤20 days on team)</td>
+                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[0] }}>
+                  {getStandins(statistics.teams?.[0]) ?? '-'}
+                </td>
+                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[1] }}>
+                  {getStandins(statistics.teams?.[1]) ?? '-'}
+                </td>
               </tr>
               <tr>
                 <td className="row-label">League Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>

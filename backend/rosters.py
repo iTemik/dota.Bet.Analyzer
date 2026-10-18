@@ -43,21 +43,17 @@ class TeamMatch(BaseModel):
         match_id: Match identifier
         start_time: Match start time (unix seconds)
         leagueid: League identifier (0 or None for non-league matches)
-        league_name: League name
         radiant: Whether the team played on Radiant
         radiant_win: Whether Radiant won
         opposing_team_id: Opponent team identifier
-        opposing_team_name: Opponent team name
     """
 
     match_id: int
     start_time: int
     leagueid: Optional[int] = None
-    league_name: Optional[str] = None
     radiant: bool
     radiant_win: Optional[bool] = None
     opposing_team_id: Optional[int] = None
-    opposing_team_name: Optional[str] = None
 
     @property
     def won(self) -> Optional[bool]:
@@ -141,11 +137,9 @@ def _parse_team_match(row: dict[str, Any]) -> Optional[TeamMatch]:
             match_id=int(row["match_id"]),
             start_time=int(row["start_time"]),
             leagueid=row.get("leagueid"),
-            league_name=(row.get("league_name") or "").strip() or None,
             radiant=bool(row["radiant"]),
             radiant_win=row.get("radiant_win"),
             opposing_team_id=row.get("opposing_team_id"),
-            opposing_team_name=row.get("opposing_team_name"),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -159,8 +153,8 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
         if sync is None or now - int(sync["fetched_at"]) > TEAM_MATCHES_TTL:
             return None
         rows = db.execute(
-            "SELECT match_id, start_time, leagueid, league_name, radiant, radiant_win, opposing_team_id, "
-            "opposing_team_name FROM team_matches WHERE team_id = ? ORDER BY start_time DESC",
+            "SELECT match_id, start_time, leagueid, radiant, radiant_win, opposing_team_id "
+            "FROM team_matches WHERE team_id = ? ORDER BY start_time DESC",
             (team_id,),
         ).fetchall()
         return [
@@ -168,11 +162,9 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
                 match_id=row["match_id"],
                 start_time=row["start_time"],
                 leagueid=row["leagueid"],
-                league_name=row["league_name"],
                 radiant=bool(row["radiant"]),
                 radiant_win=None if row["radiant_win"] is None else bool(row["radiant_win"]),
                 opposing_team_id=row["opposing_team_id"],
-                opposing_team_name=row["opposing_team_name"],
             )
             for row in rows
         ]
@@ -187,19 +179,17 @@ def _store_team_matches(team_id: int, matches: Iterable[TeamMatch], now: int) ->
         db = get_d2ba_db()
         db.execute("DELETE FROM team_matches WHERE team_id = ?", (team_id,))
         db.executemany(
-            "INSERT OR REPLACE INTO team_matches (team_id, match_id, start_time, leagueid, league_name, radiant, "
-            "radiant_win, opposing_team_id, opposing_team_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO team_matches (team_id, match_id, start_time, leagueid, radiant, radiant_win, "
+            "opposing_team_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     team_id,
                     m.match_id,
                     m.start_time,
                     m.leagueid,
-                    m.league_name,
                     m.radiant,
                     m.radiant_win,
                     m.opposing_team_id,
-                    m.opposing_team_name,
                 )
                 for m in matches
             ],
