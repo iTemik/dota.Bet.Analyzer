@@ -21,10 +21,12 @@ class Player(BaseModel):
     Attributes:
         name: Player name
         id: Unique player ID
+        is_standin: Played for the team for 20 days or less (only set for rosters from recent matches)
     """
 
     name: str
     id: int
+    is_standin: bool = False
 
 
 def get_d2ba_db():

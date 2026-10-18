@@ -229,6 +229,16 @@ class VersionSchema(Schema):
 class TeamStatisticsQuerySchema(Schema):
     """Query parameters for team statistics endpoint."""
 
+    days = fields.Int(
+        load_default=20,
+        validate=validate.Range(min=1, max=365),
+        metadata={
+            "description": (
+                "Window in days for the roster (latest league matches) and player match history (default: 20)"
+            )
+        },
+    )
+
     team = fields.List(
         fields.Str(),
         required=False,
@@ -371,12 +381,18 @@ class MatchesSummarySchema(Schema):
 
     rating_matches = fields.Int(load_default=0, metadata={"description": "Number of rating matches (ranked games)"})
     tournament_matches = fields.Int(
-        load_default=0, metadata={"description": "Number of tournament matches (competitive games)"}
+        load_default=0, metadata={"description": "Number of lobby matches (league games and scrims)"}
     )
     other_matches = fields.Int(load_default=0, metadata={"description": "Number of other matches"})
     matches_median = fields.Float(allow_none=True, metadata={"description": "Median number of matches per player"})
     matches_avg = fields.Float(allow_none=True, metadata={"description": "Average number of matches per player"})
     win_percentage = fields.Float(allow_none=True, metadata={"description": "Team win percentage across all matches"})
+    rating_win_percentage = fields.Float(
+        allow_none=True, metadata={"description": "Win percentage in rating (pub) matches only"}
+    )
+    tournament_win_percentage = fields.Float(
+        allow_none=True, metadata={"description": "Win percentage in lobby matches (league games and scrims)"}
+    )
     avg_rank = fields.Float(allow_none=True, metadata={"description": "Average player rank"})
     bad_rank_players = fields.Int(allow_none=True, metadata={"description": "Number of players with rank > 1000"})
 

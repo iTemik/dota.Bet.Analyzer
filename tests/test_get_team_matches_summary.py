@@ -265,3 +265,27 @@ class TestGetTeamMatchesSummary:
         assert result.matches_avg == 6.0
         assert result.matches_median == 6.0
         assert result.win_percentage == pytest.approx(66.67, rel=1e-2)  # 4 wins out of 6 matches
+
+
+def test_win_percentage_split_by_match_type():
+    """Pub and lobby win rates are reported separately so pubs don't hide league form."""
+    matches = [
+        # Pubs: 1 win out of 3
+        MatchStats(match_id=1, player_slot=0, radiant_win=True, game_mode=22, lobby_type=7, hero_id=1),
+        MatchStats(match_id=2, player_slot=0, radiant_win=False, game_mode=22, lobby_type=7, hero_id=1),
+        MatchStats(match_id=3, player_slot=128, radiant_win=True, game_mode=22, lobby_type=7, hero_id=1),
+        # Lobby (Captains Mode): 1 win out of 1, won on Dire
+        MatchStats(match_id=4, player_slot=130, radiant_win=False, game_mode=2, lobby_type=1, hero_id=1),
+    ]
+
+    result = get_team_matches_summary([matches])
+
+    assert result.rating_win_percentage == pytest.approx(100 / 3)
+    assert result.tournament_win_percentage == 100.0
+    assert result.win_percentage == 50.0
+
+
+def test_split_win_percentage_none_without_matches():
+    result = get_team_matches_summary([[]])
+    assert result.rating_win_percentage is None
+    assert result.tournament_win_percentage is None

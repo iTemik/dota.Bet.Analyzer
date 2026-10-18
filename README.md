@@ -415,6 +415,19 @@ python scripts/init_d2ba_db.py
 ```
 
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
+It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); re-run it after pulling to apply new migrations.
+
+**Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
+(`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that
+period, the OpenDota team membership from `pro_players` is used and the UI marks the roster as unconfirmed.
+`players` is the active roster (stats are calculated from it); `other_players` holds other players who played for the team
+in the window (a playing coach, a backup). Former players are left out. `standins_count` counts roster players with
+20 days or less on the team, `core_count` those with 60 days or more.
+
+*Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
+that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
+or even monthly when results are poor, so OpenDota's team assignments are often stale. The thresholds
+(stand-in ≤ 20 days, core ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
 
 **Sync Pro Players Data:**
 
@@ -573,6 +586,15 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - Returns team ratings, tags, IDs, and rating deltas
 - Initiates async tasks to fetch player match statistics
 - Supports GET requests with query parameters: `?team=Alpha&team=Beta` or `?team1=Alpha&team2=Beta`
+- `days` (default 20) sets the window for the roster and the player match history
+
+#### Roster Calculation
+- `players`: active roster, taken from the lineup of the team's latest league match in the `days` window
+- `other_players`: others who played for the team in the window (e.g. a playing coach, a backup); former players are excluded
+- `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `league_form`: league W/L in the window (pubs excluded)
+- Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
+- Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:
@@ -641,6 +663,7 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
+- **Roster**: Active players, stand-in count (fewer is better), league record and last league match
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches

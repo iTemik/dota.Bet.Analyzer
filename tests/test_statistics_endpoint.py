@@ -93,7 +93,7 @@ def test_get_statistics_numbered_params(monkeypatch):
 
 def test_get_trims_and_filters_teams(monkeypatch):
     # Whitespace should be trimmed
-    def fake_compute(teams=None, team_ids=None):
+    def fake_compute(teams=None, team_ids=None, days=20):
         from backend.stats import Player, StatsResponse, TeamStats
 
         items = team_ids if team_ids else (teams or [])
@@ -216,7 +216,7 @@ def test_response_shape_contains_expected_fields(monkeypatch):
 def test_compute_statistics_exception_returns_500(monkeypatch):
     """Test that unexpected exceptions in compute_statistics return 500 with proper error structure."""
 
-    def fake_compute_raises(teams=None, team_ids=None):
+    def fake_compute_raises(teams=None, team_ids=None, days=20):
         raise RuntimeError("Database connection failed")
 
     monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
@@ -241,7 +241,7 @@ def test_compute_statistics_exception_returns_500(monkeypatch):
 def test_compute_statistics_value_error_returns_400(monkeypatch):
     """Test that ValueError in compute_statistics returns 400."""
 
-    def fake_compute_raises(teams=None, team_ids=None):
+    def fake_compute_raises(teams=None, team_ids=None, days=20):
         raise ValueError("Invalid parameter")
 
     monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
@@ -259,3 +259,22 @@ def test_compute_statistics_value_error_returns_400(monkeypatch):
     assert "message" in data
     assert data["status"] == 400
     assert data["code"] == "INVALID_REQUEST"
+
+
+def test_days_defaults_to_20_and_is_forwarded(monkeypatch):
+    """The roster/match-history window comes from `days` (default 20) and reaches compute_statistics."""
+    from backend.stats import StatsResponse
+
+    seen = []
+
+    def fake_compute(teams=None, team_ids=None, days=20):
+        seen.append(days)
+        return StatsResponse(teams=[])
+
+    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
+    client = create_app(test_config={}).test_client()
+
+    assert client.get("/api/statistics?team=A").status_code == 200
+    assert client.get("/api/statistics?team=A&days=45").status_code == 200
+    assert client.get("/api/statistics?team=A&days=0").status_code == 422
+    assert seen == [20, 45]
