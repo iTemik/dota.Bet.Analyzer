@@ -31,6 +31,7 @@ from backend.schemas import (
 )
 from backend.stats import (
     ApiError,
+    MatchStats,
     compute_statistics,
     get_matches,
     get_rank,
@@ -94,6 +95,84 @@ def store_results(task_id: str, results_data: dict) -> None:
         logger.debug(f"Results stored for task {task_id}")
     except Exception as e:
         logger.warning(f"Failed to store results for task {task_id}: {e}")
+
+
+PLAYER_MATCHES_CACHE_TTL = 60 * 60  # 1 hour
+PLAYER_RANK_CACHE_TTL = 24 * 60 * 60  # 1 day
+
+
+def _cache_get(key: str) -> object | None:
+    """Read a JSON value from the Redis cache (None if missing or Redis is unavailable).
+
+    Args:
+        key: Cache key
+
+    Returns:
+        Decoded JSON value or None
+    """
+    try:
+        raw = redis_client.get(key)
+        if isinstance(raw, (bytes, str)):
+            value: object = json.loads(raw)
+            return value
+    except Exception as e:
+        logger.debug(f"Cache read failed for {key}: {e}")
+    return None
+
+
+def _cache_set(key: str, ttl: int, value: object) -> None:
+    """Write a JSON value to the Redis cache, ignoring errors.
+
+    Args:
+        key: Cache key
+        ttl: Time to live in seconds
+        value: JSON-serializable value
+    """
+    try:
+        redis_client.setex(key, ttl, json.dumps(value))
+    except Exception as e:
+        logger.debug(f"Cache write failed for {key}: {e}")
+
+
+def get_matches_cached(account_id: int, days: int) -> list[MatchStats]:
+    """Fetch player matches, cached in Redis for PLAYER_MATCHES_CACHE_TTL.
+
+    Args:
+        account_id: Player account ID
+        days: Number of days of match history
+
+    Returns:
+        List of MatchStats
+    """
+    key = f"opendota:matches:{account_id}:{days}"
+    cached = _cache_get(key)
+    if isinstance(cached, list):
+        try:
+            return [MatchStats(**item) for item in cached]
+        except Exception as e:
+            logger.debug(f"Ignoring malformed cached matches for {account_id}: {e}")
+    matches = get_matches(account_id=account_id, days=days)
+    _cache_set(key, PLAYER_MATCHES_CACHE_TTL, [m.model_dump() for m in matches])
+    return matches
+
+
+def get_rank_cached(account_id: int) -> int | None:
+    """Fetch player leaderboard rank, cached in Redis for PLAYER_RANK_CACHE_TTL.
+
+    Args:
+        account_id: Player account ID
+
+    Returns:
+        Leaderboard rank or None
+    """
+    key = f"opendota:rank:{account_id}"
+    cached = _cache_get(key)
+    if isinstance(cached, dict) and "rank" in cached:
+        rank = cached["rank"]
+        return rank if isinstance(rank, int) else None
+    rank = get_rank(account_id)
+    _cache_set(key, PLAYER_RANK_CACHE_TTL, {"rank": rank})
+    return rank
 
 
 def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response, int] | None]:
@@ -170,7 +249,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
             step_num += 1
             try:
                 # Fetch match data for this account
-                player_matches = get_matches(account_id=account_id, days=days)
+                player_matches = get_matches_cached(account_id=account_id, days=days)
                 matches_stats.append(player_matches)  # Append as a list per player
 
                 # Convert MatchStats objects to dicts for JSON serialization
@@ -193,7 +272,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                     {"account_id": account_id, "match_count": len(stats_data)},
                 )
 
-                player_rank = get_rank(account_id)
+                player_rank = get_rank_cached(account_id)
                 if player_rank is not None:
                     players_with_rank += 1
                     players_avg_rank += player_rank

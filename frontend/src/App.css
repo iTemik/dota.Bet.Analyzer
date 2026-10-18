@@ -220,3 +220,14 @@ pre {
 .collapsible-content.expanded {
   max-height: 5000px;
 }
+
+.roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.roster-source {
+  font-size: 0.8em;
+  opacity: 0.7;
+}

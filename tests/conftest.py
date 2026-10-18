@@ -27,6 +27,21 @@ def reset_app_singleton():
     backend._app = None
 
 
+@pytest.fixture(autouse=True)
+def no_roster_requests(request):
+    """Keep team statistics tests offline: roster resolution returns no recent lineup by default.
+
+    Tests of backend.rosters itself are not patched.
+    """
+    if request.module.__name__.endswith("test_rosters"):
+        yield None
+        return
+    from backend.rosters import TeamRoster
+
+    with patch("backend.stats.resolve_roster", return_value=TeamRoster()) as mock_resolve:
+        yield mock_resolve
+
+
 @pytest.fixture
 def app():
     """Create application for testing with isolated test database.

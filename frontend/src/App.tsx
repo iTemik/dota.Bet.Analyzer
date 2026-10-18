@@ -12,6 +12,15 @@ interface Player {
   id: number
 }
 
+interface LeagueForm {
+  days: number
+  matches: number
+  wins: number
+  losses: number
+  win_percentage: number | null
+  last_match_time: number | null
+}
+
 interface TeamData {
   error_code: null | string
   rating: null | number
@@ -20,6 +29,10 @@ interface TeamData {
   task_id?: string | null
   other_players: Player[]
   players: Player[]
+  roster_source?: 'recent_matches' | 'pro_players' | null
+  standins?: Player[]
+  roster_last_match_time?: number | null
+  league_form?: LeagueForm | null
   tag: string
   team: string
   team_id: number
@@ -393,6 +406,36 @@ function App() {
     }
   }
 
+  const formatDate = (unixTime: number | null | undefined): string => {
+    if (!unixTime) return '-'
+    return new Date(unixTime * 1000).toLocaleDateString()
+  }
+
+  const renderRoster = (team: TeamData | undefined) => {
+    if (!team || !team.players?.length) return '-'
+    const standinIds = new Set((team.standins ?? []).map((p) => p.id))
+    return (
+      <div className="roster">
+        {team.players.map((p) => (
+          <div key={p.id}>
+            {p.name}
+            {standinIds.has(p.id) ? ' (stand-in?)' : ''}
+          </div>
+        ))}
+        <div className="roster-source">
+          {team.roster_source === 'recent_matches'
+            ? `from league match on ${formatDate(team.roster_last_match_time)}`
+            : 'unconfirmed: no recent league match'}
+        </div>
+      </div>
+    )
+  }
+
+  const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
+    if (!form || !form.matches) return '-'
+    return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
+  }
+
   const getSummaryForTeam = (taskId: string | null | undefined) => {
     if (!taskId || !summaryData) {
       return null
@@ -551,6 +594,25 @@ function App() {
                   {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
                 </td>
               </tr>
+              <tr>
+                <td className="row-label">Roster</td>
+                <td>{renderRoster(statistics.teams?.[0])}</td>
+                <td>{renderRoster(statistics.teams?.[1])}</td>
+              </tr>
+              <tr>
+                <td className="row-label">League Record ({statistics.teams?.[0]?.league_form?.days ?? 60}d)</td>
+                <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
+                  {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
+                </td>
+                <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[1] }}>
+                  {formatLeagueRecord(statistics.teams?.[1]?.league_form)}
+                </td>
+              </tr>
+              <tr>
+                <td className="row-label">Last League Match</td>
+                <td>{formatDate(statistics.teams?.[0]?.league_form?.last_match_time)}</td>
+                <td>{formatDate(statistics.teams?.[1]?.league_form?.last_match_time)}</td>
+              </tr>
               {summaryData && (() => {
                 const team0Summary = getSummaryForTeam(statistics.teams?.[0]?.task_id)
                 const team1Summary = getSummaryForTeam(statistics.teams?.[1]?.task_id)
@@ -566,7 +628,7 @@ function App() {
                       </td>
                     </tr>
                     <tr>
-                      <td className="row-label">Tournament Matches</td>
+                      <td className="row-label">Lobby Matches (league + scrims)</td>
                       <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
                         {String(team0Summary?.tournament_matches ?? '-')}
                       </td>
@@ -575,12 +637,21 @@ function App() {
                       </td>
                     </tr>
                     <tr>
-                      <td className="row-label">Win Percentage</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.win_percentage, team1Summary?.win_percentage)[0] }}>
-                        {team0Summary?.win_percentage ? (team0Summary.win_percentage as number).toFixed(1) + '%' : '-'}
+                      <td className="row-label">Pub Win %</td>
+                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[0] }}>
+                        {typeof team0Summary?.rating_win_percentage === 'number' ? team0Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
                       </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.win_percentage, team1Summary?.win_percentage)[1] }}>
-                        {team1Summary?.win_percentage ? (team1Summary.win_percentage as number).toFixed(1) + '%' : '-'}
+                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[1] }}>
+                        {typeof team1Summary?.rating_win_percentage === 'number' ? team1Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="row-label">Lobby Win %</td>
+                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[0] }}>
+                        {typeof team0Summary?.tournament_win_percentage === 'number' ? team0Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
+                      </td>
+                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[1] }}>
+                        {typeof team1Summary?.tournament_win_percentage === 'number' ? team1Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
                       </td>
                     </tr>
                     <tr>

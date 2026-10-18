@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from backend.helpers import ErrorDefinition, Errors
 from backend.logging_config import setup_logging
 from backend.pro_players import Player, get_players_by_team
+from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
 LOBBY_TYPE_RATING = [0, 4, 5, 6, 7, 9, 22]
 LOBBY_TYPE_TOURNAMENT = [1, 2]
@@ -133,6 +134,11 @@ class TeamStats(BaseModel):
         logo_url: URL to team's logo image
         players: List of active team players
         other_players: List of inactive/substitute players
+        roster_source: Where `players` came from: "recent_matches" (latest league lineup) or "pro_players"
+            (OpenDota team membership, may be stale)
+        standins: Players of the latest lineup who did not play the team's previous series
+        roster_last_match_time: Start time of the league match the roster was taken from (unix seconds)
+        league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
         error: Error information if team data fetch failed
     """
@@ -145,6 +151,10 @@ class TeamStats(BaseModel):
     logo_url: Optional[str] = None
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
+    roster_source: Optional[str] = None
+    standins: List[Player] = Field(default_factory=list)
+    roster_last_match_time: Optional[int] = None
+    league_form: Optional[LeagueForm] = None
     task_id: Optional[str] = None
     error: Optional[ApiError] = None
 
@@ -186,11 +196,13 @@ class MatchesSummary(BaseModel):
 
     Attributes:
         rating_matches: Number of rating matches
-        tournament_matches: Number of tournament matches
+        tournament_matches: Number of lobby matches (league games and scrims, OpenDota can't tell them apart here)
         other_matches: Number of all other matches
         matches_median: Median number of matches per player
         matches_avg: Average number of matches per player
-        win_percentage: TODO - calculation to be implemented
+        win_percentage: Win percentage across all matches
+        rating_win_percentage: Win percentage in rating (pub) matches only
+        tournament_win_percentage: Win percentage in lobby matches only
     """
 
     rating_matches: int = 0
@@ -199,6 +211,8 @@ class MatchesSummary(BaseModel):
     matches_median: Optional[float] = None
     matches_avg: Optional[float] = None
     win_percentage: Optional[float] = None
+    rating_win_percentage: Optional[float] = None
+    tournament_win_percentage: Optional[float] = None
     avg_rank: Optional[float] = None
     bad_rank_players: Optional[int] = None
 
@@ -383,13 +397,32 @@ def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]
     return stats_data, None
 
 
+def _resolve_roster_safe(team_id: Optional[int]) -> TeamRoster:
+    """Resolve the roster from recent league matches, never raising.
+
+    Args:
+        team_id: Team identifier
+
+    Returns:
+        TeamRoster (empty when team_id is missing or resolution failed)
+    """
+    if not team_id:
+        return TeamRoster()
+    try:
+        return resolve_roster(team_id)
+    except Exception as exc:
+        logger.warning(f"Failed to resolve roster for team {team_id}: {exc}")
+        return TeamRoster()
+
+
 def _create_team_stats(
     team_stats: TeamStats,
     players_statistics_task,
 ) -> TeamStats:
     """Populate TeamStats with player data and task initialization.
 
-    Gathers player account list from team roster and initiates background task
+    Takes the roster from the team's latest league match (falls back to the OpenDota team
+    membership in pro_players when there was none recently) and initiates background task
     to fetch player match statistics. This is the main source of accounts
     when team statistics are requested (indirect path).
 
@@ -401,17 +434,29 @@ def _create_team_stats(
         TeamStats object with players and task_id populated
     """
     pro_players, other_players = get_players_by_team(team_id=team_stats.team_id)
+    roster = _resolve_roster_safe(team_stats.team_id)
+
+    if roster.players:
+        # Real lineup from the latest league match; OpenDota team members who didn't play it go to other_players
+        roster_ids = {player.id for player in roster.players}
+        team_stats.players = roster.players
+        team_stats.other_players = [p for p in [*pro_players, *other_players] if p.id not in roster_ids]
+        team_stats.roster_source = "recent_matches"
+        team_stats.standins = roster.standins
+        team_stats.roster_last_match_time = roster.last_match_time
+    else:
+        team_stats.players = pro_players
+        team_stats.other_players = other_players
+        team_stats.roster_source = "pro_players"
+    team_stats.league_form = roster.league_form
 
     # Initiate Celery task for player match statistics if players exist
     task_id = None
-    if pro_players:
-        account_ids = [player.id for player in pro_players]
+    if team_stats.players:
+        account_ids = [player.id for player in team_stats.players]
         task_id = f"task_{team_stats.team_id}_{int(time.time())}"
         players_statistics_task.delay(task_id=task_id, accounts=account_ids)
 
-    # Update the team stats with players and task_id
-    team_stats.players = pro_players
-    team_stats.other_players = other_players
     team_stats.task_id = task_id
 
     return team_stats
@@ -627,6 +672,8 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
     total_matches = 0
     player_match_counts = []
     wins = 0
+    rating_wins = 0
+    tournament_wins = 0
 
     # TODO: exclude coaches and strange players from the statistics calculation.
     # These players should not impact on average matches.
@@ -638,15 +685,20 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
 
         for match in player_matches:
             total_matches += 1
+            won = (match.player_slot < 128 and match.radiant_win) or (
+                match.player_slot >= 128 and not match.radiant_win
+            )
+            if won:
+                wins += 1
+
             if match.game_mode in GAME_MODE_RATING and match.lobby_type in LOBBY_TYPE_RATING:
                 rating_matches += 1
+                rating_wins += int(won)
             elif match.game_mode in GAME_MODE_TOURNAMENT and match.lobby_type in LOBBY_TYPE_TOURNAMENT:
                 tournament_matches += 1
+                tournament_wins += int(won)
             else:
                 other_matches += 1
-
-            if (match.player_slot < 128 and match.radiant_win) or (match.player_slot >= 128 and not match.radiant_win):
-                wins += 1
 
     # Calculate average matches per player
     num_players = len(matches_by_player)
@@ -662,4 +714,6 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
         matches_median=matches_median,
         matches_avg=matches_avg,
         win_percentage=100 * wins / total_matches if total_matches > 0 else 0.0,
+        rating_win_percentage=100 * rating_wins / rating_matches if rating_matches > 0 else None,
+        tournament_win_percentage=100 * tournament_wins / tournament_matches if tournament_matches > 0 else None,
     )
