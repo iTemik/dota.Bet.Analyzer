@@ -231,3 +231,8 @@ pre {
   font-size: 0.8em;
   opacity: 0.7;
 }
+
+.roster .standin {
+  color: #8a8a8a;
+  font-style: italic;
+}

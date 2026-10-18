@@ -12,6 +12,7 @@ const STATS_DAYS = 20
 interface Player {
   name: string
   id: number
+  is_standin?: boolean
 }
 
 interface LeagueForm {
@@ -425,7 +426,9 @@ function App() {
     return (
       <div className="roster">
         {team.players.map((p) => (
-          <div key={p.id}>{p.name}</div>
+          <div key={p.id} className={p.is_standin ? 'standin' : undefined} title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}>
+            {p.name}
+          </div>
         ))}
         <div className="roster-source">
           {team.roster_source === 'recent_matches'

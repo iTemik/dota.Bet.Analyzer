@@ -127,6 +127,7 @@ def test_players_others_standins_and_core_by_time_on_team(ctx):
     assert [p.id for p in roster.players] == newest
     assert [p.id for p in roster.other_players] == [105]  # active in the window; 401/402 are former players
     assert roster.standins_count == 1
+    assert [p.id for p in roster.players if p.is_standin] == [999]
     assert roster.core_count == 3
     assert roster.series_checked == 2
     assert sum(1 for url in fake.calls if url.endswith("/explorer")) == 4

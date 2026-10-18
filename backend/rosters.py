@@ -477,7 +477,9 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     names = _player_names([*active, *others])
     roster.players = _to_players(active, names)
     roster.other_players = _to_players(others, names)
-    roster.standins_count = sum(1 for a in active if tenure_known and first_seen[a] > standin_limit)
+    for player in roster.players:
+        player.is_standin = tenure_known and first_seen[player.id] > standin_limit
+    roster.standins_count = sum(1 for p in roster.players if p.is_standin)
     roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
     roster.series_checked = len(window)
     roster.last_match_id = latest.match_id
