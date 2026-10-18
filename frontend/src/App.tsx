@@ -432,8 +432,8 @@ function App() {
         ))}
         <div className="roster-source">
           {team.roster_source === 'recent_matches'
-            ? `from league match on ${formatDate(team.roster_last_match_time)}`
-            : 'unconfirmed: no recent league match'}
+            ? `from tournament match on ${formatDate(team.roster_last_match_time)}`
+            : 'unconfirmed: no recent tournament match'}
         </div>
       </div>
     )
@@ -603,7 +603,7 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">Roster</td>
+                <td className="row-label">Players</td>
                 <td>{renderRoster(statistics.teams?.[0])}</td>
                 <td>{renderRoster(statistics.teams?.[1])}</td>
               </tr>
@@ -617,7 +617,7 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">League Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
+                <td className="row-label">Tournaments Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
                 <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
                   {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
                 </td>
@@ -626,7 +626,7 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">Last League Match</td>
+                <td className="row-label">Last Tournament Match</td>
                 <td>{formatDate(statistics.teams?.[0]?.league_form?.last_match_time)}</td>
                 <td>{formatDate(statistics.teams?.[1]?.league_form?.last_match_time)}</td>
               </tr>
@@ -645,7 +645,7 @@ function App() {
                       </td>
                     </tr>
                     <tr>
-                      <td className="row-label">Lobby Matches (league + scrims)</td>
+                      <td className="row-label">Lobby Matches (tournaments + scrims)</td>
                       <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
                         {String(team0Summary?.tournament_matches ?? '-')}
                       </td>
