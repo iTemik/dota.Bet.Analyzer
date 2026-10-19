@@ -680,8 +680,8 @@ npm test          # Run tests
 - **Roster Changes**: Stable, Stand-ins or New team with the stand-in count (better state is highlighted), league
   record and the last game of the main players
 - **Team Insights**: a second Team #1 vs Team #2 table, to the right of the comparison on desktop (stacked below 1100 px), for notes that are not head-to-head numbers: core players
-  ("X of N" when a player missed games), stand-ins (everyone outside the core, "<player> played N of M") and the
-  latest tournament match with the players outside the core. Accounts without a
+  ("X of N" when a player missed games), stand-ins (everyone outside the core, same "(X of N)" format) and the
+  latest tournament match, with the players outside the core when there were any. Accounts without a
   name on OpenDota show as "ID 123…" in monospace so they don't read as a nickname
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:

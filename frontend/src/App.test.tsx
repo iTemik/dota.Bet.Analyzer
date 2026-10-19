@@ -1424,7 +1424,7 @@ describe('App Component', () => {
                     roster_state: 'new_team',
                     roster_last_match_time: 1792244896,
                     latest_match_time: 1792244896,
-                    latest_match_standins: 1,
+                    latest_match_standins: 0,
                     standins_count: 1,
                     league_form: { days: 20, matches: 4, wins: 1, losses: 3, win_percentage: 25, last_match_time: 1792244896 },
                 },
@@ -1448,10 +1448,14 @@ describe('App Component', () => {
             expect(accountId).toHaveTextContent('ID 1150772339')
             expect(accountId).toHaveAttribute('title', 'No player name on OpenDota; this is the account ID')
 
-            // Stand-ins: everyone outside the core, with the games they played
-            expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy played 3 of 10')
-            expect(cells('Stand-ins')[1]).toHaveTextContent('Backup played 2 of 10')
-            expect(cells('Stand-ins')[2]).toHaveTextContent('Sub played 2 of 30')
+            // Stand-ins: everyone outside the core, in the same "(X of N)" format as the core players
+            expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy (3 of 10)')
+            expect(cells('Stand-ins')[1]).toHaveTextContent('Backup (2 of 10)')
+            expect(cells('Stand-ins')[2]).toHaveTextContent('Sub (2 of 30)')
+
+            // Last match: players outside the core are mentioned only when there were any
+            expect(cells('Last Tournament Match')[1]).toHaveTextContent('2 players outside the core')
+            expect(cells('Last Tournament Match')[2]).not.toHaveTextContent('outside the core')
             expect(screen.queryByText('Other Players')).not.toBeInTheDocument()
 
             const recordRow = rowOf('Tournaments Record (20d)')

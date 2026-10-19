@@ -476,13 +476,6 @@ function App() {
     )
   }
 
-  const renderPlayed = (player: Player, team: TeamData) => (
-    <>
-      {renderName(player)}
-      {player.games != null && ` played ${player.games}${team.roster_games ? ` of ${team.roster_games}` : ''}`}
-    </>
-  )
-
   // Core: players with 75% (or 50%) of the games; without a clear core, the main 5
   const hasCore = (team: TeamData) => team.players.some((p) => p.is_core)
   const getCorePlayers = (team: TeamData): Player[] =>
@@ -515,7 +508,10 @@ function App() {
     return (
       <div className="roster">
         {players.map((p) => (
-          <div key={p.id}>{renderPlayed(p, team)}</div>
+          <div key={p.id}>
+            {renderName(p)}
+            {formatGamesShare(p, team)}
+          </div>
         ))}
       </div>
     )
@@ -535,8 +531,10 @@ function App() {
       label: 'Last Tournament Match',
       render: (team) => {
         if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
+        // Mention players outside the core only when there were any
         const outside = team.latest_match_standins ?? 0
-        return `${formatDate(team.latest_match_time)}, ${outside} player${outside === 1 ? '' : 's'} outside the core`
+        const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
+        return `${formatDate(team.latest_match_time)}${suffix}`
       },
     },
   ]
