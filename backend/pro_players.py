@@ -22,11 +22,13 @@ class Player(BaseModel):
         name: Player name
         id: Unique player ID
         is_standin: Played for the team for 20 days or less (only set for rosters from recent matches)
+        games: League games played for the team in the roster window (only set for rosters from recent matches)
     """
 
     name: str
     id: int
     is_standin: bool = False
+    games: Optional[int] = None
 
 
 def get_d2ba_db():

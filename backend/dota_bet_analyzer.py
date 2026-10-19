@@ -11,6 +11,7 @@ from backend import __version__
 from backend.config import Config
 from backend.helpers import Errors
 from backend.logging_config import setup_logging
+from backend.opendota import WaitCallback
 from backend.pro_players import (
     fetch_pro_players_from_api,
     fetch_teams_from_api,
@@ -134,12 +135,13 @@ def _cache_set(key: str, ttl: int, value: object) -> None:
         logger.debug(f"Cache write failed for {key}: {e}")
 
 
-def get_matches_cached(account_id: int, days: int) -> list[MatchStats]:
+def get_matches_cached(account_id: int, days: int, on_wait: WaitCallback | None = None) -> list[MatchStats]:
     """Fetch player matches, cached in Redis for PLAYER_MATCHES_CACHE_TTL.
 
     Args:
         account_id: Player account ID
         days: Number of days of match history
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
 
     Returns:
         List of MatchStats
@@ -151,16 +153,17 @@ def get_matches_cached(account_id: int, days: int) -> list[MatchStats]:
             return [MatchStats(**item) for item in cached]
         except Exception as e:
             logger.debug(f"Ignoring malformed cached matches for {account_id}: {e}")
-    matches = get_matches(account_id=account_id, days=days)
+    matches = get_matches(account_id=account_id, days=days, on_wait=on_wait)
     _cache_set(key, PLAYER_MATCHES_CACHE_TTL, [m.model_dump() for m in matches])
     return matches
 
 
-def get_rank_cached(account_id: int) -> int | None:
+def get_rank_cached(account_id: int, on_wait: WaitCallback | None = None) -> int | None:
     """Fetch player leaderboard rank, cached in Redis for PLAYER_RANK_CACHE_TTL.
 
     Args:
         account_id: Player account ID
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
 
     Returns:
         Leaderboard rank or None
@@ -170,7 +173,7 @@ def get_rank_cached(account_id: int) -> int | None:
     if isinstance(cached, dict) and "rank" in cached:
         rank = cached["rank"]
         return rank if isinstance(rank, int) else None
-    rank = get_rank(account_id)
+    rank = get_rank(account_id, on_wait=on_wait)
     _cache_set(key, PLAYER_RANK_CACHE_TTL, {"rank": rank})
     return rank
 
@@ -247,9 +250,19 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
         players_with_rank: int = 0
         for account_id in accounts:
             step_num += 1
+
+            def report_wait(delay: int, account_id: int = account_id, step: int = step_num) -> None:
+                update_progress(
+                    task_id,
+                    step,
+                    f"OpenDota rate limit reached, retrying account {account_id} in {delay}s",
+                    100 * (step / steps),
+                    {"account_id": account_id, "retry_in": delay},
+                )
+
             try:
                 # Fetch match data for this account
-                player_matches = get_matches_cached(account_id=account_id, days=days)
+                player_matches = get_matches_cached(account_id=account_id, days=days, on_wait=report_wait)
                 matches_stats.append(player_matches)  # Append as a list per player
 
                 # Convert MatchStats objects to dicts for JSON serialization
@@ -272,7 +285,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                     {"account_id": account_id, "match_count": len(stats_data)},
                 )
 
-                player_rank = get_rank_cached(account_id)
+                player_rank = get_rank_cached(account_id, on_wait=report_wait)
                 if player_rank is not None:
                     players_with_rank += 1
                     players_avg_rank += player_rank

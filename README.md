@@ -417,12 +417,17 @@ python scripts/init_d2ba_db.py
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
 It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); re-run it after pulling to apply new migrations.
 
-**Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
-(`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that
-period, the OpenDota team membership from `pro_players` is used and the UI marks the roster as unconfirmed.
-`players` is the active roster (stats are calculated from it); `other_players` holds other players who played for the team
-in the window (a playing coach, a backup). Former players are left out. `standins_count` counts roster players with
-20 days or less on the team, `core_count` those with 60 days or more.
+**Rosters:** team statistics take the roster from all of the team's league games within the `days` window (default 20,
+same as the player match history): the 5 players with the most games form the roster, whether or not they played the
+latest game. Data comes from `/teams/{id}/matches` plus one explorer query per 20 uncached games
+(`match_id IN (...)`), both cached. If there was no league match in that period, the OpenDota team membership from
+`pro_players` is used and the UI marks the roster as unconfirmed.
+`players` is the main roster (stats are calculated from it); `other_players` holds other players who played league games
+for the team in the window (a backup, a replaced player). Former players are left out. `standins_count` counts roster
+players with 20 days or less on the team, `core_count` those with 60 days or more.
+
+**OpenDota rate limit:** the free tier allows about 60 requests per minute. A request answered with HTTP 429 is
+postponed (Retry-After, or 10/20/40 s) and repeated up to 3 times; the player statistics progress shows the wait.
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
@@ -589,9 +594,13 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `days` (default 20) sets the window for the roster and the player match history
 
 #### Roster Calculation
-- `players`: active roster, taken from the lineup of the team's latest league match in the `days` window
-- `other_players`: others who played for the team in the window (e.g. a playing coach, a backup); former players are excluded
+- `players`: main roster, the 5 players with the most league games in the `days` window (ties: who played more
+  recently); each player has `games`, out of `roster_games` games looked up (at most the newest 40)
+- `other_players`: others who played league games for the team in the window, with their `games`; former players are excluded
 - `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `roster_last_match_time`: latest league game played by at least 3 of the 5 roster players
+- `latest_match_time` / `latest_match_standins`: the team's latest league game and how many of its players were
+  stand-ins or not in the main roster
 - `league_form`: league W/L in the window (pubs excluded)
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
@@ -663,7 +672,10 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
-- **Roster**: Active players, stand-in count (fewer is better), league record and last league match
+- **Roster**: Main players ("X of N" games when a player missed some), stand-ins with their games (fewer is better),
+  league record and the last game of these players
+- **Team Insights**: a second Team #1 vs Team #2 table for notes that are not head-to-head numbers: the latest
+  tournament match with its stand-in count, and other players with their tournament games
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches

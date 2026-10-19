@@ -4,11 +4,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.opendota import RATE_LIMIT_RETRIES, opendota_get
 from backend.pro_players import get_d2ba_db
 from backend.rosters import (
     TEAM_MATCHES_TTL,
     TeamMatch,
-    _latest_match_per_series,
     compute_league_form,
     get_match_lineup,
     get_team_league_matches,
@@ -36,34 +36,38 @@ def _team_match(match_id: int, start_time: int, opponent: int, radiant: bool = T
     }
 
 
-def _explorer_rows(radiant: list[int], dire: list[int]) -> dict:
-    rows = [{"player_slot": i, "account_id": a} for i, a in enumerate(radiant)]
-    rows += [{"player_slot": 128 + i, "account_id": a} for i, a in enumerate(dire)]
-    return {"rows": rows, "err": None}
+def _explorer_rows(radiant: list[int], dire: list[int], match_id: int = 0) -> list[dict]:
+    rows = [{"match_id": match_id, "player_slot": i, "account_id": a} for i, a in enumerate(radiant)]
+    rows += [{"match_id": match_id, "player_slot": 128 + i, "account_id": a} for i, a in enumerate(dire)]
+    return rows
 
 
-def _response(payload, status: int = 200) -> MagicMock:
+def _response(payload, status: int = 200, headers: dict | None = None) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status
     resp.json.return_value = payload
+    resp.headers = headers or {}
     return resp
 
 
 class FakeOpenDota:
     """Minimal fake of the OpenDota endpoints used by backend.rosters."""
 
-    def __init__(self, team_matches: list[dict], lineups: dict[int, dict]):
+    def __init__(self, team_matches: list[dict], lineups: dict[int, tuple[list[int], list[int]]]):
         self.team_matches = team_matches
-        self.lineups = lineups
+        self.lineups = lineups  # match_id -> (radiant accounts, dire accounts)
         self.calls: list[str] = []
+        self.explorer_batches: list[list[int]] = []
 
     def get(self, url, params=None, timeout=None):
         self.calls.append(url)
         if url.endswith(f"/teams/{TEAM_ID}/matches"):
             return _response(self.team_matches)
         if url.endswith("/explorer"):
-            match_id = int(params["sql"].rsplit("=", 1)[1])
-            return _response(self.lineups.get(match_id, {"rows": []}))
+            ids = [int(x) for x in params["sql"].split("IN (", 1)[1].rstrip(")").split(",")]
+            self.explorer_batches.append(ids)
+            rows = [row for i in ids if i in self.lineups for row in _explorer_rows(*self.lineups[i], match_id=i)]
+            return _response({"rows": rows, "err": None})
         if "/matches/" in url:
             return _response({"players": []})
         return _response(None, status=404)
@@ -81,30 +85,85 @@ def _store_names(names: dict[int, str]) -> None:
     db.commit()
 
 
-def test_roster_is_latest_lineup_on_team_side(ctx):
-    """The roster is taken from the team's side of the latest league match (Dire here)."""
+def _games(*lineups: list[int], start_days: float = 1, step_days: float = 1) -> tuple[list[dict], dict]:
+    """League games newest first, one per day, with the given team lineups on Radiant."""
+    matches, lineup_map = [], {}
+    for i, accounts in enumerate(lineups):
+        match_id = 1000 - i
+        matches.append(_team_match(match_id, int(NOW - (start_days + i * step_days) * DAY), opponent=i))
+        lineup_map[match_id] = (accounts, DIRE_PLAYERS)
+    return matches, lineup_map
+
+
+def test_roster_is_taken_from_team_side(ctx):
+    """The roster is taken from the team's side of its league games (Dire here)."""
     fake = FakeOpenDota(
         [_team_match(3, NOW - DAY, opponent=9, radiant=False)],
-        {3: _explorer_rows(DIRE_PLAYERS, RADIANT_PLAYERS)},
+        {3: (DIRE_PLAYERS, RADIANT_PLAYERS)},
     )
     _store_names({101: "rincyq", 102: "aik"})
 
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
     assert [p.id for p in roster.players] == RADIANT_PLAYERS
     assert [p.name for p in roster.players][:3] == ["rincyq", "aik", "#103"]
+    assert [p.games for p in roster.players] == [1] * 5
     assert roster.last_match_id == 3
     assert roster.other_players == []
     assert roster.standins_count == 0  # no older league game, so time on the team is unknown
-    assert roster.series_checked == 1
+    assert roster.games_checked == 1
 
 
-def test_players_others_standins_and_core_by_time_on_team(ctx):
-    """Latest lineup = players; other active players go to other_players; former players are dropped.
+def test_roster_is_players_with_most_games_not_latest_lineup(ctx):
+    """105 played 7 of 10 games, 999 only 3 (including the latest): 105 is in the roster, 999 is another player."""
+    with_105 = [101, 102, 103, 104, 105]
+    with_999 = [101, 102, 103, 104, 999]
+    matches, lineups = _games(
+        with_999, with_105, with_999, with_105, with_105, with_999, with_105, with_105, with_105, with_105
+    )
+    fake = FakeOpenDota(matches, lineups)
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
+        roster = resolve_roster(TEAM_ID, now=NOW)
 
-    Time on the team: 999 first played 1 day ago (stand-in), 104 first played 25 days ago (neither),
-    101-103 already played 70 days ago (core).
+    assert sorted(p.id for p in roster.players) == with_105
+    assert {p.id: p.games for p in roster.players}[105] == 7
+    assert [(p.id, p.games) for p in roster.other_players] == [(999, 3)]
+    assert roster.games_checked == 10
+    assert roster.last_match_id == 1000  # 4 of the 5 main players played the latest game
+    assert roster.latest_match_time == NOW - DAY
+    assert roster.latest_match_standins == 1  # 999 is not in the main roster
+    assert len(fake.explorer_batches) == 1  # all 10 lineups in one explorer query
+
+
+def test_tie_goes_to_the_player_who_played_more_recently(ctx):
+    matches, lineups = _games([101, 102, 103, 104, 106], [101, 102, 103, 104, 105])
+    fake = FakeOpenDota(matches, lineups)
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
+        roster = resolve_roster(TEAM_ID, now=NOW)
+
+    assert [p.id for p in roster.players][-1] == 106
+    assert [p.id for p in roster.other_players] == [105]
+
+
+def test_last_match_of_roster_skips_games_played_mostly_by_others(ctx):
+    """The newest game had only 2 main players, so the roster's last game is the one before it."""
+    main = [101, 102, 103, 104, 105]
+    matches, lineups = _games([101, 102, 301, 302, 303], main, main, main, main, main)
+    fake = FakeOpenDota(matches, lineups)
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
+        roster = resolve_roster(TEAM_ID, now=NOW)
+
+    assert sorted(p.id for p in roster.players) == main
+    assert roster.last_match_id == 999
+    assert roster.last_match_time == NOW - 2 * DAY
+    assert roster.latest_match_standins == 3
+
+
+def test_standins_and_core_by_time_on_team(ctx):
+    """999 first played 5 days ago (stand-in), 104 first played 25 days ago (neither), 101-103 70 days ago (core).
+
+    105 only played before the window, so it is a former player and is left out.
     """
     newest = [101, 102, 103, 104, 999]
     fake = FakeOpenDota(
@@ -115,22 +174,22 @@ def test_players_others_standins_and_core_by_time_on_team(ctx):
             _team_match(5, NOW - 70 * DAY, opponent=4),
         ],
         {
-            30: _explorer_rows(newest, DIRE_PLAYERS),
-            20: _explorer_rows([101, 102, 103, 104, 105], DIRE_PLAYERS),
-            10: _explorer_rows([101, 102, 103, 104, 105], DIRE_PLAYERS),
-            5: _explorer_rows([101, 102, 103, 401, 402], DIRE_PLAYERS),
+            30: (newest, DIRE_PLAYERS),
+            20: (newest, DIRE_PLAYERS),
+            10: ([101, 102, 103, 104, 105], DIRE_PLAYERS),
+            5: ([101, 102, 103, 401, 402], DIRE_PLAYERS),
         },
     )
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
-    assert [p.id for p in roster.players] == newest
-    assert [p.id for p in roster.other_players] == [105]  # active in the window; 401/402 are former players
-    assert roster.standins_count == 1
+    assert sorted(p.id for p in roster.players) == sorted(newest)
+    assert roster.other_players == []
     assert [p.id for p in roster.players if p.is_standin] == [999]
+    assert roster.standins_count == 1
     assert roster.core_count == 3
-    assert roster.series_checked == 2
-    assert sum(1 for url in fake.calls if url.endswith("/explorer")) == 4
+    assert roster.games_checked == 2
+    assert fake.explorer_batches == [[30, 20, 10, 5]]  # window games and both tenure samples in one query
 
 
 def test_new_player_between_thresholds_is_not_a_standin(ctx):
@@ -142,38 +201,33 @@ def test_new_player_between_thresholds_is_not_a_standin(ctx):
             _team_match(5, NOW - 70 * DAY, opponent=4),
         ],
         {
-            30: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
-            10: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS),
-            5: _explorer_rows([101, 102, 103, 104, 401], DIRE_PLAYERS),
+            30: (RADIANT_PLAYERS, DIRE_PLAYERS),
+            10: (RADIANT_PLAYERS, DIRE_PLAYERS),
+            5: ([101, 102, 103, 104, 401], DIRE_PLAYERS),
         },
     )
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
     assert roster.standins_count == 0
     assert roster.core_count == 4
 
 
-def test_games_of_one_series_need_one_lineup_request(ctx):
-    """A Bo3 against the same opponent counts as one series, so only its newest game is looked up."""
-    fake = FakeOpenDota(
-        [
-            _team_match(3, NOW - DAY, opponent=9),
-            _team_match(2, NOW - DAY - 3600, opponent=9),
-            _team_match(1, NOW - DAY - 7200, opponent=9),
-        ],
-        {3: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS)},
-    )
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+def test_lineups_are_fetched_in_batches(ctx):
+    """25 games in the window need two explorer queries (20 + 5), and none the second time."""
+    matches, lineups = _games(*[RADIANT_PLAYERS] * 25, start_days=0.5, step_days=0.5)
+    fake = FakeOpenDota(matches, lineups)
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
+        resolve_roster(TEAM_ID, now=NOW + 60)
 
-    assert roster.series_checked == 1
-    assert sum(1 for url in fake.calls if url.endswith("/explorer")) == 1
+    assert roster.games_checked == 25
+    assert [len(batch) for batch in fake.explorer_batches] == [20, 5]
 
 
 def test_no_recent_league_match_returns_empty_roster(ctx):
     fake = FakeOpenDota([_team_match(1, NOW - 90 * DAY, opponent=9)], {})
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, days=60, now=NOW)
 
     assert roster.players == []
@@ -183,7 +237,7 @@ def test_no_recent_league_match_returns_empty_roster(ctx):
 
 
 def test_api_failure_returns_empty_roster(ctx):
-    with patch("backend.rosters.requests.get", side_effect=ConnectionError("down")):
+    with patch("backend.opendota.requests.get", side_effect=ConnectionError("down")):
         roster = resolve_roster(TEAM_ID, now=NOW)
     assert roster.players == []
 
@@ -191,9 +245,9 @@ def test_api_failure_returns_empty_roster(ctx):
 def test_second_call_uses_cache(ctx):
     fake = FakeOpenDota(
         [_team_match(3, NOW - DAY, opponent=9)],
-        {3: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS)},
+        {3: (RADIANT_PLAYERS, DIRE_PLAYERS)},
     )
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         first = resolve_roster(TEAM_ID, now=NOW)
         calls_after_first = len(fake.calls)
         second = resolve_roster(TEAM_ID, now=NOW + 60)
@@ -205,7 +259,7 @@ def test_second_call_uses_cache(ctx):
 
 def test_team_matches_refetched_after_ttl(ctx):
     fake = FakeOpenDota([_team_match(3, NOW - DAY, opponent=9)], {})
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         get_team_league_matches(TEAM_ID, now=NOW)
         get_team_league_matches(TEAM_ID, now=NOW + TEAM_MATCHES_TTL + 1)
     assert sum(1 for url in fake.calls if url.endswith("/matches")) == 2
@@ -219,7 +273,7 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
             return _response({"rows": []})
         return _response({"players": players})
 
-    with patch("backend.rosters.requests.get", side_effect=fake_get):
+    with patch("backend.opendota.requests.get", side_effect=fake_get):
         lineup = get_match_lineup(42)
 
     assert len(lineup) == 10
@@ -227,7 +281,7 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
 
 
 def test_incomplete_lineup_is_not_cached(ctx):
-    with patch("backend.rosters.requests.get", return_value=_response({"rows": []})) as mock_get:
+    with patch("backend.opendota.requests.get", return_value=_response({"rows": []})) as mock_get:
         assert get_match_lineup(42) == []
         get_match_lineup(42)
     assert mock_get.call_count == 4  # explorer + /matches fallback, twice
@@ -246,28 +300,20 @@ def test_league_form_counts_wins_on_both_sides():
     assert form.last_match_time == NOW - DAY
 
 
-def test_series_grouping_splits_on_opponent_and_gap():
-    matches = [
-        TeamMatch(match_id=5, start_time=NOW, radiant=True, opposing_team_id=1, leagueid=1),
-        TeamMatch(match_id=4, start_time=NOW - 3600, radiant=True, opposing_team_id=1, leagueid=1),
-        TeamMatch(match_id=3, start_time=NOW - 7200, radiant=True, opposing_team_id=2, leagueid=1),
-        TeamMatch(match_id=2, start_time=NOW - 3 * DAY, radiant=True, opposing_team_id=2, leagueid=1),
-    ]
-    assert [m.match_id for m in _latest_match_per_series(matches, 5)] == [5, 3, 2]
-    assert [m.match_id for m in _latest_match_per_series(matches, 2)] == [5, 3]
-
-
 def test_create_team_stats_uses_recent_lineup(ctx):
     from backend.pro_players import Player
     from backend.rosters import LeagueForm, TeamRoster
     from backend.stats import TeamStats, _create_team_stats
 
     roster = TeamRoster(
-        players=[Player(id=1, name="a"), Player(id=2, name="b")],
-        other_players=[Player(id=5, name="coach")],
+        players=[Player(id=1, name="a", games=3), Player(id=2, name="b", games=2)],
+        other_players=[Player(id=5, name="backup", games=1)],
         standins_count=1,
         core_count=1,
-        last_match_time=NOW,
+        games_checked=3,
+        last_match_time=NOW - DAY,
+        latest_match_time=NOW,
+        latest_match_standins=2,
         league_form=LeagueForm(days=60, matches=3, wins=2, losses=1, win_percentage=66.7),
     )
     task = MagicMock()
@@ -285,6 +331,10 @@ def test_create_team_stats_uses_recent_lineup(ctx):
     assert [p.id for p in stats.other_players] == [5]  # former member 7 from pro_players is dropped
     assert stats.standins_count == 1
     assert stats.core_count == 1
+    assert stats.roster_games == 3
+    assert stats.roster_last_match_time == NOW - DAY
+    assert (stats.latest_match_time, stats.latest_match_standins) == (NOW, 2)
+    assert stats.other_players[0].games == 1
     assert stats.league_form is not None and stats.league_form.wins == 2
     task.delay.assert_called_once()
     assert task.delay.call_args.kwargs["accounts"] == [1, 2]
@@ -312,9 +362,9 @@ def test_roster_window_follows_days_argument(ctx):
     """A lineup older than the window is ignored; the default window is 20 days like the match history."""
     fake = FakeOpenDota(
         [_team_match(3, NOW - 30 * DAY, opponent=9)],
-        {3: _explorer_rows(RADIANT_PLAYERS, DIRE_PLAYERS)},
+        {3: (RADIANT_PLAYERS, DIRE_PLAYERS)},
     )
-    with patch("backend.rosters.requests.get", side_effect=fake.get):
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
         assert resolve_roster(TEAM_ID, now=NOW).players == []
         assert [p.id for p in resolve_roster(TEAM_ID, days=60, now=NOW).players] == RADIANT_PLAYERS
 
@@ -333,3 +383,29 @@ def test_create_team_stats_passes_days_to_roster_and_task(ctx):
 
     assert resolve.call_args.kwargs["days"] == 45
     assert task.delay.call_args.kwargs["days"] == 45
+
+
+def test_rate_limited_request_is_postponed_and_repeated():
+    waits: list[int] = []
+    responses = [_response(None, status=429, headers={"Retry-After": "7"}), _response(None, status=429), _response([])]
+    with (
+        patch("backend.opendota.requests.get", side_effect=responses) as mock_get,
+        patch("backend.opendota.time.sleep") as mock_sleep,
+    ):
+        resp = opendota_get("https://api.opendota.com/api/teams/1/matches", on_wait=waits.append)
+
+    assert resp.status_code == 200
+    assert mock_get.call_count == 3
+    assert waits == [7, 20]  # Retry-After first, then the default backoff for the second repeat
+    assert [c.args[0] for c in mock_sleep.call_args_list] == [7, 20]
+
+
+def test_rate_limit_gives_up_after_retries():
+    with (
+        patch("backend.opendota.requests.get", return_value=_response(None, status=429)) as mock_get,
+        patch("backend.opendota.time.sleep"),
+    ):
+        resp = opendota_get("https://api.opendota.com/api/teams/1/matches")
+
+    assert resp.status_code == 429
+    assert mock_get.call_count == RATE_LIMIT_RETRIES + 1

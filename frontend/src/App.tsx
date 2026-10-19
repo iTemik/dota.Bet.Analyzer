@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { VERSION } from './version'
@@ -13,6 +13,7 @@ interface Player {
   name: string
   id: number
   is_standin?: boolean
+  games?: number | null
 }
 
 interface LeagueForm {
@@ -33,9 +34,12 @@ interface TeamData {
   other_players: Player[]
   players: Player[]
   roster_source?: 'recent_matches' | 'pro_players' | null
+  roster_games?: number | null
   standins_count?: number
   core_count?: number
   roster_last_match_time?: number | null
+  latest_match_time?: number | null
+  latest_match_standins?: number | null
   league_form?: LeagueForm | null
   tag: string
   team: string
@@ -57,8 +61,8 @@ interface ProgressData {
 /**
  * Team roster (account lists) is collected indirectly:
  *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
- *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> get_players_by_team())
- *    - Player accounts are extracted from team roster in database
+ *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> resolve_roster())
+ *    - Player accounts are the players with the most tournament games in the window (stale team list as fallback)
  *    - This is a background task (players_statistics_task).
  *    - It's needed to poll progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
  */
@@ -266,7 +270,12 @@ function App() {
             for (const line of lines) {
               try {
                 const parsedLine = JSON.parse(line)
-                lastValidJson = parsedLine as ProgressData
+                // A stream timeout only means no new step yet (e.g. waiting for the OpenDota rate limit);
+                // keep showing the last real progress message instead
+                const isStreamTimeout = (parsedLine as ProgressData)?.data && ((parsedLine as ProgressData).data as { timeout?: boolean }).timeout
+                if (!isStreamTimeout || !lastValidJson) {
+                  lastValidJson = parsedLine as ProgressData
+                }
                 allLines.push(parsedLine)
               } catch (e) {
                 // Skip lines that aren't valid JSON
@@ -421,6 +430,13 @@ function App() {
   const getStandins = (team: TeamData | undefined): number | null =>
     team?.roster_source === 'recent_matches' ? (team.standins_count ?? 0) : null
 
+  // "(X of N)" next to a player who missed some of the team's tournament games in the window
+  const formatGamesShare = (player: Player, team: TeamData): string => {
+    const total = team.roster_games
+    if (player.games == null || !total || player.games >= total) return ''
+    return ` (${player.games} of ${total})`
+  }
+
   const renderRoster = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
     return (
@@ -428,16 +444,63 @@ function App() {
         {team.players.map((p) => (
           <div key={p.id} className={p.is_standin ? 'standin' : undefined} title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}>
             {p.name}
+            {formatGamesShare(p, team)}
           </div>
         ))}
         <div className="roster-source">
           {team.roster_source === 'recent_matches'
-            ? `from tournament match on ${formatDate(team.roster_last_match_time)}`
+            ? `from ${team.roster_games ?? 0} tournament games`
             : 'unconfirmed: no recent tournament match'}
         </div>
       </div>
     )
   }
+
+  const renderStandins = (team: TeamData | undefined) => {
+    const count = getStandins(team)
+    if (count === null || !team) return '-'
+    const standins = team.players.filter((p) => p.is_standin)
+    return (
+      <div className="roster">
+        <div>{count}</div>
+        {standins.map((p) => (
+          <div key={p.id} className="roster-source">
+            {p.name}
+            {formatGamesShare(p, team)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
+  const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
+    {
+      label: 'Last Tournament Match',
+      render: (team) => {
+        if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
+        const standins = team.latest_match_standins ?? 0
+        return `${formatDate(team.latest_match_time)}, ${standins} stand-in${standins === 1 ? '' : 's'}`
+      },
+    },
+    {
+      label: 'Other Players (tournament games)',
+      render: (team) => {
+        if (!team) return '-'
+        if (!team.other_players?.length) return 'None'
+        return (
+          <div className="roster">
+            {team.other_players.map((p) => (
+              <div key={p.id}>
+                {p.name}
+                {p.games != null ? ` (${p.games})` : ''}
+              </div>
+            ))}
+          </div>
+        )
+      },
+    },
+  ]
 
   const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
     if (!form || !form.matches) return '-'
@@ -610,10 +673,10 @@ function App() {
               <tr>
                 <td className="row-label">Stand-ins (≤20 days on team)</td>
                 <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[0] }}>
-                  {getStandins(statistics.teams?.[0]) ?? '-'}
+                  {renderStandins(statistics.teams?.[0])}
                 </td>
                 <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[1] }}>
-                  {getStandins(statistics.teams?.[1]) ?? '-'}
+                  {renderStandins(statistics.teams?.[1])}
                 </td>
               </tr>
               <tr>
@@ -626,9 +689,9 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">Last Tournament Match</td>
-                <td>{formatDate(statistics.teams?.[0]?.league_form?.last_match_time)}</td>
-                <td>{formatDate(statistics.teams?.[1]?.league_form?.last_match_time)}</td>
+                <td className="row-label" title="Latest tournament game played by at least 3 of the 5 players">Last Match of These Players</td>
+                <td>{formatDate(statistics.teams?.[0]?.roster_last_match_time ?? statistics.teams?.[0]?.league_form?.last_match_time)}</td>
+                <td>{formatDate(statistics.teams?.[1]?.roster_last_match_time ?? statistics.teams?.[1]?.league_form?.last_match_time)}</td>
               </tr>
               {summaryData && (() => {
                 const team0Summary = getSummaryForTeam(statistics.teams?.[0]?.task_id)
@@ -715,6 +778,26 @@ function App() {
                   </>
                 )
               })()}
+            </tbody>
+          </table>
+
+          <h2>Team Insights</h2>
+          <table className="stats-table insights-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</th>
+                <th>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {insightRows.map((row) => (
+                <tr key={row.label}>
+                  <td className="row-label">{row.label}</td>
+                  <td>{row.render(statistics.teams?.[0])}</td>
+                  <td>{row.render(statistics.teams?.[1])}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
