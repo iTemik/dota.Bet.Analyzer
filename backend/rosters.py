@@ -97,8 +97,8 @@ class TeamRoster(BaseModel):
             (empty when there was no league match in the window or the API failed)
         other_players: Other active players: played league games for the team in the window but not enough
             for the main roster (a backup, a replaced player). Players without games in the window are not included.
-        standins_count: How many active players (`players` and `other_players`) have played for the team for
-            STANDIN_MAX_TENURE_DAYS or less
+        standins_count: How many of `players` have played for the team for STANDIN_MAX_TENURE_DAYS or less
+            (stand-ins among `other_players` are marked with `is_standin`)
         core_count: How many of `players` have played for the team for CORE_MIN_TENURE_DAYS or more
         games_checked: Number of league games in the window whose lineup was looked at
         last_match_id: Latest league match played by at least ROSTER_MAJORITY main roster players
@@ -529,7 +529,7 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     for player in [*roster.players, *roster.other_players]:
         player.is_standin = player.id in standins
         player.is_core = player.id in core
-    roster.standins_count = len(standins)
+    roster.standins_count = sum(1 for a in active if a in standins)
     roster.roster_state = state if tenure_known else None
     roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
     roster.games_checked = len(window)

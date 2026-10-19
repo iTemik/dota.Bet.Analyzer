@@ -219,7 +219,7 @@ def test_standin_outside_core_means_new_players(ctx):
     assert [p.id for p in roster.players] == RADIANT_PLAYERS
     assert all(p.is_core for p in roster.players)
     assert [(p.id, p.is_standin, p.is_core) for p in roster.other_players] == [(999, True, False)]
-    assert roster.standins_count == 1  # stand-ins outside the main 5 are counted too
+    assert roster.standins_count == 0  # stand-ins outside the main 5 are only marked in other_players
     assert roster.roster_state == "new_players"
 
 

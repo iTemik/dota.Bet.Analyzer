@@ -66,9 +66,10 @@ def update_progress(task_id: str, step: int, message: str, progress: float, data
         task_id: Unique task identifier
         step: Current step number
         message: Progress message
-        progress: Progress percentage (0-100) or -1 for error
+        progress: Progress percentage (0-100) or -1 for error; rounded to 1 decimal place
         data: Additional data to store (optional, should be lightweight)
     """
+    progress = round(progress, 1)
     try:
         progress_data = {
             "step": step,

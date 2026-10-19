@@ -1428,7 +1428,7 @@ describe('App Component', () => {
 
             // Comparison: roster state, worse state in the negative color
             const stateCells = rowOf('Roster Changes').querySelectorAll('td')
-            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in)')
+            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in, +1 in other players)')
             expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
             expect(screen.queryByText(/tournament games$/)).not.toBeInTheDocument()
@@ -1459,6 +1459,26 @@ describe('App Component', () => {
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
             expect(screen.getByText('Last Match of These Players')).toBeInTheDocument()
+        })
+
+        it('counts stand-ins only among the other players', async () => {
+            await renderComparison([
+                {
+                    ...baseTeam,
+                    team: 'Team A',
+                    team_id: 1,
+                    players: [{ id: 11, name: 'Rain', games: 4, is_core: true }],
+                    other_players: [{ id: 15, name: 'Sub', games: 1, is_standin: true, is_core: false }],
+                    roster_source: 'recent_matches',
+                    roster_games: 4,
+                    roster_state: 'new_players',
+                    standins_count: 0,
+                },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
+            ])
+
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('New players (1 in other players)')
         })
 
         it('shows a stable roster without stand-ins', async () => {

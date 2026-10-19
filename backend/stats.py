@@ -139,7 +139,7 @@ class TeamStats(BaseModel):
         roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
             window) or "pro_players" (OpenDota team membership, may be stale)
         roster_games: Number of league games in the window the roster was counted from
-        standins_count: How many active players have played for the team for 20 days or less
+        standins_count: How many of `players` have played for the team for 20 days or less
         core_count: How many of `players` have played for the team for 60 days or more
         roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)

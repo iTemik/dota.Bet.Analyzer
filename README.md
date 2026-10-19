@@ -597,7 +597,8 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `players`: main roster, the 5 players with the most league games in the `days` window (ties: who played more
   recently); each player has `games`, out of `roster_games` games looked up (at most the newest 40)
 - `other_players`: others who played league games for the team in the window, with their `games`; former players are excluded
-- `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `standins_count` / `core_count`: main roster players with ≤ 20 / ≥ 60 days on the team; stand-ins among other
+  players are marked with `is_standin` and shown as "+N in other players"
 - Core players (`is_core`): the 5 players with at least 75% of the window games; if that does not give exactly 5,
   50% is tried; if neither does, there is no clear core (rule in `classify_roster`, `backend/rosters.py`)
 - `roster_state`: `stable` (no stand-ins), `new_players` (stand-ins are outside the core) or `new_team` (a stand-in

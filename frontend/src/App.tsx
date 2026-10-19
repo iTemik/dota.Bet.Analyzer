@@ -455,8 +455,14 @@ function App() {
   const renderRosterState = (team: TeamData | undefined) => {
     const state = team?.roster_source === 'recent_matches' && team.roster_state ? ROSTER_STATES[team.roster_state] : null
     if (!team || !state) return '-'
-    const standins = team.standins_count ?? 0
-    const suffix = standins ? ` (${standins} stand-in${standins === 1 ? '' : 's'})` : ''
+    // Stand-ins in the main 5, then stand-ins among the other players
+    const main = team.players.filter((p) => p.is_standin).length
+    const others = (team.other_players ?? []).filter((p) => p.is_standin).length
+    const parts = [
+      main ? `${main} stand-in${main === 1 ? '' : 's'}` : '',
+      others ? `${main ? '+' : ''}${others} in other players` : '',
+    ].filter(Boolean)
+    const suffix = parts.length ? ` (${parts.join(', ')})` : ''
     return <span title={state.hint}>{`${state.label}${suffix}`}</span>
   }
 
