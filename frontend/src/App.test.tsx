@@ -1400,6 +1400,7 @@ describe('App Component', () => {
                     other_players: [
                         { id: 12, name: 'NewGuy', games: 3, is_core: false },
                         { id: 15, name: 'Backup', games: 2, is_core: false },
+                        { id: 16, name: 'Benched', games: 0, is_core: false },
                     ],
                     roster_source: 'recent_matches',
                     roster_games: 10,
@@ -1456,7 +1457,12 @@ describe('App Component', () => {
             // Last match: players outside the core are mentioned only when there were any
             expect(cells('Last Tournament Match')[1]).toHaveTextContent('2 players outside the core')
             expect(cells('Last Tournament Match')[2]).not.toHaveTextContent('outside the core')
-            expect(screen.queryByText('Other Players')).not.toBeInTheDocument()
+            expect(cells('Stand-ins')[1]).not.toHaveTextContent('Benched')
+
+            // Other players: on the team in OpenDota but no league games in the window
+            expect(cells('Other Players')[1]).toHaveTextContent('Benched')
+            expect(cells('Other Players')[1]).not.toHaveTextContent('Benched (')
+            expect(cells('Other Players')[2]).toHaveTextContent('None')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')

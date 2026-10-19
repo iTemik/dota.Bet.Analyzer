@@ -134,8 +134,8 @@ class TeamStats(BaseModel):
         delta: Recent rating change
         logo_url: URL to team's logo image
         players: Main roster; player statistics are calculated from it
-        other_players: Other active players (a backup, a replaced player) for supplementary hints.
-            Former players are not included when the roster comes from recent matches.
+        other_players: Everyone else: players who played league games for the team in the window (with `games`),
+            then players OpenDota lists on the team who did not (`games` 0)
         roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
             window) or "pro_players" (OpenDota team membership, may be stale)
         roster_games: Number of league games in the window the roster was counted from
@@ -455,9 +455,11 @@ def _create_team_stats(
     roster = _resolve_roster_safe(team_stats.team_id, days)
 
     if roster.players:
-        # Main roster from recent league matches; former players are left out entirely
+        # Main roster from recent league matches; team members from pro_players who did not play are kept last
+        played = {p.id for p in [*roster.players, *roster.other_players]}
+        listed = [p.model_copy(update={"games": 0}) for p in [*pro_players, *other_players] if p.id not in played]
         team_stats.players = roster.players
-        team_stats.other_players = roster.other_players
+        team_stats.other_players = [*roster.other_players, *listed]
         team_stats.roster_source = "recent_matches"
         team_stats.roster_games = roster.games_checked
         team_stats.standins_count = roster.standins_count

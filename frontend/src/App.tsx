@@ -461,7 +461,7 @@ function App() {
   // "(X of N)" next to a player who missed some of the team's tournament games in the window
   const formatGamesShare = (player: Player, team: TeamData): string => {
     const total = team.roster_games
-    if (player.games == null || !total || player.games >= total) return ''
+    if (!player.games || !total || player.games >= total) return ''
     return ` (${player.games} of ${total})`
   }
 
@@ -483,7 +483,7 @@ function App() {
   // Stand-ins: everyone else who played for the team in the window
   const getStandins = (team: TeamData): Player[] => {
     const core = new Set(getCorePlayers(team).map((p) => p.id))
-    return [...team.players, ...(team.other_players ?? [])].filter((p) => !core.has(p.id))
+    return [...team.players, ...(team.other_players ?? [])].filter((p) => !core.has(p.id) && p.games !== 0)
   }
 
   const renderCorePlayers = (team: TeamData | undefined) => {
@@ -517,16 +517,21 @@ function App() {
     )
   }
 
-  const renderStandinPlayers = (team: TeamData | undefined) => {
+  const renderStandinPlayers = (team: TeamData | undefined) =>
+    team?.roster_source === 'recent_matches' ? renderPlayedList(getStandins(team), team) : '-'
+
+  // Other players: listed on the team by OpenDota but without league games in the window
+  const renderOtherPlayers = (team: TeamData | undefined) => {
     if (!team) return '-'
-    if (team.roster_source !== 'recent_matches') return renderPlayedList(team.other_players ?? [], team)
-    return renderPlayedList(getStandins(team), team)
+    const others = team.other_players ?? []
+    return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team)
   }
 
   // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
   const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
     { label: 'Core Players', render: renderCorePlayers },
     { label: 'Stand-ins', render: renderStandinPlayers },
+    { label: 'Other Players', render: renderOtherPlayers },
     {
       label: 'Last Tournament Match',
       render: (team) => {

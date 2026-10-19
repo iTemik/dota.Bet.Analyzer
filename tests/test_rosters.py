@@ -353,7 +353,8 @@ def test_create_team_stats_uses_recent_lineup(ctx):
 
     assert stats.roster_source == "recent_matches"
     assert [p.id for p in stats.players] == [1, 2]
-    assert [p.id for p in stats.other_players] == [5]  # former member 7 from pro_players is dropped
+    # Team member 7 from pro_players did not play in the window: kept last with 0 games
+    assert [(p.id, p.games) for p in stats.other_players] == [(5, 1), (7, 0)]
     assert stats.standins_count == 1
     assert stats.roster_games == 3
     assert stats.roster_last_match_time == NOW - DAY
