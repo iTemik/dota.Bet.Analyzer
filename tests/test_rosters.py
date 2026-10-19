@@ -9,6 +9,7 @@ from backend.pro_players import get_d2ba_db
 from backend.rosters import (
     TEAM_MATCHES_TTL,
     TeamMatch,
+    classify_roster,
     compute_league_form,
     get_match_lineup,
     get_team_league_matches,
@@ -194,27 +195,53 @@ def test_standins_and_core_by_time_on_team(ctx):
     assert fake.explorer_batches == [[30, 20, 10, 5]]  # window games and both tenure samples in one query
 
 
-def test_standin_with_minority_of_games_means_new_players(ctx):
-    """999 joined 2 days ago and played 1 of 3 window games: the roster has new players, not a new team."""
+def test_standin_outside_core_means_new_players(ctx):
+    """999 joined 2 days ago and played 1 of 4 window games; 105 played 3 of 4 (75%), so 999 is not in the core."""
     fake = FakeOpenDota(
         [
             _team_match(30, NOW - 1 * DAY, opponent=1),
             _team_match(20, NOW - 3 * DAY, opponent=2),
             _team_match(15, NOW - 4 * DAY, opponent=2),
+            _team_match(12, NOW - 5 * DAY, opponent=2),
             _team_match(10, NOW - 25 * DAY, opponent=3),
         ],
         {
             30: ([101, 102, 103, 104, 999], DIRE_PLAYERS),
             20: (RADIANT_PLAYERS, DIRE_PLAYERS),
-            15: ([101, 102, 103, 104, 106], DIRE_PLAYERS),
+            15: (RADIANT_PLAYERS, DIRE_PLAYERS),
+            12: (RADIANT_PLAYERS, DIRE_PLAYERS),
             10: (RADIANT_PLAYERS, DIRE_PLAYERS),
         },
     )
     with patch("backend.opendota.requests.get", side_effect=fake.get):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
-    assert [p.id for p in roster.players if p.is_standin] == [999]
+    assert [p.id for p in roster.players] == RADIANT_PLAYERS
+    assert all(p.is_core for p in roster.players)
+    assert [(p.id, p.is_standin, p.is_core) for p in roster.other_players] == [(999, True, False)]
+    assert roster.standins_count == 1  # stand-ins outside the main 5 are counted too
     assert roster.roster_state == "new_players"
+
+
+@pytest.mark.parametrize(
+    "games,total,standins,core,state",
+    [
+        # 5 players with 75%+ of the games, no stand-ins
+        ({1: 10, 2: 10, 3: 9, 4: 8, 5: 8, 6: 2}, 10, set(), {1, 2, 3, 4, 5}, "stable"),
+        # stand-in with 2 of 10 games is outside the core
+        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 8, 6: 2}, 10, {6}, {1, 2, 3, 4, 5}, "new_players"),
+        # stand-in with 28 of 30 games is in the core
+        ({1: 30, 2: 28, 3: 28, 4: 28, 5: 28, 6: 2}, 30, {2}, {1, 2, 3, 4, 5}, "new_team"),
+        # only 4 players reach 75%; 50% gives 5
+        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 6, 6: 4}, 10, {6}, {1, 2, 3, 4, 5}, "new_players"),
+        # no share gives exactly 5 players: no clear core
+        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 2, 6: 2}, 4, {6}, set(), "new_team"),
+        # 6 players with 75%+: no clear core
+        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 3, 6: 3}, 4, {6}, set(), "new_team"),
+    ],
+)
+def test_classify_roster(games, total, standins, core, state):
+    assert classify_roster(games, total, standins) == (core, state)
 
 
 def test_new_player_between_thresholds_is_not_a_standin(ctx):

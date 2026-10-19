@@ -14,6 +14,7 @@ interface Player {
   id: number
   is_standin?: boolean
   games?: number | null
+  is_core?: boolean | null
 }
 
 interface LeagueForm {
@@ -430,8 +431,8 @@ function App() {
   // Roster state, from best to worst; stand-ins are players with 20 days or less on the team
   const ROSTER_STATES: Record<string, { rank: number; label: string; hint: string }> = {
     stable: { rank: 0, label: 'Stable', hint: 'No stand-ins' },
-    new_players: { rank: 1, label: 'New players', hint: 'Stand-ins played a minority of the games' },
-    new_team: { rank: 2, label: 'New team', hint: 'Stand-ins played the majority of the games' },
+    new_players: { rank: 1, label: 'New players', hint: 'Stand-ins are not in the core (75% of the games, or 50%)' },
+    new_team: { rank: 2, label: 'New team', hint: 'A stand-in is in the core, or there is no clear core of 5 players' },
   }
 
   const getRosterRank = (team: TeamData | undefined): number | null =>
@@ -452,9 +453,10 @@ function App() {
     return ` (${player.games} of ${total})`
   }
 
-  // A player who played half of the team's tournament games or fewer is shown in gray
-  const isMinority = (player: Player, team: TeamData): boolean =>
-    player.games != null && !!team.roster_games && 2 * player.games <= team.roster_games
+  // A player outside the core (decided by the backend from the share of games played) is shown in gray
+  const isMinority = (player: Player): boolean => player.is_core === false
+
+  const renderStandinMark = (player: Player) => player.is_standin && <span className="roster-source"> · stand-in</span>
 
   const renderRoster = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
@@ -463,12 +465,12 @@ function App() {
         {team.players.map((p) => (
           <div
             key={p.id}
-            className={isMinority(p, team) ? 'minority' : undefined}
+            className={isMinority(p) ? 'minority' : undefined}
             title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}
           >
             {p.name}
             {formatGamesShare(p, team)}
-            {p.is_standin && <span className="roster-source"> · stand-in</span>}
+            {renderStandinMark(p)}
           </div>
         ))}
         {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
@@ -498,6 +500,7 @@ function App() {
               <div key={p.id}>
                 {p.name}
                 {p.games != null ? ` (${p.games})` : ''}
+                {renderStandinMark(p)}
               </div>
             ))}
           </div>

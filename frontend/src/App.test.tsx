@@ -1374,11 +1374,11 @@ describe('App Component', () => {
                     team: 'Team A',
                     team_id: 1,
                     players: [
-                        { id: 11, name: 'Rain', is_standin: false, games: 10 },
-                        { id: 12, name: 'NewGuy', is_standin: true, games: 3 },
-                        { id: 13, name: 'Half', is_standin: false, games: 5 },
+                        { id: 11, name: 'Rain', is_standin: false, games: 10, is_core: true },
+                        { id: 12, name: 'NewGuy', is_standin: true, games: 3, is_core: false },
+                        { id: 13, name: 'Half', is_standin: false, games: 5, is_core: false },
                     ],
-                    other_players: [{ id: 15, name: 'Backup', games: 2 }],
+                    other_players: [{ id: 15, name: 'Backup', games: 2, is_standin: true, is_core: false }],
                     roster_source: 'recent_matches',
                     roster_games: 10,
                     roster_state: 'new_players',
@@ -1393,8 +1393,8 @@ describe('App Component', () => {
                     team: 'Team B',
                     team_id: 2,
                     players: [
-                        { id: 21, name: 'Kiseki', is_standin: false, games: 30 },
-                        { id: 22, name: 'Fresh', is_standin: true, games: 28 },
+                        { id: 21, name: 'Kiseki', is_standin: false, games: 30, is_core: true },
+                        { id: 22, name: 'Fresh', is_standin: true, games: 28, is_core: true },
                     ],
                     roster_source: 'recent_matches',
                     roster_games: 30,
@@ -1414,7 +1414,7 @@ describe('App Component', () => {
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
             expect(screen.queryByText(/tournament games$/)).not.toBeInTheDocument()
 
-            // Insights: players with "X of N" only below 100%, minority players in gray
+            // Insights: players with "X of N" only below 100%, players outside the core in gray
             const playersCells = rowOf('Players').querySelectorAll('td')
             const playerEntry = (name: string) =>
                 Array.from(rowOf('Players').querySelectorAll('.roster > div')).find((el) => el.textContent?.startsWith(name)) as HTMLElement
@@ -1427,7 +1427,11 @@ describe('App Component', () => {
             expect(newGuy).toHaveClass('minority')
             expect(newGuy).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
             expect(playerEntry('Half')).toHaveClass('minority')
-            // 28 of 30 is the majority: a stand-in, but not gray
+            // A stand-in in the core is not gray
+            const backup = Array.from(rowOf('Other Players (tournament games)').querySelectorAll('.roster > div')).find(
+                (el) => el.textContent?.startsWith('Backup'),
+            )
+            expect(backup).toHaveTextContent('Backup (2) · stand-in')
             const fresh = playerEntry('Fresh')
             expect(fresh).toHaveTextContent('Fresh (28 of 30) · stand-in')
             expect(fresh).not.toHaveClass('minority')

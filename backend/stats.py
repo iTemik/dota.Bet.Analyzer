@@ -139,13 +139,13 @@ class TeamStats(BaseModel):
         roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
             window) or "pro_players" (OpenDota team membership, may be stale)
         roster_games: Number of league games in the window the roster was counted from
-        standins_count: How many of `players` have played for the team for 20 days or less
+        standins_count: How many active players have played for the team for 20 days or less
         core_count: How many of `players` have played for the team for 60 days or more
         roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
         latest_match_standins: Players of the latest league match who are stand-ins or not in the main roster
-        roster_state: "stable" (no stand-ins), "new_players" (stand-ins played a minority of the games) or
-            "new_team" (a stand-in played the majority of the games); None when unknown
+        roster_state: "stable" (no stand-ins), "new_players" (stand-ins are not in the core) or "new_team"
+            (a stand-in is in the core, or there is no clear core); None when unknown
         league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
         error: Error information if team data fetch failed
