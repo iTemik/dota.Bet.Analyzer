@@ -1122,6 +1122,25 @@ describe('App Component', () => {
         }, 10000)
     })
 
+    describe('Backend Version', () => {
+        it('retries the version request while the backend is starting', async () => {
+            let versionCalls = 0
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    versionCalls += 1
+                    if (versionCalls === 1) return Promise.reject(new Error('backend not started yet'))
+                    return Promise.resolve(createMockResponse({ backend: '0.11.DEV' }))
+                }
+                return Promise.resolve(createMockResponse({ teams: [] }))
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            expect(screen.getByText(/Backend: v loading/)).toBeInTheDocument()
+            await waitFor(() => expect(screen.getByText(/Backend: v 0\.11\.DEV/)).toBeInTheDocument(), { timeout: 5000 })
+            expect(versionCalls).toBe(2)
+        }, 10000)
+    })
+
     describe('Progress Messages', () => {
         it('keeps the rate-limit wait message when the progress stream times out', async () => {
             const waitLine = { step: 1, message: 'OpenDota rate limit reached, retrying account 7 in 20s', progress: 10, data: {}, timestamp: 1 }

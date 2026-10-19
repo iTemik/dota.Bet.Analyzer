@@ -87,24 +87,38 @@ function App() {
   const currentSearchIdRef = useRef<number>(0)
 
   useEffect(() => {
-    const fetchBackendVersion = async () => {
+    // The backend may still be starting (it syncs pro players on startup), so retry for a while
+    const VERSION_RETRIES = 15
+    const VERSION_RETRY_DELAY = 2000
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const fetchBackendVersion = async (attempt: number) => {
       try {
         const response = await fetch('/api/version')
         const text = await response.text()
-        //console.log('Raw response text:', JSON.stringify(text))
         if (response.ok) {
           const data = JSON.parse(text)
-          //console.log('Parsed backend version response:', data)
-          setBackendVersion(data.backend || data.backend_version || 'unknown')
-        } else {
-          console.error('Backend version response not ok:', response.status)
+          if (!cancelled) setBackendVersion(data.backend || data.backend_version || 'unknown')
+          return
         }
+        console.error('Backend version response not ok:', response.status)
       } catch (err) {
         console.error('Failed to fetch backend version:', err)
       }
+      if (cancelled) return
+      if (attempt < VERSION_RETRIES) {
+        retryTimer = setTimeout(() => fetchBackendVersion(attempt + 1), VERSION_RETRY_DELAY)
+      } else {
+        setBackendVersion('unavailable')
+      }
     }
 
-    fetchBackendVersion()
+    fetchBackendVersion(1)
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+    }
   }, [])
 
   const handleCheck = async () => {
