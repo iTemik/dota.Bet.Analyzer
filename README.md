@@ -840,3 +840,20 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Prefer updating `backend/schema.txt` and running `scripts/generate_schema.py` rather than editing `opendota_schema.sql` manually
 - Verify schema: `python scripts/generate_schema.py --check`
 - Add CI checks to ensure schema is up to date on push
+
+
+# Assumptions
+
+## Dependence on Opendota API
+
+It's assumed that OpenDota provides actual, correct, and complete information. If this service malfunctions, this solution becomes useless.
+
+## Team roster calculation
+
+It is assumed that a team roster is relatively stable. The latest match is used to determine the list of players.
+After roster changes, player swaps, and the addition of temporary stand-ins, statistical calculations may be inaccurate.
+The app uses a list of team members from the previous matches
+
+## Past performance reflects current performance
+
+It is assumed that there is no match-fixing (322) and that team performance is stable, so recently played matches can be used for statistical calculations.
