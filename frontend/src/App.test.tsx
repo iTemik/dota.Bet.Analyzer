@@ -1433,27 +1433,33 @@ describe('App Component', () => {
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
             expect(screen.queryByText(/tournament games$/)).not.toBeInTheDocument()
 
-            // Insights: players with "X of N" only below 100%, players outside the core in gray
-            const playersCells = rowOf('Players').querySelectorAll('td')
-            const playerEntry = (name: string) =>
-                Array.from(rowOf('Players').querySelectorAll('.roster > div')).find((el) => el.textContent?.startsWith(name)) as HTMLElement
-            const rain = playersCells[1].querySelector('.roster > div') as HTMLElement
-            expect(rain).toHaveTextContent('Rain')
-            expect(rain).not.toHaveTextContent('of 10')
-            expect(rain).not.toHaveClass('minority')
-            const newGuy = playerEntry('NewGuy')
-            expect(newGuy).toHaveTextContent('NewGuy (3 of 10) · stand-in')
+            // Insights rows: core players, stand-ins and other players
+            const entry = (label: string, name: string) =>
+                Array.from(rowOf(label).querySelectorAll('.roster > div')).find((el) => el.textContent?.startsWith(name)) as HTMLElement
+            const coreCells = rowOf('Core Players').querySelectorAll('td')
+            expect(coreCells[1]).toHaveTextContent('Rain')
+            expect(coreCells[1]).not.toHaveTextContent('NewGuy')
+            expect(entry('Core Players', 'Rain')).not.toHaveTextContent('of 10')
+            expect(entry('Core Players', 'Rain')).not.toHaveClass('minority')
+            // "(X of N)" only when a core player missed games; outside the core in gray
+            expect(entry('Core Players', 'Half')).toHaveTextContent('Half (5 of 10)')
+            expect(entry('Core Players', 'Half')).toHaveClass('minority')
+            expect(coreCells[2]).toHaveTextContent('Kiseki')
+
+            // Every stand-in shows the games played
+            const newGuy = entry('Stand-ins (≤20 days on team)', 'NewGuy')
+            expect(newGuy).toHaveTextContent('NewGuy played 3 of 10')
             expect(newGuy).toHaveClass('minority')
             expect(newGuy).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
-            expect(playerEntry('Half')).toHaveClass('minority')
-            // A stand-in in the core is not gray
-            const backup = Array.from(rowOf('Other Players (tournament games)').querySelectorAll('.roster > div')).find(
-                (el) => el.textContent?.startsWith('Backup'),
-            )
-            expect(backup).toHaveTextContent('Backup (2) · stand-in')
-            const fresh = playerEntry('Fresh')
-            expect(fresh).toHaveTextContent('Fresh (28 of 30) · stand-in')
+            const fresh = entry('Stand-ins (≤20 days on team)', 'Fresh')
+            expect(fresh).toHaveTextContent('Fresh played 28 of 30')
             expect(fresh).not.toHaveClass('minority')
+
+            // Other players: "<player> played N", stand-ins highlighted by color, no extra text
+            const backup = entry('Other Players', 'Backup')
+            expect(backup).toHaveTextContent('Backup played 2 of 10')
+            expect(backup).not.toHaveTextContent('stand-in')
+            expect(backup).toHaveClass('standin-name')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')

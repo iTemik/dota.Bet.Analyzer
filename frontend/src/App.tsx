@@ -476,55 +476,71 @@ function App() {
   // A player outside the core (decided by the backend from the share of games played) is shown in gray
   const isMinority = (player: Player): boolean => player.is_core === false
 
-  const renderStandinMark = (player: Player) => player.is_standin && <span className="roster-source"> · stand-in</span>
+  const STANDIN_TITLE = 'Stand-in: 20 days or less on the team'
 
-  const renderRoster = (team: TeamData | undefined) => {
+  const formatPlayed = (player: Player, team: TeamData): string =>
+    player.games == null ? player.name : `${player.name} played ${player.games}${team.roster_games ? ` of ${team.roster_games}` : ''}`
+
+  // Main roster players who are not stand-ins; "(X of N)" only when they missed some games
+  const renderCorePlayers = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
+    const core = team.players.filter((p) => !p.is_standin)
     return (
       <div className="roster">
-        {team.players.map((p) => (
-          <div
-            key={p.id}
-            className={isMinority(p) ? 'minority' : undefined}
-            title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}
-          >
+        {core.map((p) => (
+          <div key={p.id} className={isMinority(p) ? 'minority' : undefined}>
             {p.name}
             {formatGamesShare(p, team)}
-            {renderStandinMark(p)}
           </div>
         ))}
+        {!core.length && <div>None</div>}
         {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
+      </div>
+    )
+  }
+
+  // Stand-ins of the main roster, each with the games they played
+  const renderStandinPlayers = (team: TeamData | undefined) => {
+    if (team?.roster_source !== 'recent_matches') return '-'
+    const standins = team.players.filter((p) => p.is_standin)
+    if (!standins.length) return 'None'
+    return (
+      <div className="roster">
+        {standins.map((p) => (
+          <div key={p.id} className={isMinority(p) ? 'minority' : undefined} title={STANDIN_TITLE}>
+            {formatPlayed(p, team)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // Other active players with their games; stand-ins highlighted by color
+  const renderOtherPlayers = (team: TeamData | undefined) => {
+    if (!team) return '-'
+    if (!team.other_players?.length) return 'None'
+    return (
+      <div className="roster">
+        {team.other_players.map((p) => (
+          <div key={p.id} className={p.is_standin ? 'standin-name' : undefined} title={p.is_standin ? STANDIN_TITLE : undefined}>
+            {formatPlayed(p, team)}
+          </div>
+        ))}
       </div>
     )
   }
 
   // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
   const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
-    { label: 'Players', render: renderRoster },
+    { label: 'Core Players', render: renderCorePlayers },
+    { label: 'Stand-ins (≤20 days on team)', render: renderStandinPlayers },
+    { label: 'Other Players', render: renderOtherPlayers },
     {
       label: 'Last Tournament Match',
       render: (team) => {
         if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
         const standins = team.latest_match_standins ?? 0
         return `${formatDate(team.latest_match_time)}, ${standins} stand-in${standins === 1 ? '' : 's'}`
-      },
-    },
-    {
-      label: 'Other Players (tournament games)',
-      render: (team) => {
-        if (!team) return '-'
-        if (!team.other_players?.length) return 'None'
-        return (
-          <div className="roster">
-            {team.other_players.map((p) => (
-              <div key={p.id}>
-                {p.name}
-                {p.games != null ? ` (${p.games})` : ''}
-                {renderStandinMark(p)}
-              </div>
-            ))}
-          </div>
-        )
       },
     },
   ]
@@ -641,7 +657,7 @@ function App() {
       {statistics && (
         <div className="results-section">
           <h2>Team Comparison</h2>
-          <table className="stats-table">
+          <table className="stats-table comparison-table">
             <thead>
               <tr>
                 <th></th>

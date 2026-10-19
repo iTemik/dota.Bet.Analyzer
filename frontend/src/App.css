@@ -113,7 +113,7 @@ input:focus {
 
 .results-section {
   width: 100%;
-  max-width: 600px;
+  max-width: 960px;
   background: rgba(255, 255, 255, 0.1);
   padding: 2rem;
   border-radius: 8px;
@@ -235,4 +235,32 @@ pre {
 .roster .minority {
   color: #8a8a8a;
   font-style: italic;
+}
+
+/* The comparison keeps its compact width; team insights use the whole section for longer text */
+.comparison-table {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.insights-table {
+  table-layout: fixed;
+}
+
+.insights-table th:first-child,
+.insights-table .row-label {
+  width: 11rem;
+  white-space: normal;
+}
+
+.stats-table.insights-table td:nth-child(2),
+.stats-table.insights-table td:nth-child(3) {
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.roster .standin-name {
+  color: #d4a84b;
 }

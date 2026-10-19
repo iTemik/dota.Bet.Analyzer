@@ -679,9 +679,9 @@ npm test          # Run tests
 - **Team Metadata**: Tags, IDs, current ratings
 - **Roster Changes**: Stable, New players or New team with the stand-in count (better state is highlighted), league
   record and the last game of the main players
-- **Team Insights**: a second Team #1 vs Team #2 table for notes that are not head-to-head numbers: the main players
-  ("X of N" games when a player missed some; players outside the core in gray; stand-ins marked),
-  the latest tournament match with its stand-in count, and other players with their tournament games
+- **Team Insights**: a second, wider Team #1 vs Team #2 table for notes that are not head-to-head numbers: core players
+  ("X of N" when a player missed games; outside the core in gray), stand-ins with the games each played, other players
+  ("<player> played N of M", stand-ins highlighted by color) and the latest tournament match with its stand-in count
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches
