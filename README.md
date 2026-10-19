@@ -425,15 +425,15 @@ latest game. Data comes from `/teams/{id}/matches` plus one explorer query per 2
 `players` is the main roster (stats are calculated from it); `other_players` holds other players who played league games
 for the team in the window (a backup, a replaced player). Former players are left out. The core is decided by share
 of games (75%, else 50%), not by time on the team, so a new player who played every game is core. A stand-in is a new
-player (20 days or less on the team) outside the core; `core_count` counts roster players with 60 days or more.
+player (20 days or less on the team) outside the core.
 
 **OpenDota rate limit:** the free tier allows about 60 requests per minute. A request answered with HTTP 429 is
 postponed (Retry-After, or 10/20/40 s) and repeated up to 3 times; the player statistics progress shows the wait.
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
-or even monthly when results are poor, so OpenDota's team assignments are often stale. The thresholds
-(new player ≤ 20 days, ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
+or even monthly when results are poor, so OpenDota's team assignments are often stale. The threshold
+(new player ≤ 20 days on the team) is a temporary assumption and may be adjusted later.
 
 **Sync Pro Players Data:**
 
@@ -598,7 +598,7 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `players`: main roster, the 5 players with the most league games in the `days` window (ties: who played more
   recently); each player has `games`, out of `roster_games` games looked up (at most the newest 40)
 - `other_players`: others who played league games for the team in the window, with their `games`; former players are excluded
-- `is_new` / `new_players_count`: players with ≤ 20 days on the team; `core_count`: main roster players with ≥ 60 days
+- `is_new` / `new_players_count`: players with ≤ 20 days on the team
 - `standins_count`: new players outside the core (a new player in the core is not a stand-in)
 - Core players (`is_core`): the 5 players with at least 75% of the window games; if that does not give exactly 5,
   50% is tried; if neither does, there is no clear core (rule in `classify_roster`, `backend/rosters.py`)

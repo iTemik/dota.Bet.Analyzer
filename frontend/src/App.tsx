@@ -38,7 +38,6 @@ interface TeamData {
   roster_games?: number | null
   standins_count?: number
   new_players_count?: number
-  core_count?: number
   roster_last_match_time?: number | null
   latest_match_time?: number | null
   latest_match_standins?: number | null

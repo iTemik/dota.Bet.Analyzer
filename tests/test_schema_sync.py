@@ -137,7 +137,6 @@ def test_pydantic_to_marshmallow_utility():
                 "roster_games",
                 "standins_count",
                 "new_players_count",
-                "core_count",
                 "roster_last_match_time",
                 "latest_match_time",
                 "latest_match_standins",

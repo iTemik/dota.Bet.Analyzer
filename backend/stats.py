@@ -142,7 +142,6 @@ class TeamStats(BaseModel):
         standins_count: Stand-ins: active players outside the core (below 75%, or 50%, of the games) with
             20 days or less on the team
         new_players_count: How many of `players` have played for the team for 20 days or less
-        core_count: How many of `players` have played for the team for 60 days or more
         roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
         latest_match_standins: Players of the latest league match who are not in the core
@@ -165,7 +164,6 @@ class TeamStats(BaseModel):
     roster_games: Optional[int] = None
     standins_count: int = 0
     new_players_count: int = 0
-    core_count: int = 0
     roster_last_match_time: Optional[int] = None
     latest_match_time: Optional[int] = None
     latest_match_standins: Optional[int] = None
@@ -466,7 +464,6 @@ def _create_team_stats(
         team_stats.roster_games = roster.games_checked
         team_stats.standins_count = roster.standins_count
         team_stats.new_players_count = roster.new_players_count
-        team_stats.core_count = roster.core_count
         team_stats.roster_last_match_time = roster.last_match_time
         team_stats.latest_match_time = roster.latest_match_time
         team_stats.latest_match_standins = roster.latest_match_standins

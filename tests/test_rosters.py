@@ -162,8 +162,8 @@ def test_last_match_of_roster_skips_games_played_mostly_by_others(ctx):
     assert roster.latest_match_standins == 3
 
 
-def test_standins_and_core_by_time_on_team(ctx):
-    """999 first played 5 days ago (stand-in), 104 first played 25 days ago (neither), 101-103 70 days ago (core).
+def test_new_player_by_time_on_team(ctx):
+    """999 first played 5 days ago (new player), 101-104 first played 25 days ago or earlier.
 
     105 only played before the window, so it is a former player and is left out.
     """
@@ -179,7 +179,6 @@ def test_standins_and_core_by_time_on_team(ctx):
             30: (newest, DIRE_PLAYERS),
             20: (newest, DIRE_PLAYERS),
             10: ([101, 102, 103, 104, 105], DIRE_PLAYERS),
-            5: ([101, 102, 103, 401, 402], DIRE_PLAYERS),
         },
     )
     with patch("backend.opendota.requests.get", side_effect=fake.get):
@@ -190,10 +189,9 @@ def test_standins_and_core_by_time_on_team(ctx):
     assert [p.id for p in roster.players if p.is_new] == [999]
     assert roster.new_players_count == 1
     assert roster.standins_count == 0  # all 5 played every window game, so all are core
-    assert roster.core_count == 3
     assert roster.games_checked == 2
     assert roster.roster_state == "new_team"  # the stand-in played both window games
-    assert fake.explorer_batches == [[30, 20, 10, 5]]  # window games and both tenure samples in one query
+    assert fake.explorer_batches == [[30, 20, 10]]  # window games and the tenure sample in one query
 
 
 def test_standin_outside_core_means_new_players(ctx):
@@ -264,7 +262,6 @@ def test_new_player_between_thresholds_is_not_a_standin(ctx):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
     assert roster.standins_count == 0
-    assert roster.core_count == 4
     assert roster.roster_state == "stable"
 
 
@@ -364,7 +361,7 @@ def test_create_team_stats_uses_recent_lineup(ctx):
         players=[Player(id=1, name="a", games=3), Player(id=2, name="b", games=2)],
         other_players=[Player(id=5, name="backup", games=1)],
         standins_count=1,
-        core_count=1,
+        new_players_count=1,
         games_checked=3,
         last_match_time=NOW - DAY,
         latest_match_time=NOW,
@@ -385,7 +382,7 @@ def test_create_team_stats_uses_recent_lineup(ctx):
     assert [p.id for p in stats.players] == [1, 2]
     assert [p.id for p in stats.other_players] == [5]  # former member 7 from pro_players is dropped
     assert stats.standins_count == 1
-    assert stats.core_count == 1
+    assert stats.new_players_count == 1
     assert stats.roster_games == 3
     assert stats.roster_last_match_time == NOW - DAY
     assert (stats.latest_match_time, stats.latest_match_standins) == (NOW, 2)
