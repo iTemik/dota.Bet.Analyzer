@@ -144,6 +144,8 @@ class TeamStats(BaseModel):
         roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
         latest_match_standins: Players of the latest league match who are stand-ins or not in the main roster
+        roster_state: "stable" (no stand-ins), "new_players" (stand-ins played a minority of the games) or
+            "new_team" (a stand-in played the majority of the games); None when unknown
         league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
         error: Error information if team data fetch failed
@@ -164,6 +166,7 @@ class TeamStats(BaseModel):
     roster_last_match_time: Optional[int] = None
     latest_match_time: Optional[int] = None
     latest_match_standins: Optional[int] = None
+    roster_state: Optional[str] = None
     league_form: Optional[LeagueForm] = None
     task_id: Optional[str] = None
     error: Optional[ApiError] = None
@@ -463,6 +466,7 @@ def _create_team_stats(
         team_stats.roster_last_match_time = roster.last_match_time
         team_stats.latest_match_time = roster.latest_match_time
         team_stats.latest_match_standins = roster.latest_match_standins
+        team_stats.roster_state = roster.roster_state
     else:
         team_stats.players = pro_players
         team_stats.other_players = other_players

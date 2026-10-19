@@ -112,6 +112,7 @@ def test_roster_is_taken_from_team_side(ctx):
     assert roster.last_match_id == 3
     assert roster.other_players == []
     assert roster.standins_count == 0  # no older league game, so time on the team is unknown
+    assert roster.roster_state is None
     assert roster.games_checked == 1
 
 
@@ -189,7 +190,31 @@ def test_standins_and_core_by_time_on_team(ctx):
     assert roster.standins_count == 1
     assert roster.core_count == 3
     assert roster.games_checked == 2
+    assert roster.roster_state == "new_team"  # the stand-in played both window games
     assert fake.explorer_batches == [[30, 20, 10, 5]]  # window games and both tenure samples in one query
+
+
+def test_standin_with_minority_of_games_means_new_players(ctx):
+    """999 joined 2 days ago and played 1 of 3 window games: the roster has new players, not a new team."""
+    fake = FakeOpenDota(
+        [
+            _team_match(30, NOW - 1 * DAY, opponent=1),
+            _team_match(20, NOW - 3 * DAY, opponent=2),
+            _team_match(15, NOW - 4 * DAY, opponent=2),
+            _team_match(10, NOW - 25 * DAY, opponent=3),
+        ],
+        {
+            30: ([101, 102, 103, 104, 999], DIRE_PLAYERS),
+            20: (RADIANT_PLAYERS, DIRE_PLAYERS),
+            15: ([101, 102, 103, 104, 106], DIRE_PLAYERS),
+            10: (RADIANT_PLAYERS, DIRE_PLAYERS),
+        },
+    )
+    with patch("backend.opendota.requests.get", side_effect=fake.get):
+        roster = resolve_roster(TEAM_ID, now=NOW)
+
+    assert [p.id for p in roster.players if p.is_standin] == [999]
+    assert roster.roster_state == "new_players"
 
 
 def test_new_player_between_thresholds_is_not_a_standin(ctx):
@@ -211,6 +236,7 @@ def test_new_player_between_thresholds_is_not_a_standin(ctx):
 
     assert roster.standins_count == 0
     assert roster.core_count == 4
+    assert roster.roster_state == "stable"
 
 
 def test_lineups_are_fetched_in_batches(ctx):

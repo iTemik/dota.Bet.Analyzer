@@ -598,6 +598,8 @@ The backend provides REST API endpoints for team statistics, match data, and pla
   recently); each player has `games`, out of `roster_games` games looked up (at most the newest 40)
 - `other_players`: others who played league games for the team in the window, with their `games`; former players are excluded
 - `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `roster_state`: `stable` (no stand-ins), `new_players` (stand-ins played a minority of the window games) or
+  `new_team` (a stand-in played the majority of them, worst for statistics); empty when time on the team is unknown
 - `roster_last_match_time`: latest league game played by at least 3 of the 5 roster players
 - `latest_match_time` / `latest_match_standins`: the team's latest league game and how many of its players were
   stand-ins or not in the main roster
@@ -672,10 +674,11 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
-- **Roster**: Main players ("X of N" games when a player missed some), stand-ins with their games (fewer is better),
-  league record and the last game of these players
-- **Team Insights**: a second Team #1 vs Team #2 table for notes that are not head-to-head numbers: the latest
-  tournament match with its stand-in count, and other players with their tournament games
+- **Roster Changes**: Stable, New players or New team with the stand-in count (better state is highlighted), league
+  record and the last game of the main players
+- **Team Insights**: a second Team #1 vs Team #2 table for notes that are not head-to-head numbers: the main players
+  ("X of N" games when a player missed some; players with half of the games or fewer in gray; stand-ins marked),
+  the latest tournament match with its stand-in count, and other players with their tournament games
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches

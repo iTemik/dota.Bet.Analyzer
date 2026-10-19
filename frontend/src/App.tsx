@@ -40,6 +40,7 @@ interface TeamData {
   roster_last_match_time?: number | null
   latest_match_time?: number | null
   latest_match_standins?: number | null
+  roster_state?: 'stable' | 'new_players' | 'new_team' | null
   league_form?: LeagueForm | null
   tag: string
   team: string
@@ -426,9 +427,23 @@ function App() {
     return new Date(unixTime * 1000).toLocaleDateString()
   }
 
-  // Stand-in count is only known when the roster comes from recent league matches
-  const getStandins = (team: TeamData | undefined): number | null =>
-    team?.roster_source === 'recent_matches' ? (team.standins_count ?? 0) : null
+  // Roster state, from best to worst; stand-ins are players with 20 days or less on the team
+  const ROSTER_STATES: Record<string, { rank: number; label: string; hint: string }> = {
+    stable: { rank: 0, label: 'Stable', hint: 'No stand-ins' },
+    new_players: { rank: 1, label: 'New players', hint: 'Stand-ins played a minority of the games' },
+    new_team: { rank: 2, label: 'New team', hint: 'Stand-ins played the majority of the games' },
+  }
+
+  const getRosterRank = (team: TeamData | undefined): number | null =>
+    team?.roster_source === 'recent_matches' && team.roster_state ? (ROSTER_STATES[team.roster_state]?.rank ?? null) : null
+
+  const renderRosterState = (team: TeamData | undefined) => {
+    const state = team?.roster_source === 'recent_matches' && team.roster_state ? ROSTER_STATES[team.roster_state] : null
+    if (!team || !state) return '-'
+    const standins = team.standins_count ?? 0
+    const suffix = standins ? ` (${standins} stand-in${standins === 1 ? '' : 's'})` : ''
+    return <span title={state.hint}>{`${state.label}${suffix}`}</span>
+  }
 
   // "(X of N)" next to a player who missed some of the team's tournament games in the window
   const formatGamesShare = (player: Player, team: TeamData): string => {
@@ -437,44 +452,33 @@ function App() {
     return ` (${player.games} of ${total})`
   }
 
+  // A player who played half of the team's tournament games or fewer is shown in gray
+  const isMinority = (player: Player, team: TeamData): boolean =>
+    player.games != null && !!team.roster_games && 2 * player.games <= team.roster_games
+
   const renderRoster = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
     return (
       <div className="roster">
         {team.players.map((p) => (
-          <div key={p.id} className={p.is_standin ? 'standin' : undefined} title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}>
+          <div
+            key={p.id}
+            className={isMinority(p, team) ? 'minority' : undefined}
+            title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}
+          >
             {p.name}
             {formatGamesShare(p, team)}
+            {p.is_standin && <span className="roster-source"> · stand-in</span>}
           </div>
         ))}
-        <div className="roster-source">
-          {team.roster_source === 'recent_matches'
-            ? `from ${team.roster_games ?? 0} tournament games`
-            : 'unconfirmed: no recent tournament match'}
-        </div>
-      </div>
-    )
-  }
-
-  const renderStandins = (team: TeamData | undefined) => {
-    const count = getStandins(team)
-    if (count === null || !team) return '-'
-    const standins = team.players.filter((p) => p.is_standin)
-    return (
-      <div className="roster">
-        <div>{count}</div>
-        {standins.map((p) => (
-          <div key={p.id} className="roster-source">
-            {p.name}
-            {formatGamesShare(p, team)}
-          </div>
-        ))}
+        {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
       </div>
     )
   }
 
   // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
   const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
+    { label: 'Players', render: renderRoster },
     {
       label: 'Last Tournament Match',
       render: (team) => {
@@ -666,17 +670,12 @@ function App() {
                 </td>
               </tr>
               <tr>
-                <td className="row-label">Players</td>
-                <td>{renderRoster(statistics.teams?.[0])}</td>
-                <td>{renderRoster(statistics.teams?.[1])}</td>
-              </tr>
-              <tr>
-                <td className="row-label">Stand-ins (≤20 days on team)</td>
-                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[0] }}>
-                  {renderStandins(statistics.teams?.[0])}
+                <td className="row-label">Roster Changes</td>
+                <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[0] }}>
+                  {renderRosterState(statistics.teams?.[0])}
                 </td>
-                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[1] }}>
-                  {renderStandins(statistics.teams?.[1])}
+                <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[1] }}>
+                  {renderRosterState(statistics.teams?.[1])}
                 </td>
               </tr>
               <tr>

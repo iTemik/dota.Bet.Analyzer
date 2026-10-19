@@ -139,6 +139,7 @@ def test_pydantic_to_marshmallow_utility():
                 "roster_last_match_time",
                 "latest_match_time",
                 "latest_match_standins",
+                "roster_state",
                 "league_form",
                 "task_id",
                 "error",

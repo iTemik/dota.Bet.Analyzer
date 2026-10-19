@@ -33,6 +33,9 @@ ROSTER_MAJORITY = 3  # A game with at least this many main roster players counts
 LINEUP_BATCH_SIZE = 20  # Match lineups fetched by one explorer query
 STANDIN_MAX_TENURE_DAYS = 20  # Playing for the team this long or less = stand-in
 CORE_MIN_TENURE_DAYS = 60  # Playing for the team this long or more = core player
+ROSTER_STABLE = "stable"  # No stand-ins
+ROSTER_NEW_PLAYERS = "new_players"  # Stand-ins played only a minority of the window games
+ROSTER_NEW_TEAM = "new_team"  # At least one stand-in played the majority of the window games
 DAY_SECONDS = 24 * 60 * 60
 RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 REQUEST_TIMEOUT = 30
@@ -100,6 +103,7 @@ class TeamRoster(BaseModel):
         last_match_time: Start time of that match (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
         latest_match_standins: Players of the latest league match who are stand-ins or not in the main roster
+        roster_state: ROSTER_STABLE, ROSTER_NEW_PLAYERS or ROSTER_NEW_TEAM (None when time on the team is unknown)
         league_form: League results over the activity window
     """
 
@@ -112,6 +116,7 @@ class TeamRoster(BaseModel):
     last_match_time: Optional[int] = None
     latest_match_time: Optional[int] = None
     latest_match_standins: Optional[int] = None
+    roster_state: Optional[str] = None
     league_form: Optional[LeagueForm] = None
 
 
@@ -437,6 +442,8 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
       STANDIN_MAX_TENURE_DAYS and the newest game older than CORE_MIN_TENURE_DAYS. A roster player first seen
       less than STANDIN_MAX_TENURE_DAYS ago is a stand-in. When the team has no league game older than that,
       nobody is counted as a stand-in because time on the team is unknown.
+    - Roster state: no stand-ins = stable; stand-ins who played only a minority of the window games = new players;
+      a stand-in who played the majority of them = new team (worst for statistics).
 
     Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus one explorer request per
     LINEUP_BATCH_SIZE games not cached yet; lineups are cached forever.
@@ -486,6 +493,13 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     for player in roster.players:
         player.is_standin = player.id in standins
     roster.standins_count = len(standins)
+    if tenure_known:
+        if not standins:
+            roster.roster_state = ROSTER_STABLE
+        elif any(2 * games[a] > len(window) for a in standins):
+            roster.roster_state = ROSTER_NEW_TEAM
+        else:
+            roster.roster_state = ROSTER_NEW_PLAYERS
     roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
     roster.games_checked = len(window)
 

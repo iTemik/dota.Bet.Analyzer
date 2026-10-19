@@ -1367,7 +1367,7 @@ describe('App Component', () => {
 
         const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
 
-        it('shows players from recent tournament matches with stand-ins in gray', async () => {
+        it('shows the roster state in the comparison and the players with their games in the insights', async () => {
             await renderComparison([
                 {
                     ...baseTeam,
@@ -1376,10 +1376,12 @@ describe('App Component', () => {
                     players: [
                         { id: 11, name: 'Rain', is_standin: false, games: 10 },
                         { id: 12, name: 'NewGuy', is_standin: true, games: 3 },
+                        { id: 13, name: 'Half', is_standin: false, games: 5 },
                     ],
                     other_players: [{ id: 15, name: 'Backup', games: 2 }],
                     roster_source: 'recent_matches',
                     roster_games: 10,
+                    roster_state: 'new_players',
                     roster_last_match_time: 1792244896,
                     latest_match_time: 1792244896,
                     latest_match_standins: 2,
@@ -1390,33 +1392,45 @@ describe('App Component', () => {
                     ...baseTeam,
                     team: 'Team B',
                     team_id: 2,
-                    players: [{ id: 21, name: 'Kiseki', is_standin: false, games: 4 }],
+                    players: [
+                        { id: 21, name: 'Kiseki', is_standin: false, games: 30 },
+                        { id: 22, name: 'Fresh', is_standin: true, games: 28 },
+                    ],
                     roster_source: 'recent_matches',
-                    roster_games: 4,
+                    roster_games: 30,
+                    roster_state: 'new_team',
                     roster_last_match_time: 1792244896,
                     latest_match_time: 1792244896,
                     latest_match_standins: 1,
-                    standins_count: 0,
+                    standins_count: 1,
                     league_form: { days: 20, matches: 4, wins: 1, losses: 3, win_percentage: 25, last_match_time: 1792244896 },
                 },
             ])
 
-            expect(screen.getByText('Players')).toBeInTheDocument()
-            const playersCells = rowOf('Players').querySelectorAll('td')
-            // "X of N" only for players who missed some games
-            expect(playersCells[1]).toHaveTextContent('Rain')
-            expect(playersCells[1]).not.toHaveTextContent('Rain (10 of 10)')
-            expect(playersCells[2]).not.toHaveTextContent('of 4')
-            const standin = playersCells[1].querySelector('.standin') as HTMLElement
-            expect(standin).toHaveTextContent('NewGuy (3 of 10)')
-            expect(standin).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
-            expect(screen.getByText('from 10 tournament games')).toBeInTheDocument()
-            expect(screen.getByText('from 4 tournament games')).toBeInTheDocument()
+            // Comparison: roster state, worse state in the negative color
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in)')
+            expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
+            expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
+            expect(screen.queryByText(/tournament games$/)).not.toBeInTheDocument()
 
-            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
-            expect(standinsCells[1]).toHaveTextContent('1')
-            expect(standinsCells[1]).toHaveTextContent('NewGuy (3 of 10)')
-            expect(standinsCells[2]).toHaveTextContent('0')
+            // Insights: players with "X of N" only below 100%, minority players in gray
+            const playersCells = rowOf('Players').querySelectorAll('td')
+            const playerEntry = (name: string) =>
+                Array.from(rowOf('Players').querySelectorAll('.roster > div')).find((el) => el.textContent?.startsWith(name)) as HTMLElement
+            const rain = playersCells[1].querySelector('.roster > div') as HTMLElement
+            expect(rain).toHaveTextContent('Rain')
+            expect(rain).not.toHaveTextContent('of 10')
+            expect(rain).not.toHaveClass('minority')
+            const newGuy = playerEntry('NewGuy')
+            expect(newGuy).toHaveTextContent('NewGuy (3 of 10) · stand-in')
+            expect(newGuy).toHaveClass('minority')
+            expect(newGuy).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
+            expect(playerEntry('Half')).toHaveClass('minority')
+            // 28 of 30 is the majority: a stand-in, but not gray
+            const fresh = playerEntry('Fresh')
+            expect(fresh).toHaveTextContent('Fresh (28 of 30) · stand-in')
+            expect(fresh).not.toHaveClass('minority')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
@@ -1424,46 +1438,24 @@ describe('App Component', () => {
             expect(screen.getByText('Last Match of These Players')).toBeInTheDocument()
         })
 
-        it('shows team insights: latest tournament match stand-ins and other players with their games', async () => {
+        it('shows a stable roster without stand-ins', async () => {
             await renderComparison([
                 {
                     ...baseTeam,
                     team: 'Team A',
                     team_id: 1,
-                    players: [{ id: 11, name: 'Rain', games: 10 }],
-                    other_players: [
-                        { id: 15, name: 'Backup', games: 2 },
-                        { id: 16, name: 'OldMate', games: 1 },
-                    ],
-                    roster_source: 'recent_matches',
-                    roster_games: 10,
-                    latest_match_time: 1792244896,
-                    latest_match_standins: 2,
-                    standins_count: 0,
-                },
-                {
-                    ...baseTeam,
-                    team: 'Team B',
-                    team_id: 2,
-                    players: [{ id: 21, name: 'Kiseki', games: 4 }],
+                    players: [{ id: 11, name: 'Rain', games: 4 }],
                     roster_source: 'recent_matches',
                     roster_games: 4,
-                    latest_match_time: 1792244896,
-                    latest_match_standins: 1,
+                    roster_state: 'stable',
                     standins_count: 0,
                 },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
             ])
 
-            expect(screen.getByText('Team Insights')).toBeInTheDocument()
-            const date = new Date(1792244896 * 1000).toLocaleDateString()
-            const lastMatchCells = rowOf('Last Tournament Match').querySelectorAll('td')
-            expect(lastMatchCells[1]).toHaveTextContent(`${date}, 2 stand-ins`)
-            expect(lastMatchCells[2]).toHaveTextContent(`${date}, 1 stand-in`)
-
-            const otherCells = rowOf('Other Players (tournament games)').querySelectorAll('td')
-            expect(otherCells[1]).toHaveTextContent('Backup (2)')
-            expect(otherCells[1]).toHaveTextContent('OldMate (1)')
-            expect(otherCells[2]).toHaveTextContent('None')
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('Stable')
+            expect(stateCells[2]).toHaveTextContent('-')
         })
 
         it('marks the players as unconfirmed when there was no recent tournament match', async () => {
@@ -1483,10 +1475,10 @@ describe('App Component', () => {
             expect(screen.getByText('OldMember')).toBeInTheDocument()
             expect(screen.getByText('unconfirmed: no recent tournament match')).toBeInTheDocument()
 
-            // Stand-in count is unknown for unconfirmed players, and there is no tournament record
-            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
-            expect(standinsCells[1]).toHaveTextContent('-')
-            expect(standinsCells[2]).toHaveTextContent('-')
+            // Roster state is unknown for unconfirmed players, and there is no tournament record
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('-')
+            expect(stateCells[2]).toHaveTextContent('-')
             const recordCells = rowOf('Tournaments Record (20d)').querySelectorAll('td')
             expect(recordCells[1]).toHaveTextContent('-')
             expect(recordCells[2]).toHaveTextContent('-')
