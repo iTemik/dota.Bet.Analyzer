@@ -1461,7 +1461,7 @@ describe('App Component', () => {
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
-            expect(screen.getByText('Last Match of These Players')).toBeInTheDocument()
+            expect(screen.getByText('Last Match')).toBeInTheDocument()
         })
 
         it('shows a stable roster without stand-ins', async () => {

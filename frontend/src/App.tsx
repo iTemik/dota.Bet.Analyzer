@@ -723,7 +723,7 @@ function App() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="row-label" title="Latest tournament game played by at least 3 of the 5 players">Last Match of These Players</td>
+                    <td className="row-label" title="Latest tournament game played by at least 3 of the 5 players">Last Match</td>
                     <td>{formatDate(statistics.teams?.[0]?.roster_last_match_time ?? statistics.teams?.[0]?.league_form?.last_match_time)}</td>
                     <td>{formatDate(statistics.teams?.[1]?.roster_last_match_time ?? statistics.teams?.[1]?.league_form?.last_match_time)}</td>
                   </tr>
