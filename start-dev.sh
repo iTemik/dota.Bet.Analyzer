@@ -35,6 +35,14 @@ else
     echo "  Or use Docker: docker run -d -p 6379:6379 redis:latest"
 fi
 
+# Apply pending DB migrations
+echo ""
+echo "Applying database migrations..."
+if ! python scripts/init_d2ba_db.py; then
+    echo "Error: database migrations failed"
+    exit 1
+fi
+
 # Start services
 echo ""
 echo "Starting services..."

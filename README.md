@@ -120,7 +120,7 @@ Once your environment is set up, these are the commands you'll use most:
 | **Start backend only** | `npm run backend` |
 | **Start frontend only** | `npm run frontend` |
 | **Activate Python venv** | `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (Linux) |
-| **Initialize databases** | `flask --app backend init-db` then `python scripts/init_d2ba_db.py` |
+| **Initialize databases** | `flask --app backend init-db`; `npm run dev` applies d2ba migrations (or `npm run migrate`) |
 | **View API docs** | Open http://localhost:5000/api/swagger-ui |
 | **Stop Redis** | `docker stop redis-dota && docker rm redis-dota` |
 
@@ -415,7 +415,7 @@ python scripts/init_d2ba_db.py
 ```
 
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
-It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); re-run it after pulling to apply new migrations.
+It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
 
 **Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
 (`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that

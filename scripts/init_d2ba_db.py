@@ -48,6 +48,7 @@ def init_d2ba_db(db_path=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Initialize d2ba database")
     parser.add_argument(
         "--db",
