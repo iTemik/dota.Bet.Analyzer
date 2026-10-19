@@ -24,6 +24,16 @@ python scripts/migrate.py status           # Show migration status
 python scripts/migrate.py run --db <path>  # Use custom database path
 ```
 
+## Automatic Apply
+
+`npm run dev` (and `start-dev.ps1` / `start-dev.sh`) runs `scripts/init_d2ba_db.py` before starting the services, so pending
+migrations are applied on every start. There are no down migrations: switching to an older branch keeps the newer tables,
+which the older code ignores. To keep that safe:
+
+- Migrations only add things (tables, columns, indexes). Do not drop or rename in a migration other branches may not have.
+- Never edit a migration after it has been applied; add a new one instead. An edited file is not re-run, and a table that
+  already exists is skipped, so the schema would silently differ.
+
 ## Writing New Migrations
 
 1. **Create a new file** with naming convention: `YYYYMMDD_HHMMSS_description.sql`

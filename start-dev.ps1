@@ -55,6 +55,16 @@ function Start-InNewTerminal
     Write-Host "[OK] Started: $Title" -ForegroundColor Green
 }
 
+# Apply pending DB migrations
+Write-Host ""
+Write-Host "Applying database migrations..." -ForegroundColor Cyan
+& "$scriptDir\.venv\Scripts\python.exe" "$scriptDir\scripts\init_d2ba_db.py"
+if ($LASTEXITCODE -ne 0)
+{
+    Write-Host "[ERROR] Database migrations failed" -ForegroundColor Red
+    exit 1
+}
+
 # Start services in separate terminal windows
 Write-Host ""
 Write-Host "Starting services..." -ForegroundColor Cyan

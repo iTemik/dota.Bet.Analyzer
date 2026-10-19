@@ -56,7 +56,7 @@ python -m black backend/                # Format Python
 python -m isort backend/                # Sort imports
 python -m ruff check backend/ --fix     # Lint + fix
 python -m pytest tests/ -q              # Run tests
-npm run dev                             # Start Backend+Celery+Frontend (auto-checks Redis)
+npm run dev                             # Start Backend+Celery+Frontend (auto-checks Redis, applies DB migrations)
 npm test                                # All tests
 Get-Content backend/stats.py -Head 50   # View (PowerShell)
 Select-String "pattern" backend/*.py    # Search
