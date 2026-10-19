@@ -12,7 +12,6 @@ const STATS_DAYS = 20
 interface Player {
   name: string
   id: number
-  is_new?: boolean
   games?: number | null
   is_core?: boolean | null
 }
@@ -37,7 +36,6 @@ interface TeamData {
   roster_source?: 'recent_matches' | 'pro_players' | null
   roster_games?: number | null
   standins_count?: number
-  new_players_count?: number
   roster_last_match_time?: number | null
   latest_match_time?: number | null
   latest_match_standins?: number | null
@@ -442,11 +440,11 @@ function App() {
     return new Date(unixTime * 1000).toLocaleDateString()
   }
 
-  // Roster state, from best to worst; stand-ins are players with 20 days or less on the team
+  // Roster state, from best to worst; stand-ins are players outside the core (below 75%, or 50%, of the games)
   const ROSTER_STATES: Record<string, { rank: number; label: string; hint: string }> = {
-    stable: { rank: 0, label: 'Stable', hint: 'No new players (20 days or less on the team)' },
-    new_players: { rank: 1, label: 'New players', hint: 'New players are only stand-ins (outside the core)' },
-    new_team: { rank: 2, label: 'New team', hint: 'A new player is in the core, or there is no clear core of 5 players' },
+    stable: { rank: 0, label: 'Stable', hint: 'Only the core players played' },
+    standins: { rank: 1, label: 'Stand-ins', hint: 'A clear core of 5 players, plus stand-ins in some games' },
+    new_team: { rank: 2, label: 'New team', hint: 'No clear core of 5 players: players rotate' },
   }
 
   const getRosterRank = (team: TeamData | undefined): number | null =>
@@ -455,14 +453,8 @@ function App() {
   const renderRosterState = (team: TeamData | undefined) => {
     const state = team?.roster_source === 'recent_matches' && team.roster_state ? ROSTER_STATES[team.roster_state] : null
     if (!team || !state) return '-'
-    // New players (20 days or less on the team) in the core, then stand-ins (new players outside the core)
-    const newInCore = getCorePlayers(team).filter((p) => p.is_new).length
     const standins = getStandins(team).length
-    const parts = [
-      newInCore ? `${newInCore} new in core` : '',
-      standins ? `${standins} stand-in${standins === 1 ? '' : 's'}` : '',
-    ].filter(Boolean)
-    const suffix = parts.length ? ` (${parts.join(', ')})` : ''
+    const suffix = standins ? ` (${standins} stand-in${standins === 1 ? '' : 's'})` : ''
     return <span title={state.hint}>{`${state.label}${suffix}`}</span>
   }
 
@@ -491,16 +483,15 @@ function App() {
     </>
   )
 
-  // Core: players with 75% (or 50%) of the games, whatever their time on the team; without a clear core, the main 5
+  // Core: players with 75% (or 50%) of the games; without a clear core, the main 5
   const hasCore = (team: TeamData) => team.players.some((p) => p.is_core)
   const getCorePlayers = (team: TeamData): Player[] =>
     team.roster_source === 'recent_matches' && hasCore(team) ? team.players.filter((p) => p.is_core) : team.players
-  const getNonCorePlayers = (team: TeamData): Player[] => {
+  // Stand-ins: everyone else who played for the team in the window
+  const getStandins = (team: TeamData): Player[] => {
     const core = new Set(getCorePlayers(team).map((p) => p.id))
     return [...team.players, ...(team.other_players ?? [])].filter((p) => !core.has(p.id))
   }
-  // Stand-ins: new players (20 days or less on the team) outside the core
-  const getStandins = (team: TeamData): Player[] => getNonCorePlayers(team).filter((p) => p.is_new)
 
   const renderCorePlayers = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
@@ -530,24 +521,16 @@ function App() {
     )
   }
 
-  const renderStandinPlayers = (team: TeamData | undefined) =>
-    team?.roster_source === 'recent_matches' ? renderPlayedList(getStandins(team), team) : '-'
-
-  // Other players: outside the core and not new (backups, replaced players)
-  const renderOtherPlayers = (team: TeamData | undefined) => {
+  const renderStandinPlayers = (team: TeamData | undefined) => {
     if (!team) return '-'
     if (team.roster_source !== 'recent_matches') return renderPlayedList(team.other_players ?? [], team)
-    return renderPlayedList(
-      getNonCorePlayers(team).filter((p) => !p.is_new),
-      team,
-    )
+    return renderPlayedList(getStandins(team), team)
   }
 
   // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
-  const insightRows: { label: string; note?: string; render: (team: TeamData | undefined) => ReactNode }[] = [
+  const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
     { label: 'Core Players', render: renderCorePlayers },
-    { label: 'Stand-ins', note: '(≤20 days on team)', render: renderStandinPlayers },
-    { label: 'Other Players', render: renderOtherPlayers },
+    { label: 'Stand-ins', render: renderStandinPlayers },
     {
       label: 'Last Tournament Match',
       render: (team) => {
@@ -848,10 +831,7 @@ function App() {
                 <tbody>
                   {insightRows.map((row) => (
                     <tr key={row.label}>
-                      <td className="row-label">
-                        {row.label}
-                        {row.note && <div className="row-note">{row.note}</div>}
-                      </td>
+                      <td className="row-label">{row.label}</td>
                       <td>{row.render(statistics.teams?.[0])}</td>
                       <td>{row.render(statistics.teams?.[1])}</td>
                     </tr>

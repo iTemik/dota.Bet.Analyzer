@@ -239,12 +239,6 @@ pre {
   opacity: 0.8;
 }
 
-.row-note {
-  font-weight: 400;
-  font-size: 0.85em;
-  opacity: 0.8;
-}
-
 /* Desktop: team comparison on the left, team insights (longer text) on the right */
 .results-columns {
   display: grid;

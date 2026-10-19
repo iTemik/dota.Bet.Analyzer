@@ -1386,28 +1386,28 @@ describe('App Component', () => {
 
         const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
 
-        it('shows the roster state in the comparison and core players, stand-ins and other players in the insights', async () => {
+        it('shows the roster state in the comparison and core players and stand-ins in the insights', async () => {
             await renderComparison([
                 {
                     ...baseTeam,
                     team: 'Team A',
                     team_id: 1,
                     players: [
-                        { id: 11, name: 'Rain', is_new: false, games: 10, is_core: true },
-                        { id: 13, name: 'Half', is_new: false, games: 8, is_core: true },
-                        { id: 14, name: '#1150772339', is_new: false, games: 10, is_core: true },
+                        { id: 11, name: 'Rain', games: 10, is_core: true },
+                        { id: 13, name: 'Half', games: 8, is_core: true },
+                        { id: 14, name: '#1150772339', games: 10, is_core: true },
                     ],
                     other_players: [
-                        { id: 12, name: 'NewGuy', is_new: true, games: 3, is_core: false },
-                        { id: 15, name: 'Backup', is_new: false, games: 2, is_core: false },
+                        { id: 12, name: 'NewGuy', games: 3, is_core: false },
+                        { id: 15, name: 'Backup', games: 2, is_core: false },
                     ],
                     roster_source: 'recent_matches',
                     roster_games: 10,
-                    roster_state: 'new_players',
+                    roster_state: 'standins',
                     roster_last_match_time: 1792244896,
                     latest_match_time: 1792244896,
                     latest_match_standins: 2,
-                    standins_count: 1,
+                    standins_count: 2,
                     league_form: { days: 20, matches: 10, wins: 7, losses: 3, win_percentage: 70, last_match_time: 1792244896 },
                 },
                 {
@@ -1415,10 +1415,10 @@ describe('App Component', () => {
                     team: 'Team B',
                     team_id: 2,
                     players: [
-                        { id: 21, name: 'Kiseki', is_new: false, games: 30, is_core: true },
-                        { id: 22, name: 'Fresh', is_new: true, games: 30, is_core: true },
+                        { id: 21, name: 'Kiseki', games: 30, is_core: true },
+                        { id: 22, name: 'Fresh', games: 30, is_core: true },
                     ],
-                    other_players: [{ id: 23, name: 'Sub', is_new: true, games: 2, is_core: false }],
+                    other_players: [{ id: 23, name: 'Sub', games: 2, is_core: false }],
                     roster_source: 'recent_matches',
                     roster_games: 30,
                     roster_state: 'new_team',
@@ -1432,12 +1432,12 @@ describe('App Component', () => {
 
             // Comparison: roster state, worse state in the negative color
             const stateCells = rowOf('Roster Changes').querySelectorAll('td')
-            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in)')
-            expect(stateCells[2]).toHaveTextContent('New team (1 new in core, 1 stand-in)')
+            expect(stateCells[1]).toHaveTextContent('Stand-ins (2 stand-ins)')
+            expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
 
             const cells = (label: string) => rowOf(label).querySelectorAll('td')
-            // Core players: "(X of N)" only when a player missed games; a new player who played every game is core
+            // Core players: "(X of N)" only when a player missed games
             expect(cells('Core Players')[1]).toHaveTextContent('Rain')
             expect(cells('Core Players')[1]).not.toHaveTextContent('Rain (')
             expect(cells('Core Players')[1]).toHaveTextContent('Half (8 of 10)')
@@ -1448,16 +1448,11 @@ describe('App Component', () => {
             expect(accountId).toHaveTextContent('ID 1150772339')
             expect(accountId).toHaveAttribute('title', 'No player name on OpenDota; this is the account ID')
 
-            // Stand-ins: new players outside the core, with the games they played; label on two lines
-            expect(rowOf('Stand-ins').querySelector('.row-note')).toHaveTextContent('(≤20 days on team)')
+            // Stand-ins: everyone outside the core, with the games they played
             expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy played 3 of 10')
-            expect(cells('Stand-ins')[1]).not.toHaveTextContent('Backup')
+            expect(cells('Stand-ins')[1]).toHaveTextContent('Backup played 2 of 10')
             expect(cells('Stand-ins')[2]).toHaveTextContent('Sub played 2 of 30')
-
-            // Other players: outside the core and not new, no highlighting
-            expect(cells('Other Players')[1]).toHaveTextContent('Backup played 2 of 10')
-            expect(cells('Other Players')[1]).not.toHaveTextContent('NewGuy')
-            expect(cells('Other Players')[2]).toHaveTextContent('None')
+            expect(screen.queryByText('Other Players')).not.toBeInTheDocument()
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')

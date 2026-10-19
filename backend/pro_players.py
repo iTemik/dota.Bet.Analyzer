@@ -21,7 +21,6 @@ class Player(BaseModel):
     Attributes:
         name: Player name
         id: Unique player ID
-        is_new: Played for the team for 20 days or less (only set for rosters from recent matches)
         games: League games played for the team in the roster window (only set for rosters from recent matches)
         is_core: Played enough of the window games to be in the core, 75% (or 50%); players outside the core
             are stand-ins (only set for rosters from recent matches)
@@ -29,7 +28,6 @@ class Player(BaseModel):
 
     name: str
     id: int
-    is_new: bool = False
     games: Optional[int] = None
     is_core: Optional[bool] = None
 

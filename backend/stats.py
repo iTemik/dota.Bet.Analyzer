@@ -139,14 +139,13 @@ class TeamStats(BaseModel):
         roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
             window) or "pro_players" (OpenDota team membership, may be stale)
         roster_games: Number of league games in the window the roster was counted from
-        standins_count: Stand-ins: active players outside the core (below 75%, or 50%, of the games) with
-            20 days or less on the team
-        new_players_count: How many of `players` have played for the team for 20 days or less
+        standins_count: Stand-ins: players who played in the window but are outside the core (below 75%, or 50%,
+            of the games)
         roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
         latest_match_standins: Players of the latest league match who are not in the core
-        roster_state: "stable" (no new players), "new_players" (new players are not in the core) or "new_team"
-            (a new player is in the core, or there is no clear core); None when unknown
+        roster_state: "stable" (only the core played), "standins" (a clear core plus stand-ins) or "new_team"
+            (no clear core); None when unknown
         league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
         error: Error information if team data fetch failed
@@ -163,7 +162,6 @@ class TeamStats(BaseModel):
     roster_source: Optional[str] = None
     roster_games: Optional[int] = None
     standins_count: int = 0
-    new_players_count: int = 0
     roster_last_match_time: Optional[int] = None
     latest_match_time: Optional[int] = None
     latest_match_standins: Optional[int] = None
@@ -463,7 +461,6 @@ def _create_team_stats(
         team_stats.roster_source = "recent_matches"
         team_stats.roster_games = roster.games_checked
         team_stats.standins_count = roster.standins_count
-        team_stats.new_players_count = roster.new_players_count
         team_stats.roster_last_match_time = roster.last_match_time
         team_stats.latest_match_time = roster.latest_match_time
         team_stats.latest_match_standins = roster.latest_match_standins

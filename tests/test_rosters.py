@@ -112,8 +112,8 @@ def test_roster_is_taken_from_team_side(ctx):
     assert [p.games for p in roster.players] == [1] * 5
     assert roster.last_match_id == 3
     assert roster.other_players == []
-    assert roster.standins_count == 0  # no older league game, so time on the team is unknown
-    assert roster.roster_state is None
+    assert roster.standins_count == 0
+    assert roster.roster_state == "stable"
     assert roster.games_checked == 1
 
 
@@ -162,8 +162,8 @@ def test_last_match_of_roster_skips_games_played_mostly_by_others(ctx):
     assert roster.latest_match_standins == 3
 
 
-def test_new_player_by_time_on_team(ctx):
-    """999 first played 5 days ago (new player), 101-104 first played 25 days ago or earlier.
+def test_new_player_who_played_every_game_is_core(ctx):
+    """999 joined 5 days ago but played every window game, so it is core; time on the team is not checked.
 
     105 only played before the window, so it is a former player and is left out.
     """
@@ -173,7 +173,6 @@ def test_new_player_by_time_on_team(ctx):
             _team_match(30, NOW - 1 * DAY, opponent=1),
             _team_match(20, NOW - 5 * DAY, opponent=2),
             _team_match(10, NOW - 25 * DAY, opponent=3),
-            _team_match(5, NOW - 70 * DAY, opponent=4),
         ],
         {
             30: (newest, DIRE_PLAYERS),
@@ -185,31 +184,28 @@ def test_new_player_by_time_on_team(ctx):
         roster = resolve_roster(TEAM_ID, now=NOW)
 
     assert sorted(p.id for p in roster.players) == sorted(newest)
+    assert all(p.is_core for p in roster.players)
     assert roster.other_players == []
-    assert [p.id for p in roster.players if p.is_new] == [999]
-    assert roster.new_players_count == 1
-    assert roster.standins_count == 0  # all 5 played every window game, so all are core
+    assert roster.standins_count == 0
     assert roster.games_checked == 2
-    assert roster.roster_state == "new_team"  # the stand-in played both window games
-    assert fake.explorer_batches == [[30, 20, 10]]  # window games and the tenure sample in one query
+    assert roster.roster_state == "stable"
+    assert fake.explorer_batches == [[30, 20]]  # only the window games are looked up
 
 
-def test_standin_outside_core_means_new_players(ctx):
-    """999 joined 2 days ago and played 1 of 4 window games; 105 played 3 of 4 (75%), so 999 is not in the core."""
+def test_player_outside_core_is_standin(ctx):
+    """999 played 1 of 4 window games; 105 played 3 of 4 (75%), so 999 is a stand-in."""
     fake = FakeOpenDota(
         [
             _team_match(30, NOW - 1 * DAY, opponent=1),
             _team_match(20, NOW - 3 * DAY, opponent=2),
             _team_match(15, NOW - 4 * DAY, opponent=2),
             _team_match(12, NOW - 5 * DAY, opponent=2),
-            _team_match(10, NOW - 25 * DAY, opponent=3),
         ],
         {
             30: ([101, 102, 103, 104, 999], DIRE_PLAYERS),
             20: (RADIANT_PLAYERS, DIRE_PLAYERS),
             15: (RADIANT_PLAYERS, DIRE_PLAYERS),
             12: (RADIANT_PLAYERS, DIRE_PLAYERS),
-            10: (RADIANT_PLAYERS, DIRE_PLAYERS),
         },
     )
     with patch("backend.opendota.requests.get", side_effect=fake.get):
@@ -217,52 +213,30 @@ def test_standin_outside_core_means_new_players(ctx):
 
     assert [p.id for p in roster.players] == RADIANT_PLAYERS
     assert all(p.is_core for p in roster.players)
-    assert [(p.id, p.is_new, p.is_core) for p in roster.other_players] == [(999, True, False)]
-    assert roster.new_players_count == 0  # 999 is outside the main 5
-    assert roster.standins_count == 1  # 999: new and outside the core
-    assert roster.roster_state == "new_players"
+    assert [(p.id, p.is_core) for p in roster.other_players] == [(999, False)]
+    assert roster.standins_count == 1
+    assert roster.roster_state == "standins"
 
 
 @pytest.mark.parametrize(
-    "games,total,standins,core,state",
+    "games,total,core,state",
     [
-        # 5 players with 75%+ of the games, no stand-ins
-        ({1: 10, 2: 10, 3: 9, 4: 8, 5: 8, 6: 2}, 10, set(), {1, 2, 3, 4, 5}, "stable"),
+        # only the 5 core players played
+        ({1: 10, 2: 10, 3: 9, 4: 8, 5: 8}, 10, {1, 2, 3, 4, 5}, "stable"),
         # stand-in with 2 of 10 games is outside the core
-        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 8, 6: 2}, 10, {6}, {1, 2, 3, 4, 5}, "new_players"),
-        # stand-in with 28 of 30 games is in the core
-        ({1: 30, 2: 28, 3: 28, 4: 28, 5: 28, 6: 2}, 30, {2}, {1, 2, 3, 4, 5}, "new_team"),
+        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 8, 6: 2}, 10, {1, 2, 3, 4, 5}, "standins"),
+        # 28 of 30 games is core
+        ({1: 30, 2: 28, 3: 28, 4: 28, 5: 28, 6: 2}, 30, {1, 2, 3, 4, 5}, "standins"),
         # only 4 players reach 75%; 50% gives 5
-        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 6, 6: 4}, 10, {6}, {1, 2, 3, 4, 5}, "new_players"),
+        ({1: 10, 2: 10, 3: 10, 4: 10, 5: 6, 6: 4}, 10, {1, 2, 3, 4, 5}, "standins"),
         # no share gives exactly 5 players: no clear core
-        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 2, 6: 2}, 4, {6}, set(), "new_team"),
+        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 2, 6: 2}, 4, set(), "new_team"),
         # 6 players with 75%+: no clear core
-        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 3, 6: 3}, 4, {6}, set(), "new_team"),
+        ({1: 4, 2: 4, 3: 4, 4: 4, 5: 3, 6: 3}, 4, set(), "new_team"),
     ],
 )
-def test_classify_roster(games, total, standins, core, state):
-    assert classify_roster(games, total, standins) == (core, state)
-
-
-def test_new_player_between_thresholds_is_not_a_standin(ctx):
-    """A player who joined 30 days ago is neither a stand-in nor core."""
-    fake = FakeOpenDota(
-        [
-            _team_match(30, NOW - 1 * DAY, opponent=1),
-            _team_match(10, NOW - 30 * DAY, opponent=3),
-            _team_match(5, NOW - 70 * DAY, opponent=4),
-        ],
-        {
-            30: (RADIANT_PLAYERS, DIRE_PLAYERS),
-            10: (RADIANT_PLAYERS, DIRE_PLAYERS),
-            5: ([101, 102, 103, 104, 401], DIRE_PLAYERS),
-        },
-    )
-    with patch("backend.opendota.requests.get", side_effect=fake.get):
-        roster = resolve_roster(TEAM_ID, now=NOW)
-
-    assert roster.standins_count == 0
-    assert roster.roster_state == "stable"
+def test_classify_roster(games, total, core, state):
+    assert classify_roster(games, total) == (core, state)
 
 
 def test_lineups_are_fetched_in_batches(ctx):
@@ -361,7 +335,6 @@ def test_create_team_stats_uses_recent_lineup(ctx):
         players=[Player(id=1, name="a", games=3), Player(id=2, name="b", games=2)],
         other_players=[Player(id=5, name="backup", games=1)],
         standins_count=1,
-        new_players_count=1,
         games_checked=3,
         last_match_time=NOW - DAY,
         latest_match_time=NOW,
@@ -382,7 +355,6 @@ def test_create_team_stats_uses_recent_lineup(ctx):
     assert [p.id for p in stats.players] == [1, 2]
     assert [p.id for p in stats.other_players] == [5]  # former member 7 from pro_players is dropped
     assert stats.standins_count == 1
-    assert stats.new_players_count == 1
     assert stats.roster_games == 3
     assert stats.roster_last_match_time == NOW - DAY
     assert (stats.latest_match_time, stats.latest_match_standins) == (NOW, 2)
