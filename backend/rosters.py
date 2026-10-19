@@ -31,12 +31,12 @@ ROSTER_MAX_GAMES = 40  # At most this many of the newest league games inside the
 ROSTER_SIZE = 5  # Main roster size: the players with the most games in the window
 ROSTER_MAJORITY = 3  # A game with at least this many main roster players counts as played by the roster
 LINEUP_BATCH_SIZE = 20  # Match lineups fetched by one explorer query
-STANDIN_MAX_TENURE_DAYS = 20  # Playing for the team this long or less = stand-in
+NEW_PLAYER_MAX_TENURE_DAYS = 20  # Playing for the team this long or less = new player
 CORE_MIN_TENURE_DAYS = 60  # Playing for the team this long or more = core player
 CORE_GAME_SHARES = (0.75, 0.5)  # Core = players with at least this share of the window games; tried in order
-ROSTER_STABLE = "stable"  # No stand-ins
-ROSTER_NEW_PLAYERS = "new_players"  # Stand-ins are not in the core
-ROSTER_NEW_TEAM = "new_team"  # A stand-in is in the core, or no clear core of ROSTER_SIZE players
+ROSTER_STABLE = "stable"  # No new players
+ROSTER_NEW_PLAYERS = "new_players"  # New players are only outside the core (stand-ins)
+ROSTER_NEW_TEAM = "new_team"  # A new player is in the core, or no clear core of ROSTER_SIZE players
 DAY_SECONDS = 24 * 60 * 60
 RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 REQUEST_TIMEOUT = 30
@@ -97,14 +97,15 @@ class TeamRoster(BaseModel):
             (empty when there was no league match in the window or the API failed)
         other_players: Other active players: played league games for the team in the window but not enough
             for the main roster (a backup, a replaced player). Players without games in the window are not included.
-        standins_count: How many of `players` have played for the team for STANDIN_MAX_TENURE_DAYS or less
-            (stand-ins among `other_players` are marked with `is_standin`)
+        standins_count: Stand-ins: active players outside the core who have played for the team for
+            NEW_PLAYER_MAX_TENURE_DAYS or less (marked with `is_new` and `is_core` False)
+        new_players_count: How many of `players` have played for the team for NEW_PLAYER_MAX_TENURE_DAYS or less
         core_count: How many of `players` have played for the team for CORE_MIN_TENURE_DAYS or more
         games_checked: Number of league games in the window whose lineup was looked at
         last_match_id: Latest league match played by at least ROSTER_MAJORITY main roster players
         last_match_time: Start time of that match (unix seconds)
         latest_match_time: Start time of the team's latest league match (unix seconds)
-        latest_match_standins: Players of the latest league match who are stand-ins or not in the main roster
+        latest_match_standins: Players of the latest league match who are not in the core
         roster_state: ROSTER_STABLE, ROSTER_NEW_PLAYERS or ROSTER_NEW_TEAM (None when time on the team is unknown);
             see classify_roster
         league_form: League results over the activity window
@@ -113,6 +114,7 @@ class TeamRoster(BaseModel):
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     standins_count: int = 0
+    new_players_count: int = 0
     core_count: int = 0
     games_checked: int = 0
     last_match_id: Optional[int] = None
@@ -414,7 +416,7 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
 def _tenure_matches(matches: list[TeamMatch], looked_up: set[int], now: int) -> list[TeamMatch]:
     """Newest games older than the stand-in and the core thresholds (not already looked up)."""
     picked: list[TeamMatch] = []
-    for threshold in (STANDIN_MAX_TENURE_DAYS, CORE_MIN_TENURE_DAYS):
+    for threshold in (NEW_PLAYER_MAX_TENURE_DAYS, CORE_MIN_TENURE_DAYS):
         max_time = now - threshold * DAY_SECONDS
         older = next((m for m in matches if m.start_time <= max_time), None)
         if older is not None and older.match_id not in looked_up:
@@ -435,19 +437,20 @@ def _team_lineups(
     return result
 
 
-def classify_roster(games: dict[int, int], total_games: int, standins: set[int]) -> tuple[set[int], str]:
+def classify_roster(games: dict[int, int], total_games: int, new_players: set[int]) -> tuple[set[int], str]:
     """Find the core players and the roster state from games played in the window.
 
-    - Core: players with at least CORE_GAME_SHARES[0] (75%) of the games. When that does not give exactly
-      ROSTER_SIZE players, the next share (50%) is tried. When no share gives ROSTER_SIZE players, there is no
-      clear core and the team counts as a new team.
-    - State: no stand-ins = stable; stand-ins outside the core = new players; a stand-in in the core (or no clear
-      core) = new team, the worst state for statistics.
+    - Core: players with at least CORE_GAME_SHARES[0] (75%) of the games, however long they have been on the
+      team. When that does not give exactly ROSTER_SIZE players, the next share (50%) is tried. When no share
+      gives ROSTER_SIZE players, there is no clear core and the team counts as a new team.
+      New players outside the core are stand-ins.
+    - State: no new players = stable; new players only outside the core (stand-ins) = new players; a new player
+      in the core (or no clear core) = new team, the worst state for statistics.
 
     Args:
         games: Window games played per account
         total_games: Number of window games
-        standins: Accounts with STANDIN_MAX_TENURE_DAYS or less on the team
+        new_players: Accounts with NEW_PLAYER_MAX_TENURE_DAYS or less on the team
 
     Returns:
         Tuple of (core accounts, empty when there is no clear core; roster state)
@@ -459,9 +462,9 @@ def classify_roster(games: dict[int, int], total_games: int, standins: set[int])
             core = candidates
             break
 
-    if not standins:
+    if not new_players:
         state = ROSTER_STABLE
-    elif not core or core & standins:
+    elif not core or core & new_players:
         state = ROSTER_NEW_TEAM
     else:
         state = ROSTER_NEW_PLAYERS
@@ -475,9 +478,9 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     - `players` are the ROSTER_SIZE players with the most of those games (ties: who played more recently),
       whether or not they played the latest game. Everyone else who played in the window goes to `other_players`.
     - Time on the team is estimated from the window games plus two extra lineups: the newest game older than
-      STANDIN_MAX_TENURE_DAYS and the newest game older than CORE_MIN_TENURE_DAYS. A roster player first seen
-      less than STANDIN_MAX_TENURE_DAYS ago is a stand-in. When the team has no league game older than that,
-      nobody is counted as a stand-in because time on the team is unknown.
+      NEW_PLAYER_MAX_TENURE_DAYS and the newest game older than CORE_MIN_TENURE_DAYS. A roster player first seen
+      less than NEW_PLAYER_MAX_TENURE_DAYS ago is a new player. When the team has no league game older than that,
+      nobody is counted as a new player because time on the team is unknown.
     - Core players and the roster state come from classify_roster.
 
     Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus one explorer request per
@@ -517,19 +520,22 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
         for account_id in accounts:
             first_seen[account_id] = min(first_seen.get(account_id, match.start_time), match.start_time)
 
-    standin_limit = now - STANDIN_MAX_TENURE_DAYS * DAY_SECONDS
+    new_limit = now - NEW_PLAYER_MAX_TENURE_DAYS * DAY_SECONDS
     core_limit = now - CORE_MIN_TENURE_DAYS * DAY_SECONDS
-    tenure_known = any(t <= standin_limit for t in first_seen.values())
-    standins = {a for a in ranked if tenure_known and first_seen[a] > standin_limit}
-    core, state = classify_roster(games, len(window), standins)
+    tenure_known = any(t <= new_limit for t in first_seen.values())
+    new_players = {a for a in ranked if tenure_known and first_seen[a] > new_limit}
+    core, state = classify_roster(games, len(window), new_players)
+    # Without a clear core, everyone outside the main roster counts as a stand-in
+    core_set = core or active_set
 
     names = _player_names([*active, *others])
     roster.players = _to_players(active, names, games)
     roster.other_players = _to_players(others, names, games)
     for player in [*roster.players, *roster.other_players]:
-        player.is_standin = player.id in standins
+        player.is_new = player.id in new_players
         player.is_core = player.id in core
-    roster.standins_count = sum(1 for a in active if a in standins)
+    roster.standins_count = sum(1 for a in ranked if a in new_players and a not in core_set)
+    roster.new_players_count = sum(1 for a in active if a in new_players)
     roster.roster_state = state if tenure_known else None
     roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
     roster.games_checked = len(window)
@@ -544,5 +550,5 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
 
     latest, latest_accounts = window[0]
     roster.latest_match_time = latest.start_time
-    roster.latest_match_standins = sum(1 for a in latest_accounts if a not in active_set or a in standins)
+    roster.latest_match_standins = sum(1 for a in latest_accounts if a not in core_set)
     return roster

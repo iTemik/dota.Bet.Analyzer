@@ -423,8 +423,9 @@ latest game. Data comes from `/teams/{id}/matches` plus one explorer query per 2
 (`match_id IN (...)`), both cached. If there was no league match in that period, the OpenDota team membership from
 `pro_players` is used and the UI marks the roster as unconfirmed.
 `players` is the main roster (stats are calculated from it); `other_players` holds other players who played league games
-for the team in the window (a backup, a replaced player). Former players are left out. `standins_count` counts roster
-players with 20 days or less on the team, `core_count` those with 60 days or more.
+for the team in the window (a backup, a replaced player). Former players are left out. The core is decided by share
+of games (75%, else 50%), not by time on the team, so a new player who played every game is core. A stand-in is a new
+player (20 days or less on the team) outside the core; `core_count` counts roster players with 60 days or more.
 
 **OpenDota rate limit:** the free tier allows about 60 requests per minute. A request answered with HTTP 429 is
 postponed (Retry-After, or 10/20/40 s) and repeated up to 3 times; the player statistics progress shows the wait.
@@ -432,7 +433,7 @@ postponed (Retry-After, or 10/20/40 s) and repeated up to 3 times; the player st
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
 or even monthly when results are poor, so OpenDota's team assignments are often stale. The thresholds
-(stand-in ≤ 20 days, core ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
+(new player ≤ 20 days, ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
 
 **Sync Pro Players Data:**
 
@@ -597,15 +598,15 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `players`: main roster, the 5 players with the most league games in the `days` window (ties: who played more
   recently); each player has `games`, out of `roster_games` games looked up (at most the newest 40)
 - `other_players`: others who played league games for the team in the window, with their `games`; former players are excluded
-- `standins_count` / `core_count`: main roster players with ≤ 20 / ≥ 60 days on the team; stand-ins among other
-  players are marked with `is_standin` and shown as "+N in other players"
+- `is_new` / `new_players_count`: players with ≤ 20 days on the team; `core_count`: main roster players with ≥ 60 days
+- `standins_count`: new players outside the core (a new player in the core is not a stand-in)
 - Core players (`is_core`): the 5 players with at least 75% of the window games; if that does not give exactly 5,
   50% is tried; if neither does, there is no clear core (rule in `classify_roster`, `backend/rosters.py`)
-- `roster_state`: `stable` (no stand-ins), `new_players` (stand-ins are outside the core) or `new_team` (a stand-in
-  is in the core, or there is no clear core; worst for statistics); empty when time on the team is unknown
+- `roster_state`: `stable` (no new players), `new_players` (new players are only outside the core) or `new_team` (a new
+  player is in the core, or there is no clear core; worst for statistics); empty when time on the team is unknown
 - `roster_last_match_time`: latest league game played by at least 3 of the 5 roster players
 - `latest_match_time` / `latest_match_standins`: the team's latest league game and how many of its players were
-  stand-ins or not in the main roster
+  outside the core
 - `league_form`: league W/L in the window (pubs excluded)
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
@@ -677,11 +678,12 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
-- **Roster Changes**: Stable, New players or New team with the stand-in count (better state is highlighted), league
+- **Roster Changes**: Stable, New players or New team with new players in the core and the stand-in count (better state is highlighted), league
   record and the last game of the main players
 - **Team Insights**: a second Team #1 vs Team #2 table, to the right of the comparison on desktop (stacked below 1100 px), for notes that are not head-to-head numbers: core players
-  ("X of N" when a player missed games; outside the core in gray), stand-ins with the games each played, other players
-  ("<player> played N of M", stand-ins highlighted by color) and the latest tournament match with its stand-in count
+  ("X of N" when a player missed games), stand-ins (new players outside the core, label on two lines) and other players
+  ("<player> played N of M"), and the latest tournament match with the players outside the core. Accounts without a
+  name on OpenDota show as "ID 123…" in monospace so they don't read as a nickname
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches

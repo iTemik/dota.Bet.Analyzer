@@ -233,9 +233,16 @@ pre {
   opacity: 0.7;
 }
 
-.roster .minority {
-  color: #8a8a8a;
-  font-style: italic;
+.account-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.row-note {
+  font-weight: 400;
+  font-size: 0.85em;
+  opacity: 0.8;
 }
 
 /* Desktop: team comparison on the left, team insights (longer text) on the right */
@@ -265,10 +272,6 @@ pre {
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
-}
-
-.roster .standin-name {
-  color: #d4a84b;
 }
 
 .form-section .input-groups-row {

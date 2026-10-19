@@ -134,7 +134,7 @@ def test_roster_is_players_with_most_games_not_latest_lineup(ctx):
     assert roster.games_checked == 10
     assert roster.last_match_id == 1000  # 4 of the 5 main players played the latest game
     assert roster.latest_match_time == NOW - DAY
-    assert roster.latest_match_standins == 1  # 999 is not in the main roster
+    assert roster.latest_match_standins == 1  # 999 is not in the core
     assert len(fake.explorer_batches) == 1  # all 10 lineups in one explorer query
 
 
@@ -187,8 +187,9 @@ def test_standins_and_core_by_time_on_team(ctx):
 
     assert sorted(p.id for p in roster.players) == sorted(newest)
     assert roster.other_players == []
-    assert [p.id for p in roster.players if p.is_standin] == [999]
-    assert roster.standins_count == 1
+    assert [p.id for p in roster.players if p.is_new] == [999]
+    assert roster.new_players_count == 1
+    assert roster.standins_count == 0  # all 5 played every window game, so all are core
     assert roster.core_count == 3
     assert roster.games_checked == 2
     assert roster.roster_state == "new_team"  # the stand-in played both window games
@@ -218,8 +219,9 @@ def test_standin_outside_core_means_new_players(ctx):
 
     assert [p.id for p in roster.players] == RADIANT_PLAYERS
     assert all(p.is_core for p in roster.players)
-    assert [(p.id, p.is_standin, p.is_core) for p in roster.other_players] == [(999, True, False)]
-    assert roster.standins_count == 0  # stand-ins outside the main 5 are only marked in other_players
+    assert [(p.id, p.is_new, p.is_core) for p in roster.other_players] == [(999, True, False)]
+    assert roster.new_players_count == 0  # 999 is outside the main 5
+    assert roster.standins_count == 1  # 999: new and outside the core
     assert roster.roster_state == "new_players"
 
 

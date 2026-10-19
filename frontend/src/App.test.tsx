@@ -1386,18 +1386,21 @@ describe('App Component', () => {
 
         const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
 
-        it('shows the roster state in the comparison and the players with their games in the insights', async () => {
+        it('shows the roster state in the comparison and core players, stand-ins and other players in the insights', async () => {
             await renderComparison([
                 {
                     ...baseTeam,
                     team: 'Team A',
                     team_id: 1,
                     players: [
-                        { id: 11, name: 'Rain', is_standin: false, games: 10, is_core: true },
-                        { id: 12, name: 'NewGuy', is_standin: true, games: 3, is_core: false },
-                        { id: 13, name: 'Half', is_standin: false, games: 5, is_core: false },
+                        { id: 11, name: 'Rain', is_new: false, games: 10, is_core: true },
+                        { id: 13, name: 'Half', is_new: false, games: 8, is_core: true },
+                        { id: 14, name: '#1150772339', is_new: false, games: 10, is_core: true },
                     ],
-                    other_players: [{ id: 15, name: 'Backup', games: 2, is_standin: true, is_core: false }],
+                    other_players: [
+                        { id: 12, name: 'NewGuy', is_new: true, games: 3, is_core: false },
+                        { id: 15, name: 'Backup', is_new: false, games: 2, is_core: false },
+                    ],
                     roster_source: 'recent_matches',
                     roster_games: 10,
                     roster_state: 'new_players',
@@ -1412,9 +1415,10 @@ describe('App Component', () => {
                     team: 'Team B',
                     team_id: 2,
                     players: [
-                        { id: 21, name: 'Kiseki', is_standin: false, games: 30, is_core: true },
-                        { id: 22, name: 'Fresh', is_standin: true, games: 28, is_core: true },
+                        { id: 21, name: 'Kiseki', is_new: false, games: 30, is_core: true },
+                        { id: 22, name: 'Fresh', is_new: true, games: 30, is_core: true },
                     ],
+                    other_players: [{ id: 23, name: 'Sub', is_new: true, games: 2, is_core: false }],
                     roster_source: 'recent_matches',
                     roster_games: 30,
                     roster_state: 'new_team',
@@ -1428,63 +1432,37 @@ describe('App Component', () => {
 
             // Comparison: roster state, worse state in the negative color
             const stateCells = rowOf('Roster Changes').querySelectorAll('td')
-            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in, +1 in other players)')
-            expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
+            expect(stateCells[1]).toHaveTextContent('New players (1 stand-in)')
+            expect(stateCells[2]).toHaveTextContent('New team (1 new in core, 1 stand-in)')
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
-            expect(screen.queryByText(/tournament games$/)).not.toBeInTheDocument()
 
-            // Insights rows: core players, stand-ins and other players
-            const entry = (label: string, name: string) =>
-                Array.from(rowOf(label).querySelectorAll('.roster > div')).find((el) => el.textContent?.startsWith(name)) as HTMLElement
-            const coreCells = rowOf('Core Players').querySelectorAll('td')
-            expect(coreCells[1]).toHaveTextContent('Rain')
-            expect(coreCells[1]).not.toHaveTextContent('NewGuy')
-            expect(entry('Core Players', 'Rain')).not.toHaveTextContent('of 10')
-            expect(entry('Core Players', 'Rain')).not.toHaveClass('minority')
-            // "(X of N)" only when a core player missed games; outside the core in gray
-            expect(entry('Core Players', 'Half')).toHaveTextContent('Half (5 of 10)')
-            expect(entry('Core Players', 'Half')).toHaveClass('minority')
-            expect(coreCells[2]).toHaveTextContent('Kiseki')
+            const cells = (label: string) => rowOf(label).querySelectorAll('td')
+            // Core players: "(X of N)" only when a player missed games; a new player who played every game is core
+            expect(cells('Core Players')[1]).toHaveTextContent('Rain')
+            expect(cells('Core Players')[1]).not.toHaveTextContent('Rain (')
+            expect(cells('Core Players')[1]).toHaveTextContent('Half (8 of 10)')
+            expect(cells('Core Players')[2]).toHaveTextContent('Fresh')
+            expect(cells('Core Players')[2]).not.toHaveTextContent('Sub')
+            // A player without a name is shown as an account ID
+            const accountId = cells('Core Players')[1].querySelector('.account-id') as HTMLElement
+            expect(accountId).toHaveTextContent('ID 1150772339')
+            expect(accountId).toHaveAttribute('title', 'No player name on OpenDota; this is the account ID')
 
-            // Every stand-in shows the games played
-            const newGuy = entry('Stand-ins (≤20 days on team)', 'NewGuy')
-            expect(newGuy).toHaveTextContent('NewGuy played 3 of 10')
-            expect(newGuy).toHaveClass('minority')
-            expect(newGuy).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
-            const fresh = entry('Stand-ins (≤20 days on team)', 'Fresh')
-            expect(fresh).toHaveTextContent('Fresh played 28 of 30')
-            expect(fresh).not.toHaveClass('minority')
+            // Stand-ins: new players outside the core, with the games they played; label on two lines
+            expect(rowOf('Stand-ins').querySelector('.row-note')).toHaveTextContent('(≤20 days on team)')
+            expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy played 3 of 10')
+            expect(cells('Stand-ins')[1]).not.toHaveTextContent('Backup')
+            expect(cells('Stand-ins')[2]).toHaveTextContent('Sub played 2 of 30')
 
-            // Other players: "<player> played N", stand-ins highlighted by color, no extra text
-            const backup = entry('Other Players', 'Backup')
-            expect(backup).toHaveTextContent('Backup played 2 of 10')
-            expect(backup).not.toHaveTextContent('stand-in')
-            expect(backup).toHaveClass('standin-name')
+            // Other players: outside the core and not new, no highlighting
+            expect(cells('Other Players')[1]).toHaveTextContent('Backup played 2 of 10')
+            expect(cells('Other Players')[1]).not.toHaveTextContent('NewGuy')
+            expect(cells('Other Players')[2]).toHaveTextContent('None')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
             expect(screen.getByText('Last Match of These Players')).toBeInTheDocument()
-        })
-
-        it('counts stand-ins only among the other players', async () => {
-            await renderComparison([
-                {
-                    ...baseTeam,
-                    team: 'Team A',
-                    team_id: 1,
-                    players: [{ id: 11, name: 'Rain', games: 4, is_core: true }],
-                    other_players: [{ id: 15, name: 'Sub', games: 1, is_standin: true, is_core: false }],
-                    roster_source: 'recent_matches',
-                    roster_games: 4,
-                    roster_state: 'new_players',
-                    standins_count: 0,
-                },
-                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
-            ])
-
-            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
-            expect(stateCells[1]).toHaveTextContent('New players (1 in other players)')
         })
 
         it('shows a stable roster without stand-ins', async () => {

@@ -107,7 +107,7 @@ def test_pydantic_to_marshmallow_utility():
     schema_instance = PlayerSchemaGenerated()
     assert "name" in schema_instance.fields
     assert "id" in schema_instance.fields
-    assert "is_standin" in schema_instance.fields
+    assert "is_new" in schema_instance.fields
     assert "games" in schema_instance.fields
     assert "is_core" in schema_instance.fields
     assert len(schema_instance.fields) == 5
@@ -136,6 +136,7 @@ def test_pydantic_to_marshmallow_utility():
                 "roster_source",
                 "roster_games",
                 "standins_count",
+                "new_players_count",
                 "core_count",
                 "roster_last_match_time",
                 "latest_match_time",
@@ -146,7 +147,7 @@ def test_pydantic_to_marshmallow_utility():
                 "error",
             },
         ),
-        ("Player", {"name", "id", "is_standin", "games", "is_core"}),
+        ("Player", {"name", "id", "is_new", "games", "is_core"}),
         ("ApiError", {"status", "code", "message", "details"}),
     ],
 )
