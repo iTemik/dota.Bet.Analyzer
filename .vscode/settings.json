@@ -26,5 +26,6 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "terminal.integrated.shellIntegration.executeCommandDuration": 300000,
-    "terminal.integrated.shellIntegration.timeout": 60000
+    "terminal.integrated.shellIntegration.timeout": 60000,
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }
