@@ -284,8 +284,8 @@ describe('App Component', () => {
 
             await waitFor(() => {
                 expect(screen.getByText(/Team Comparison/i)).toBeInTheDocument()
-                expect(screen.getByText('Nigma Galaxy')).toBeInTheDocument()
-                expect(screen.getByText('Aurora Gaming')).toBeInTheDocument()
+                expect(screen.getAllByText('Nigma Galaxy').length).toBeGreaterThan(0)
+                expect(screen.getAllByText('Aurora Gaming').length).toBeGreaterThan(0)
             })
         })
 
@@ -555,7 +555,7 @@ describe('App Component', () => {
 
             // The component should display the initial stats
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             })
         })
 
@@ -674,7 +674,7 @@ describe('App Component', () => {
 
             // Wait for statistics to be displayed
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             })
 
             // Wait for summary data to be polled and rating matches to appear
@@ -855,7 +855,7 @@ describe('App Component', () => {
 
             // Wait for the table to render with statistics
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             })
 
             // Now query for rating cells
@@ -992,7 +992,7 @@ describe('App Component', () => {
 
             // Wait for statistics to be displayed
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             })
 
             // Wait for summary data to be polled and the rows to be rendered
@@ -1112,13 +1112,63 @@ describe('App Component', () => {
 
             // Wait for statistics to be displayed
             await waitFor(() => {
-                expect(screen.getByText('Team C')).toBeInTheDocument()
+                expect(screen.getAllByText('Team C').length).toBeGreaterThan(0)
             })
 
             // Wait for summary data to be polled and the rows to be rendered
             await waitFor(() => {
                 expect(screen.getByText(/Bad Rank Players/i)).toBeInTheDocument()
             }, { timeout: 5000 })
+        }, 10000)
+    })
+
+    describe('Backend Version', () => {
+        it('retries the version request while the backend is starting', async () => {
+            let versionCalls = 0
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    versionCalls += 1
+                    if (versionCalls === 1) return Promise.reject(new Error('backend not started yet'))
+                    return Promise.resolve(createMockResponse({ backend: '0.11.DEV' }))
+                }
+                return Promise.resolve(createMockResponse({ teams: [] }))
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            expect(screen.getByText(/Backend: v loading/)).toBeInTheDocument()
+            await waitFor(() => expect(screen.getByText(/Backend: v 0\.11\.DEV/)).toBeInTheDocument(), { timeout: 5000 })
+            expect(versionCalls).toBe(2)
+        }, 10000)
+    })
+
+    describe('Progress Messages', () => {
+        it('keeps the rate-limit wait message when the progress stream times out', async () => {
+            const waitLine = { step: 1, message: 'OpenDota rate limit reached, retrying account 7 in 20s', progress: 10, data: {}, timestamp: 1 }
+            const timeoutLine = { step: -1, message: 'Task timed out - no progress updates for 3.0s', progress: -1, data: { error: true, timeout: true } }
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                }
+                if (url.includes('/api/stream-progress/')) {
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve(`${JSON.stringify(waitLine)}\n${JSON.stringify(timeoutLine)}\n`),
+                    })
+                }
+                return Promise.resolve(
+                    createMockResponse({ teams: [{ team: 'Team A', team_id: 1, task_id: 'task_1', players: [], other_players: [] }] })
+                )
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            await waitFor(() => {
+                expect(screen.getByText(/OpenDota rate limit reached, retrying account 7 in 20s/)).toBeInTheDocument()
+            }, { timeout: 5000 })
+            expect(screen.queryByText(/Task timed out/)).not.toBeInTheDocument()
         }, 10000)
     })
 
@@ -1219,7 +1269,7 @@ describe('App Component', () => {
             await userEvent.click(button)
 
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             }, { timeout: 5000 })
 
             // Clear inputs and do second search
@@ -1231,7 +1281,7 @@ describe('App Component', () => {
 
             // Previous results should be cleared, new results should be displayed
             await waitFor(() => {
-                expect(screen.getByText('Team C')).toBeInTheDocument()
+                expect(screen.getAllByText('Team C').length).toBeGreaterThan(0)
                 expect(screen.queryByText('Team A')).not.toBeInTheDocument()
             }, { timeout: 5000 })
         }, 10000)
@@ -1290,7 +1340,7 @@ describe('App Component', () => {
             await userEvent.click(button)
 
             await waitFor(() => {
-                expect(screen.getByText('Team A')).toBeInTheDocument()
+                expect(screen.getAllByText('Team A').length).toBeGreaterThan(0)
             })
 
             // Second search should clear previous polling
@@ -1336,48 +1386,108 @@ describe('App Component', () => {
 
         const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
 
-        it('shows players from recent tournament matches with stand-ins in gray', async () => {
+        it('shows the roster state in the comparison and core players and stand-ins in the insights', async () => {
             await renderComparison([
                 {
                     ...baseTeam,
                     team: 'Team A',
                     team_id: 1,
                     players: [
-                        { id: 11, name: 'Rain', is_standin: false },
-                        { id: 12, name: 'NewGuy', is_standin: true },
+                        { id: 11, name: 'Rain', games: 10, is_core: true },
+                        { id: 13, name: 'Half', games: 8, is_core: true },
+                        { id: 14, name: '#1150772339', games: 10, is_core: true },
+                    ],
+                    other_players: [
+                        { id: 12, name: 'NewGuy', games: 3, is_core: false },
+                        { id: 15, name: 'Backup', games: 2, is_core: false },
+                        { id: 16, name: 'Benched', games: 0, is_core: false },
                     ],
                     roster_source: 'recent_matches',
+                    roster_games: 10,
+                    roster_state: 'standins',
                     roster_last_match_time: 1792244896,
-                    standins_count: 1,
+                    latest_match_time: 1792244896,
+                    latest_match_standins: 2,
+                    standins_count: 2,
                     league_form: { days: 20, matches: 10, wins: 7, losses: 3, win_percentage: 70, last_match_time: 1792244896 },
                 },
                 {
                     ...baseTeam,
                     team: 'Team B',
                     team_id: 2,
-                    players: [{ id: 21, name: 'Kiseki', is_standin: false }],
+                    players: [
+                        { id: 21, name: 'Kiseki', games: 30, is_core: true },
+                        { id: 22, name: 'Fresh', games: 30, is_core: true },
+                    ],
+                    other_players: [{ id: 23, name: 'Sub', games: 2, is_core: false }],
                     roster_source: 'recent_matches',
+                    roster_games: 30,
+                    roster_state: 'new_team',
                     roster_last_match_time: 1792244896,
-                    standins_count: 0,
+                    latest_match_time: 1792244896,
+                    latest_match_standins: 0,
+                    standins_count: 1,
                     league_form: { days: 20, matches: 4, wins: 1, losses: 3, win_percentage: 25, last_match_time: 1792244896 },
                 },
             ])
 
-            expect(screen.getByText('Players')).toBeInTheDocument()
-            expect(screen.getByText('Rain')).not.toHaveClass('standin')
-            const standin = screen.getByText('NewGuy')
-            expect(standin).toHaveClass('standin')
-            expect(standin).toHaveAttribute('title', 'Stand-in: 20 days or less on the team')
-            expect(screen.getAllByText(/from tournament match on/i)).toHaveLength(2)
+            // Comparison: roster state, worse state in the negative color
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('Stand-ins (2 stand-ins)')
+            expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
+            expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
 
-            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
-            expect(standinsCells[1]).toHaveTextContent('1')
-            expect(standinsCells[2]).toHaveTextContent('0')
+            const cells = (label: string) => rowOf(label).querySelectorAll('td')
+            // Core players: "(X of N)" only when a player missed games
+            expect(cells('Core Players')[1]).toHaveTextContent('Rain')
+            expect(cells('Core Players')[1]).not.toHaveTextContent('Rain (')
+            expect(cells('Core Players')[1]).toHaveTextContent('Half (8 of 10)')
+            expect(cells('Core Players')[2]).toHaveTextContent('Fresh')
+            expect(cells('Core Players')[2]).not.toHaveTextContent('Sub')
+            // A player without a name is shown as an account ID
+            const accountId = cells('Core Players')[1].querySelector('.account-id') as HTMLElement
+            expect(accountId).toHaveTextContent('ID 1150772339')
+            expect(accountId).toHaveAttribute('title', 'No player name on OpenDota; this is the account ID')
+
+            // Stand-ins: everyone outside the core, in the same "(X of N)" format as the core players
+            expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy (3 of 10)')
+            expect(cells('Stand-ins')[1]).toHaveTextContent('Backup (2 of 10)')
+            expect(cells('Stand-ins')[2]).toHaveTextContent('Sub (2 of 30)')
+
+            // Last match: players outside the core are mentioned only when there were any
+            expect(cells('Last Tournament Match')[1]).toHaveTextContent('2 players outside the core')
+            expect(cells('Last Tournament Match')[2]).not.toHaveTextContent('outside the core')
+            expect(cells('Stand-ins')[1]).not.toHaveTextContent('Benched')
+
+            // Other players: on the team in OpenDota but no league games in the window
+            expect(cells('Other Players')[1]).toHaveTextContent('Benched')
+            expect(cells('Other Players')[1]).not.toHaveTextContent('Benched (')
+            expect(cells('Other Players')[2]).toHaveTextContent('None')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
-            expect(screen.getByText('Last Tournament Match')).toBeInTheDocument()
+            expect(screen.getByText('Last Match')).toBeInTheDocument()
+        })
+
+        it('shows a stable roster without stand-ins', async () => {
+            await renderComparison([
+                {
+                    ...baseTeam,
+                    team: 'Team A',
+                    team_id: 1,
+                    players: [{ id: 11, name: 'Rain', games: 4 }],
+                    roster_source: 'recent_matches',
+                    roster_games: 4,
+                    roster_state: 'stable',
+                    standins_count: 0,
+                },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
+            ])
+
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('Stable')
+            expect(stateCells[2]).toHaveTextContent('-')
         })
 
         it('marks the players as unconfirmed when there was no recent tournament match', async () => {
@@ -1397,10 +1507,10 @@ describe('App Component', () => {
             expect(screen.getByText('OldMember')).toBeInTheDocument()
             expect(screen.getByText('unconfirmed: no recent tournament match')).toBeInTheDocument()
 
-            // Stand-in count is unknown for unconfirmed players, and there is no tournament record
-            const standinsCells = rowOf(/Stand-ins/).querySelectorAll('td')
-            expect(standinsCells[1]).toHaveTextContent('-')
-            expect(standinsCells[2]).toHaveTextContent('-')
+            // Roster state is unknown for unconfirmed players, and there is no tournament record
+            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
+            expect(stateCells[1]).toHaveTextContent('-')
+            expect(stateCells[2]).toHaveTextContent('-')
             const recordCells = rowOf('Tournaments Record (20d)').querySelectorAll('td')
             expect(recordCells[1]).toHaveTextContent('-')
             expect(recordCells[2]).toHaveTextContent('-')

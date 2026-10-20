@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from backend.helpers import ErrorDefinition, Errors
 from backend.logging_config import setup_logging
+from backend.opendota import WaitCallback, opendota_get
 from backend.pro_players import Player, get_players_by_team
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
@@ -132,14 +133,19 @@ class TeamStats(BaseModel):
         rating: Team's Elo ranking
         delta: Recent rating change
         logo_url: URL to team's logo image
-        players: Active roster; player statistics are calculated from it
-        other_players: Other active players (a playing coach, a backup) for supplementary hints.
-            Former players are not included when the roster comes from recent matches.
-        roster_source: Where `players` came from: "recent_matches" (latest league lineup) or "pro_players"
-            (OpenDota team membership, may be stale)
-        standins_count: How many of `players` have played for the team for 20 days or less
-        core_count: How many of `players` have played for the team for 60 days or more
-        roster_last_match_time: Start time of the league match the roster was taken from (unix seconds)
+        players: Main roster; player statistics are calculated from it
+        other_players: Everyone else: players who played league games for the team in the window (with `games`),
+            then players OpenDota lists on the team who did not (`games` 0)
+        roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
+            window) or "pro_players" (OpenDota team membership, may be stale)
+        roster_games: Number of league games in the window the roster was counted from
+        standins_count: Stand-ins: players who played in the window but are outside the core (below 75%, or 50%,
+            of the games)
+        roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
+        latest_match_time: Start time of the team's latest league match (unix seconds)
+        latest_match_standins: Players of the latest league match who are not in the core
+        roster_state: "stable" (only the core played), "standins" (a clear core plus stand-ins) or "new_team"
+            (no clear core); None when unknown
         league_form: League results over the roster period (pubs excluded)
         task_id: Celery task ID for fetching player match statistics (None if not initiated)
         error: Error information if team data fetch failed
@@ -154,9 +160,12 @@ class TeamStats(BaseModel):
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     roster_source: Optional[str] = None
+    roster_games: Optional[int] = None
     standins_count: int = 0
-    core_count: int = 0
     roster_last_match_time: Optional[int] = None
+    latest_match_time: Optional[int] = None
+    latest_match_standins: Optional[int] = None
+    roster_state: Optional[str] = None
     league_form: Optional[LeagueForm] = None
     task_id: Optional[str] = None
     error: Optional[ApiError] = None
@@ -224,12 +233,15 @@ class StatisticsError(Exception):
     """Raised when fetching or parsing statistics for a team fails."""
 
 
-def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional[ApiError]]:
+def _safe_get_json(
+    url: str, timeout: int = 5, on_wait: Optional[WaitCallback] = None
+) -> tuple[Optional[dict], Optional[ApiError]]:
     """Safely perform GET request and parse JSON response.
 
     Args:
         url: URL to fetch
         timeout: Request timeout in seconds
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
 
     Returns:
         Tuple of (json_data, error) where:
@@ -237,7 +249,7 @@ def _safe_get_json(url: str, timeout: int = 5) -> tuple[Optional[dict], Optional
         - error is an ApiError instance (None if success)
     """
     try:
-        resp = requests.get(url, timeout=timeout)
+        resp = opendota_get(url, timeout=timeout, on_wait=on_wait)
     except Exception as exc:
         return None, ApiError(status=503, code="NETWORK_ERROR", message=f"Network error fetching data: {exc}")
 
@@ -426,7 +438,7 @@ def _create_team_stats(
 ) -> TeamStats:
     """Populate TeamStats with player data and task initialization.
 
-    Takes the roster from the team's latest league match (falls back to the OpenDota team
+    Takes the roster from the team's recent league matches (falls back to the OpenDota team
     membership in pro_players when there was none recently) and initiates background task
     to fetch player match statistics. This is the main source of accounts
     when team statistics are requested (indirect path).
@@ -443,13 +455,18 @@ def _create_team_stats(
     roster = _resolve_roster_safe(team_stats.team_id, days)
 
     if roster.players:
-        # Active roster from the latest league match; former players are left out entirely
+        # Main roster from recent league matches; team members from pro_players who did not play are kept last
+        played = {p.id for p in [*roster.players, *roster.other_players]}
+        listed = [p.model_copy(update={"games": 0}) for p in [*pro_players, *other_players] if p.id not in played]
         team_stats.players = roster.players
-        team_stats.other_players = roster.other_players
+        team_stats.other_players = [*roster.other_players, *listed]
         team_stats.roster_source = "recent_matches"
+        team_stats.roster_games = roster.games_checked
         team_stats.standins_count = roster.standins_count
-        team_stats.core_count = roster.core_count
         team_stats.roster_last_match_time = roster.last_match_time
+        team_stats.latest_match_time = roster.latest_match_time
+        team_stats.latest_match_standins = roster.latest_match_standins
+        team_stats.roster_state = roster.roster_state
     else:
         team_stats.players = pro_players
         team_stats.other_players = other_players
@@ -576,7 +593,7 @@ def compute_statistics(
     return StatsResponse(teams=result)
 
 
-def get_matches(account_id: int, days: int = 20) -> list[MatchStats]:
+def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback] = None) -> list[MatchStats]:
     """Fetch matches for a player from OpenDota API.
 
     It's heavy request it may take several minutes to complete.
@@ -584,6 +601,7 @@ def get_matches(account_id: int, days: int = 20) -> list[MatchStats]:
     Args:
         account_id: Player account ID
         days: Number of days of match history to fetch (default 20)
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
 
     Returns:
         List of MatchStats objects representing the player's recent matches
@@ -599,7 +617,7 @@ def get_matches(account_id: int, days: int = 20) -> list[MatchStats]:
 
     try:
         logger.debug(f"Fetching matches for account {account_id} from URL: {url}")
-        response = requests.get(url, timeout=60)
+        response = opendota_get(url, timeout=60, on_wait=on_wait)
         response.raise_for_status()
 
         try:
@@ -634,17 +652,18 @@ def get_matches(account_id: int, days: int = 20) -> list[MatchStats]:
         raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}") from exc
 
 
-def get_rank(account_id: int) -> Optional[int]:
+def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optional[int]:
     """Fetch player's leaderboard rank from OpenDota API.
 
     Args:
         account_id: Player's account ID
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
 
     Returns:
         Leaderboard rank value (None if not found or error occurred)
     """
     url = f"https://api.opendota.com/api/players/{account_id}"
-    data, error = _safe_get_json(url)
+    data, error = _safe_get_json(url, on_wait=on_wait)
 
     if error:
         logger.debug(f"Failed to fetch rank for account {account_id}: {error.code} - {error.message}")

@@ -107,8 +107,9 @@ def test_pydantic_to_marshmallow_utility():
     schema_instance = PlayerSchemaGenerated()
     assert "name" in schema_instance.fields
     assert "id" in schema_instance.fields
-    assert "is_standin" in schema_instance.fields
-    assert len(schema_instance.fields) == 3
+    assert "games" in schema_instance.fields
+    assert "is_core" in schema_instance.fields
+    assert len(schema_instance.fields) == 4
 
     # Test it can serialize
     sample_data = {"name": "TestPlayer", "id": 123}
@@ -132,15 +133,18 @@ def test_pydantic_to_marshmallow_utility():
                 "players",
                 "other_players",
                 "roster_source",
+                "roster_games",
                 "standins_count",
-                "core_count",
                 "roster_last_match_time",
+                "latest_match_time",
+                "latest_match_standins",
+                "roster_state",
                 "league_form",
                 "task_id",
                 "error",
             },
         ),
-        ("Player", {"name", "id", "is_standin"}),
+        ("Player", {"name", "id", "games", "is_core"}),
         ("ApiError", {"status", "code", "message", "details"}),
     ],
 )

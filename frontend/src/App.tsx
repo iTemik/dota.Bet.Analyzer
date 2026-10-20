@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { VERSION } from './version'
@@ -12,7 +12,8 @@ const STATS_DAYS = 20
 interface Player {
   name: string
   id: number
-  is_standin?: boolean
+  games?: number | null
+  is_core?: boolean | null
 }
 
 interface LeagueForm {
@@ -33,9 +34,12 @@ interface TeamData {
   other_players: Player[]
   players: Player[]
   roster_source?: 'recent_matches' | 'pro_players' | null
+  roster_games?: number | null
   standins_count?: number
-  core_count?: number
   roster_last_match_time?: number | null
+  latest_match_time?: number | null
+  latest_match_standins?: number | null
+  roster_state?: 'stable' | 'new_players' | 'new_team' | null
   league_form?: LeagueForm | null
   tag: string
   team: string
@@ -57,8 +61,8 @@ interface ProgressData {
 /**
  * Team roster (account lists) is collected indirectly:
  *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
- *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> get_players_by_team())
- *    - Player accounts are extracted from team roster in database
+ *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> resolve_roster())
+ *    - Player accounts are the players with the most tournament games in the window (stale team list as fallback)
  *    - This is a background task (players_statistics_task).
  *    - It's needed to poll progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
  */
@@ -81,24 +85,38 @@ function App() {
   const currentSearchIdRef = useRef<number>(0)
 
   useEffect(() => {
-    const fetchBackendVersion = async () => {
+    // The backend may still be starting (it syncs pro players on startup), so retry for a while
+    const VERSION_RETRIES = 15
+    const VERSION_RETRY_DELAY = 2000
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const fetchBackendVersion = async (attempt: number) => {
       try {
         const response = await fetch('/api/version')
         const text = await response.text()
-        //console.log('Raw response text:', JSON.stringify(text))
         if (response.ok) {
           const data = JSON.parse(text)
-          //console.log('Parsed backend version response:', data)
-          setBackendVersion(data.backend || data.backend_version || 'unknown')
-        } else {
-          console.error('Backend version response not ok:', response.status)
+          if (!cancelled) setBackendVersion(data.backend || data.backend_version || 'unknown')
+          return
         }
+        console.error('Backend version response not ok:', response.status)
       } catch (err) {
         console.error('Failed to fetch backend version:', err)
       }
+      if (cancelled) return
+      if (attempt < VERSION_RETRIES) {
+        retryTimer = setTimeout(() => fetchBackendVersion(attempt + 1), VERSION_RETRY_DELAY)
+      } else {
+        setBackendVersion('unavailable')
+      }
     }
 
-    fetchBackendVersion()
+    fetchBackendVersion(1)
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+    }
   }, [])
 
   const handleCheck = async () => {
@@ -266,7 +284,12 @@ function App() {
             for (const line of lines) {
               try {
                 const parsedLine = JSON.parse(line)
-                lastValidJson = parsedLine as ProgressData
+                // A stream timeout only means no new step yet (e.g. waiting for the OpenDota rate limit);
+                // keep showing the last real progress message instead
+                const isStreamTimeout = (parsedLine as ProgressData)?.data && ((parsedLine as ProgressData).data as { timeout?: boolean }).timeout
+                if (!isStreamTimeout || !lastValidJson) {
+                  lastValidJson = parsedLine as ProgressData
+                }
                 allLines.push(parsedLine)
               } catch (e) {
                 // Skip lines that aren't valid JSON
@@ -417,27 +440,109 @@ function App() {
     return new Date(unixTime * 1000).toLocaleDateString()
   }
 
-  // Stand-in count is only known when the roster comes from recent league matches
-  const getStandins = (team: TeamData | undefined): number | null =>
-    team?.roster_source === 'recent_matches' ? (team.standins_count ?? 0) : null
+  // Roster state, from best to worst; stand-ins are players outside the core (below 75%, or 50%, of the games)
+  const ROSTER_STATES: Record<string, { rank: number; label: string; hint: string }> = {
+    stable: { rank: 0, label: 'Stable', hint: 'Only the core players played' },
+    standins: { rank: 1, label: 'Stand-ins', hint: 'A clear core of 5 players, plus stand-ins in some games' },
+    new_team: { rank: 2, label: 'New team', hint: 'No clear core of 5 players: players rotate' },
+  }
 
-  const renderRoster = (team: TeamData | undefined) => {
+  const getRosterRank = (team: TeamData | undefined): number | null =>
+    team?.roster_source === 'recent_matches' && team.roster_state ? (ROSTER_STATES[team.roster_state]?.rank ?? null) : null
+
+  const renderRosterState = (team: TeamData | undefined) => {
+    const state = team?.roster_source === 'recent_matches' && team.roster_state ? ROSTER_STATES[team.roster_state] : null
+    if (!team || !state) return '-'
+    const standins = getStandins(team).length
+    const suffix = standins ? ` (${standins} stand-in${standins === 1 ? '' : 's'})` : ''
+    return <span title={state.hint}>{`${state.label}${suffix}`}</span>
+  }
+
+  // "(X of N)" next to a player who missed some of the team's tournament games in the window
+  const formatGamesShare = (player: Player, team: TeamData): string => {
+    const total = team.roster_games
+    if (!player.games || !total || player.games >= total) return ''
+    return ` (${player.games} of ${total})`
+  }
+
+  // Players without a name on OpenDota come as "#<account id>"; show them as an ID so they don't read as a nickname
+  const renderName = (player: Player) => {
+    const accountId = /^#(\d+)$/.exec(player.name)?.[1]
+    if (!accountId) return player.name
+    return (
+      <span className="account-id" title="No player name on OpenDota; this is the account ID">
+        ID {accountId}
+      </span>
+    )
+  }
+
+  // Core: players with 75% (or 50%) of the games; without a clear core, the main 5
+  const hasCore = (team: TeamData) => team.players.some((p) => p.is_core)
+  const getCorePlayers = (team: TeamData): Player[] =>
+    team.roster_source === 'recent_matches' && hasCore(team) ? team.players.filter((p) => p.is_core) : team.players
+  // Stand-ins: everyone else who played for the team in the window
+  const getStandins = (team: TeamData): Player[] => {
+    const core = new Set(getCorePlayers(team).map((p) => p.id))
+    return [...team.players, ...(team.other_players ?? [])].filter((p) => !core.has(p.id) && p.games !== 0)
+  }
+
+  const renderCorePlayers = (team: TeamData | undefined) => {
     if (!team || !team.players?.length) return '-'
+    const clearCore = team.roster_source === 'recent_matches' && hasCore(team)
     return (
       <div className="roster">
-        {team.players.map((p) => (
-          <div key={p.id} className={p.is_standin ? 'standin' : undefined} title={p.is_standin ? 'Stand-in: 20 days or less on the team' : undefined}>
-            {p.name}
+        {getCorePlayers(team).map((p) => (
+          <div key={p.id}>
+            {renderName(p)}
+            {formatGamesShare(p, team)}
           </div>
         ))}
-        <div className="roster-source">
-          {team.roster_source === 'recent_matches'
-            ? `from tournament match on ${formatDate(team.roster_last_match_time)}`
-            : 'unconfirmed: no recent tournament match'}
-        </div>
+        {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
+        {team.roster_source === 'recent_matches' && !clearCore && <div className="roster-source">no clear core: players rotate</div>}
       </div>
     )
   }
+
+  const renderPlayedList = (players: Player[], team: TeamData) => {
+    if (!players.length) return 'None'
+    return (
+      <div className="roster">
+        {players.map((p) => (
+          <div key={p.id}>
+            {renderName(p)}
+            {formatGamesShare(p, team)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const renderStandinPlayers = (team: TeamData | undefined) =>
+    team?.roster_source === 'recent_matches' ? renderPlayedList(getStandins(team), team) : '-'
+
+  // Other players: listed on the team by OpenDota but without league games in the window
+  const renderOtherPlayers = (team: TeamData | undefined) => {
+    if (!team) return '-'
+    const others = team.other_players ?? []
+    return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team)
+  }
+
+  // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
+  const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
+    { label: 'Core Players', render: renderCorePlayers },
+    { label: 'Stand-ins', render: renderStandinPlayers },
+    { label: 'Other Players', render: renderOtherPlayers },
+    {
+      label: 'Last Tournament Match',
+      render: (team) => {
+        if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
+        // Mention players outside the core only when there were any
+        const outside = team.latest_match_standins ?? 0
+        const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
+        return `${formatDate(team.latest_match_time)}${suffix}`
+      },
+    },
+  ]
 
   const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
     if (!form || !form.matches) return '-'
@@ -550,173 +655,194 @@ function App() {
 
       {statistics && (
         <div className="results-section">
-          <h2>Team Comparison</h2>
-          <table className="stats-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</span>
-                    {statistics.teams?.[0]?.logo_url && (
-                      <img src={statistics.teams[0].logo_url} alt="Team 1 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
-                    )}
-                  </div>
-                </th>
-                <th>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</span>
-                    {statistics.teams?.[1]?.logo_url && (
-                      <img src={statistics.teams[1].logo_url} alt="Team 2 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
-                    )}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="row-label">Team Tag</td>
-                <td>{statistics.teams?.[0]?.tag ? statistics.teams[0].tag : '-'}</td>
-                <td>{statistics.teams?.[1]?.tag ? statistics.teams[1].tag : '-'}</td>
-              </tr>
-              <tr>
-                <td className="row-label">Team ID</td>
-                <td>{statistics.teams?.[0]?.team_id ? statistics.teams[0].team_id : '-'}</td>
-                <td>{statistics.teams?.[1]?.team_id ? statistics.teams[1].team_id : '-'}</td>
-              </tr>
-              <tr>
-                <td className="row-label">Rating</td>
-                <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[0] }}>
-                  {statistics.teams?.[0]?.rating ? statistics.teams[0].rating : '-'}
-                </td>
-                <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[1] }}>
-                  {statistics.teams?.[1]?.rating ? statistics.teams[1].rating : '-'}
-                </td>
-              </tr>
-              <tr>
-                <td className="row-label">Last match rating</td>
-                <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[0]?.delta) }}>
-                  {statistics.teams?.[0]?.delta ? statistics.teams[0].delta.toFixed(1) : '-'}
-                </td>
-                <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[1]?.delta) }}>
-                  {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
-                </td>
-              </tr>
-              <tr>
-                <td className="row-label">Players</td>
-                <td>{renderRoster(statistics.teams?.[0])}</td>
-                <td>{renderRoster(statistics.teams?.[1])}</td>
-              </tr>
-              <tr>
-                <td className="row-label">Stand-ins (≤20 days on team)</td>
-                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[0] }}>
-                  {getStandins(statistics.teams?.[0]) ?? '-'}
-                </td>
-                <td style={{ backgroundColor: getInverseSummaryValueColors(getStandins(statistics.teams?.[0]), getStandins(statistics.teams?.[1]))[1] }}>
-                  {getStandins(statistics.teams?.[1]) ?? '-'}
-                </td>
-              </tr>
-              <tr>
-                <td className="row-label">Tournaments Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
-                <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
-                  {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
-                </td>
-                <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[1] }}>
-                  {formatLeagueRecord(statistics.teams?.[1]?.league_form)}
-                </td>
-              </tr>
-              <tr>
-                <td className="row-label">Last Tournament Match</td>
-                <td>{formatDate(statistics.teams?.[0]?.league_form?.last_match_time)}</td>
-                <td>{formatDate(statistics.teams?.[1]?.league_form?.last_match_time)}</td>
-              </tr>
-              {summaryData && (() => {
-                const team0Summary = getSummaryForTeam(statistics.teams?.[0]?.task_id)
-                const team1Summary = getSummaryForTeam(statistics.teams?.[1]?.task_id)
-                return (
-                  <>
-                    <tr>
-                      <td className="row-label">Rating Matches</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[0] }}>
-                        {String(team0Summary?.rating_matches ?? '-')}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[1] }}>
-                        {String(team1Summary?.rating_matches ?? '-')}
-                      </td>
+          <div className="results-columns">
+            <div className="results-column">
+              <h2>Team Comparison</h2>
+              <table className="stats-table comparison-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</span>
+                        {statistics.teams?.[0]?.logo_url && (
+                          <img src={statistics.teams[0].logo_url} alt="Team 1 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                        )}
+                      </div>
+                    </th>
+                    <th>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</span>
+                        {statistics.teams?.[1]?.logo_url && (
+                          <img src={statistics.teams[1].logo_url} alt="Team 2 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                        )}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="row-label">Team Tag</td>
+                    <td>{statistics.teams?.[0]?.tag ? statistics.teams[0].tag : '-'}</td>
+                    <td>{statistics.teams?.[1]?.tag ? statistics.teams[1].tag : '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Team ID</td>
+                    <td>{statistics.teams?.[0]?.team_id ? statistics.teams[0].team_id : '-'}</td>
+                    <td>{statistics.teams?.[1]?.team_id ? statistics.teams[1].team_id : '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Rating</td>
+                    <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[0] }}>
+                      {statistics.teams?.[0]?.rating ? statistics.teams[0].rating : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[1] }}>
+                      {statistics.teams?.[1]?.rating ? statistics.teams[1].rating : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Last match rating</td>
+                    <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[0]?.delta) }}>
+                      {statistics.teams?.[0]?.delta ? statistics.teams[0].delta.toFixed(1) : '-'}
+                    </td>
+                    <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[1]?.delta) }}>
+                      {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Roster Changes</td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[0] }}>
+                      {renderRosterState(statistics.teams?.[0])}
+                    </td>
+                    <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[1] }}>
+                      {renderRosterState(statistics.teams?.[1])}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label">Tournaments Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
+                    <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
+                      {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
+                    </td>
+                    <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[1] }}>
+                      {formatLeagueRecord(statistics.teams?.[1]?.league_form)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="row-label" title="Latest tournament game played by at least 3 of the 5 players">Last Match</td>
+                    <td>{formatDate(statistics.teams?.[0]?.roster_last_match_time ?? statistics.teams?.[0]?.league_form?.last_match_time)}</td>
+                    <td>{formatDate(statistics.teams?.[1]?.roster_last_match_time ?? statistics.teams?.[1]?.league_form?.last_match_time)}</td>
+                  </tr>
+                  {summaryData && (() => {
+                    const team0Summary = getSummaryForTeam(statistics.teams?.[0]?.task_id)
+                    const team1Summary = getSummaryForTeam(statistics.teams?.[1]?.task_id)
+                    return (
+                      <>
+                        <tr>
+                          <td className="row-label">Rating Matches</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[0] }}>
+                            {String(team0Summary?.rating_matches ?? '-')}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[1] }}>
+                            {String(team1Summary?.rating_matches ?? '-')}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Lobby Matches (tournaments + scrims)</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
+                            {String(team0Summary?.tournament_matches ?? '-')}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[1] }}>
+                            {String(team1Summary?.tournament_matches ?? '-')}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Pub Win %</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[0] }}>
+                            {typeof team0Summary?.rating_win_percentage === 'number' ? team0Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[1] }}>
+                            {typeof team1Summary?.rating_win_percentage === 'number' ? team1Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Lobby Win %</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[0] }}>
+                            {typeof team0Summary?.tournament_win_percentage === 'number' ? team0Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[1] }}>
+                            {typeof team1Summary?.tournament_win_percentage === 'number' ? team1Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Average Player Rank</td>
+                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[0] }}>
+                            {team0Summary?.avg_rank ? (team0Summary.avg_rank as number).toFixed(0) : '-'}
+                          </td>
+                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[1] }}>
+                            {team1Summary?.avg_rank ? (team1Summary.avg_rank as number).toFixed(0) : '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Bad Rank Players</td>
+                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[0] }}>
+                            {String(team0Summary?.bad_rank_players ?? '-')}
+                          </td>
+                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[1] }}>
+                            {String(team1Summary?.bad_rank_players ?? '-')}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Other Matches</td>
+                          <td>{String(team0Summary?.other_matches ?? '-')}</td>
+                          <td>{String(team1Summary?.other_matches ?? '-')}</td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Average Matches Per Player</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[0] }}>
+                            {team0Summary?.matches_avg ? (team0Summary.matches_avg as number).toFixed(2) : '-'}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[1] }}>
+                            {team1Summary?.matches_avg ? (team1Summary.matches_avg as number).toFixed(2) : '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="row-label">Median Matches Per Player</td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[0] }}>
+                            {team0Summary?.matches_median ? (team0Summary.matches_median as number).toFixed(2) : '-'}
+                          </td>
+                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[1] }}>
+                            {team1Summary?.matches_median ? (team1Summary.matches_median as number).toFixed(2) : '-'}
+                          </td>
+                        </tr>
+                      </>
+                    )
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="results-column">
+              <h2>Team Insights</h2>
+              <table className="stats-table insights-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</th>
+                    <th>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {insightRows.map((row) => (
+                    <tr key={row.label}>
+                      <td className="row-label">{row.label}</td>
+                      <td>{row.render(statistics.teams?.[0])}</td>
+                      <td>{row.render(statistics.teams?.[1])}</td>
                     </tr>
-                    <tr>
-                      <td className="row-label">Lobby Matches (tournaments + scrims)</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
-                        {String(team0Summary?.tournament_matches ?? '-')}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[1] }}>
-                        {String(team1Summary?.tournament_matches ?? '-')}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Pub Win %</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[0] }}>
-                        {typeof team0Summary?.rating_win_percentage === 'number' ? team0Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[1] }}>
-                        {typeof team1Summary?.rating_win_percentage === 'number' ? team1Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Lobby Win %</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[0] }}>
-                        {typeof team0Summary?.tournament_win_percentage === 'number' ? team0Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[1] }}>
-                        {typeof team1Summary?.tournament_win_percentage === 'number' ? team1Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Average Player Rank</td>
-                      <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[0] }}>
-                        {team0Summary?.avg_rank ? (team0Summary.avg_rank as number).toFixed(0) : '-'}
-                      </td>
-                      <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[1] }}>
-                        {team1Summary?.avg_rank ? (team1Summary.avg_rank as number).toFixed(0) : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Bad Rank Players</td>
-                      <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[0] }}>
-                        {String(team0Summary?.bad_rank_players ?? '-')}
-                      </td>
-                      <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[1] }}>
-                        {String(team1Summary?.bad_rank_players ?? '-')}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Other Matches</td>
-                      <td>{String(team0Summary?.other_matches ?? '-')}</td>
-                      <td>{String(team1Summary?.other_matches ?? '-')}</td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Average Matches Per Player</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[0] }}>
-                        {team0Summary?.matches_avg ? (team0Summary.matches_avg as number).toFixed(2) : '-'}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[1] }}>
-                        {team1Summary?.matches_avg ? (team1Summary.matches_avg as number).toFixed(2) : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="row-label">Median Matches Per Player</td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[0] }}>
-                        {team0Summary?.matches_median ? (team0Summary.matches_median as number).toFixed(2) : '-'}
-                      </td>
-                      <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[1] }}>
-                        {team1Summary?.matches_median ? (team1Summary.matches_median as number).toFixed(2) : '-'}
-                      </td>
-                    </tr>
-                  </>
-                )
-              })()}
-            </tbody>
-          </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <div className="collapsible-header" onClick={() => setShowRawStats(!showRawStats)}>
             <h2>Raw team stats JSON</h2>

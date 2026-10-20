@@ -336,3 +336,13 @@ class TestStreamProgressEndpoint:
         update_2 = json.loads(lines[1])
         assert update_2["data"]["successful"] == 1
         assert update_2["data"]["total"] == 1
+
+
+def test_progress_is_rounded_to_one_decimal():
+    from backend import dota_bet_analyzer
+
+    with patch.object(dota_bet_analyzer, "redis_client") as redis:
+        dota_bet_analyzer.update_progress("task_1", 5, "Got Player rank", 100 * 5 / 12)
+
+    stored = json.loads(redis.setex.call_args.args[2])
+    assert stored["progress"] == 41.7

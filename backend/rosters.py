@@ -1,11 +1,12 @@
 """Resolve real team rosters and league form from recent league matches.
 
 OpenDota's team membership data (`/proPlayers` team_id, `/teams/{id}/players`) is often stale,
-so the roster is taken from the players who actually played the team's latest league matches.
+so the roster is taken from the players who actually played the team's recent league matches.
 
 Requests are kept low by caching in d2ba.sqlite:
 - `/teams/{team_id}/matches` (one request returns the whole league history) is cached for TEAM_MATCHES_TTL.
-- Match lineups never change once a match is finished, so they are cached forever.
+- Match lineups never change once a match is finished, so they are cached forever. Missing lineups are
+  fetched with one explorer `match_id IN (...)` query per batch of matches.
 """
 
 from __future__ import annotations
@@ -15,23 +16,26 @@ import time
 from collections.abc import Iterable
 from typing import Any, List, Optional
 
-import requests
 from pydantic import BaseModel, Field
 
 from backend.logging_config import setup_logging
+from backend.opendota import OPENDOTA_API, opendota_get
 from backend.pro_players import Player, get_d2ba_db
 
 logger = setup_logging(__name__)
 
-OPENDOTA_API = "https://api.opendota.com/api"
 TEAM_MATCHES_TTL = 2 * 60 * 60  # 2 hours
 TEAM_MATCHES_KEEP_DAYS = 365  # Older league matches are not stored
 ROSTER_DAYS = 20  # Activity window; same default as the match history window (`days`) used for player stats
-ACTIVE_SERIES_LIMIT = 6  # At most this many series inside the activity window are looked up
-STANDIN_MAX_TENURE_DAYS = 20  # Playing for the team this long or less = stand-in
-CORE_MIN_TENURE_DAYS = 60  # Playing for the team this long or more = core player
+ROSTER_MAX_GAMES = 40  # At most this many of the newest league games inside the window are looked up
+ROSTER_SIZE = 5  # Main roster size: the players with the most games in the window
+ROSTER_MAJORITY = 3  # A game with at least this many main roster players counts as played by the roster
+LINEUP_BATCH_SIZE = 20  # Match lineups fetched by one explorer query
+CORE_GAME_SHARES = (0.75, 0.5)  # Core = players with at least this share of the window games; tried in order
+ROSTER_STABLE = "stable"  # Only the core played
+ROSTER_STANDINS = "standins"  # A clear core, plus stand-ins in some games
+ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
 DAY_SECONDS = 24 * 60 * 60
-SERIES_GAP_SECONDS = 8 * 60 * 60  # Games against the same opponent closer than this belong to one series
 RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 REQUEST_TIMEOUT = 30
 
@@ -87,25 +91,31 @@ class TeamRoster(BaseModel):
     """Active roster resolved from the team's recent league matches.
 
     Attributes:
-        players: Active roster: lineup of the latest league match in the activity window
+        players: Main roster: the ROSTER_SIZE players with the most league games in the activity window
             (empty when there was no league match in the window or the API failed)
-        other_players: Other active players: played for the team in the window but not in the latest lineup
-            (a playing coach, a backup). Former players are not included.
-        standins_count: How many of `players` have played for the team for STANDIN_MAX_TENURE_DAYS or less
-        core_count: How many of `players` have played for the team for CORE_MIN_TENURE_DAYS or more
-        series_checked: Number of distinct series whose lineup was looked at
-        last_match_id: Latest league match the roster was taken from
+        other_players: Other active players: played league games for the team in the window but not enough
+            for the main roster (a backup, a replaced player). Players without games in the window are not included.
+        standins_count: Stand-ins: players who played in the window but are outside the core (`is_core` False);
+            without a clear core, the players outside the main roster
+        games_checked: Number of league games in the window whose lineup was looked at
+        last_match_id: Latest league match played by at least ROSTER_MAJORITY main roster players
         last_match_time: Start time of that match (unix seconds)
+        latest_match_time: Start time of the team's latest league match (unix seconds)
+        latest_match_standins: Players of the latest league match who are not in the core
+        roster_state: ROSTER_STABLE, ROSTER_STANDINS or ROSTER_NEW_TEAM;
+            see classify_roster
         league_form: League results over the activity window
     """
 
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
     standins_count: int = 0
-    core_count: int = 0
-    series_checked: int = 0
+    games_checked: int = 0
     last_match_id: Optional[int] = None
     last_match_time: Optional[int] = None
+    latest_match_time: Optional[int] = None
+    latest_match_standins: Optional[int] = None
+    roster_state: Optional[str] = None
     league_form: Optional[LeagueForm] = None
 
 
@@ -120,7 +130,7 @@ def _get_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
         Parsed JSON payload or None
     """
     try:
-        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        resp = opendota_get(url, params=params, timeout=REQUEST_TIMEOUT)
         if resp.status_code != 200:
             logger.warning(f"HTTP {resp.status_code} from {url}")
             return None
@@ -276,11 +286,59 @@ def _rows_to_lineup(rows: Any) -> list[tuple[int, int]]:
     return lineup
 
 
-def get_match_lineup(match_id: int) -> list[tuple[int, int]]:
-    """Get (player_slot, account_id) of all players of a match (cached forever).
+def _fetch_lineup_batch(match_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    """Fetch explorer rows of several matches with one `match_id IN (...)` query, grouped by match."""
+    ids = ",".join(str(int(match_id)) for match_id in match_ids)
+    sql = f"SELECT match_id, player_slot, account_id FROM player_matches WHERE match_id IN ({ids})"
+    payload = _get_json(f"{OPENDOTA_API}/explorer", params={"sql": sql})
+    rows = payload.get("rows") if isinstance(payload, dict) else None
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and isinstance(row.get("match_id"), int):
+            grouped.setdefault(row["match_id"], []).append(row)
+    return grouped
 
-    Uses a small single-match explorer query first; falls back to /matches/{id} which is much larger.
+
+def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[tuple[int, int]]]:
+    """Get (player_slot, account_id) of all players of several matches (cached forever).
+
+    Matches missing from the cache are fetched with one explorer query per LINEUP_BATCH_SIZE matches.
+    A match the explorer returns incomplete falls back to /matches/{id}, which is much larger.
     Both teams are cached, so the opponent's lineup of the same match costs nothing later.
+
+    Args:
+        match_ids: Match identifiers
+
+    Returns:
+        Lineup per match id (an empty or short list when unavailable)
+    """
+    lineups: dict[int, list[tuple[int, int]]] = {}
+    missing: list[int] = []
+    for match_id in dict.fromkeys(match_ids):
+        cached = _load_cached_lineup(match_id)
+        if cached is not None:
+            lineups[match_id] = cached
+        else:
+            missing.append(match_id)
+
+    for start in range(0, len(missing), LINEUP_BATCH_SIZE):
+        batch = missing[start : start + LINEUP_BATCH_SIZE]
+        grouped = _fetch_lineup_batch(batch)
+        for match_id in batch:
+            lineup = _rows_to_lineup(grouped.get(match_id))
+            if len(lineup) < 10:
+                payload = _get_json(f"{OPENDOTA_API}/matches/{int(match_id)}")
+                fallback = _rows_to_lineup(payload.get("players") if isinstance(payload, dict) else None)
+                if len(fallback) > len(lineup):
+                    lineup = fallback
+            if len(lineup) >= 10:
+                _store_lineup(match_id, lineup)
+            lineups[match_id] = lineup
+    return lineups
+
+
+def get_match_lineup(match_id: int) -> list[tuple[int, int]]:
+    """Get (player_slot, account_id) of all players of one match (cached forever).
 
     Args:
         match_id: Match identifier
@@ -288,58 +346,12 @@ def get_match_lineup(match_id: int) -> list[tuple[int, int]]:
     Returns:
         List of (player_slot, account_id) tuples (empty if unavailable)
     """
-    cached = _load_cached_lineup(match_id)
-    if cached is not None:
-        return cached
-
-    sql = f"SELECT player_slot, account_id FROM player_matches WHERE match_id = {int(match_id)}"
-    payload = _get_json(f"{OPENDOTA_API}/explorer", params={"sql": sql})
-    lineup = _rows_to_lineup(payload.get("rows") if isinstance(payload, dict) else None)
-
-    if len(lineup) < 10:
-        payload = _get_json(f"{OPENDOTA_API}/matches/{int(match_id)}")
-        fallback = _rows_to_lineup(payload.get("players") if isinstance(payload, dict) else None)
-        if len(fallback) > len(lineup):
-            lineup = fallback
-
-    if len(lineup) >= 10:
-        _store_lineup(match_id, lineup)
-    return lineup
+    return get_match_lineups([match_id]).get(match_id, [])
 
 
 def _team_side_accounts(lineup: list[tuple[int, int]], radiant: bool) -> list[int]:
     """Return account ids of the players on the given side, ordered by slot."""
     return [account_id for slot, account_id in sorted(lineup) if (slot < RADIANT_SLOT_LIMIT) == radiant and account_id]
-
-
-def _latest_match_per_series(matches: list[TeamMatch], limit: int) -> list[TeamMatch]:
-    """Pick the newest match of each of the latest `limit` series.
-
-    Consecutive matches against the same opponent in the same league with less than
-    SERIES_GAP_SECONDS between them are treated as one series.
-
-    Args:
-        matches: Team matches sorted newest first
-        limit: Maximum number of series
-
-    Returns:
-        Newest match of each series, newest series first
-    """
-    picked: list[TeamMatch] = []
-    previous: Optional[TeamMatch] = None
-    for match in matches:
-        same_series = (
-            previous is not None
-            and match.opposing_team_id == previous.opposing_team_id
-            and match.leagueid == previous.leagueid
-            and previous.start_time - match.start_time < SERIES_GAP_SECONDS
-        )
-        if not same_series:
-            if len(picked) >= limit:
-                break
-            picked.append(match)
-        previous = match
-    return picked
 
 
 def _player_names(account_ids: list[int]) -> dict[int, str]:
@@ -362,9 +374,12 @@ def _player_names(account_ids: list[int]) -> dict[int, str]:
     return {row["account_id"]: (row["name"] or row["personaname"] or "").strip() for row in rows}
 
 
-def _to_players(account_ids: list[int], names: dict[int, str]) -> list[Player]:
-    """Build Player objects, using the account id when the name is unknown."""
-    return [Player(id=account_id, name=names.get(account_id) or f"#{account_id}") for account_id in account_ids]
+def _to_players(account_ids: list[int], names: dict[int, str], games: dict[int, int]) -> list[Player]:
+    """Build Player objects with their league game count, using the account id when the name is unknown."""
+    return [
+        Player(id=account_id, name=names.get(account_id) or f"#{account_id}", games=games.get(account_id))
+        for account_id in account_ids
+    ]
 
 
 def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] = None) -> LeagueForm:
@@ -392,57 +407,60 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
     )
 
 
-def _first_match_older_than(matches: list[TeamMatch], max_time: int) -> Optional[TeamMatch]:
-    """Return the newest match that started at or before `max_time` (matches are sorted newest first)."""
-    return next((m for m in matches if m.start_time <= max_time), None)
-
-
-def _lineups(matches: Iterable[TeamMatch]) -> list[tuple[TeamMatch, list[int]]]:
-    """Look up the team's side of each match, skipping matches with an incomplete lineup."""
+def _team_lineups(
+    matches: Iterable[TeamMatch], lineups: dict[int, list[tuple[int, int]]]
+) -> list[tuple[TeamMatch, list[int]]]:
+    """The team's side of each match, skipping matches with an incomplete lineup."""
     result = []
     for match in matches:
-        accounts = _team_side_accounts(get_match_lineup(match.match_id), match.radiant)
+        accounts = _team_side_accounts(lineups.get(match.match_id, []), match.radiant)
         if len(accounts) >= 5:
             result.append((match, accounts))
     return result
 
 
-def _other_active_players(window: list[tuple[TeamMatch, list[int]]], active_ids: set[int]) -> list[int]:
-    """Players of older window lineups who are not in the active roster, most appearances first."""
-    appearances: dict[int, int] = {}
-    for _, accounts in window[1:]:
-        for account_id in accounts:
-            if account_id not in active_ids:
-                appearances[account_id] = appearances.get(account_id, 0) + 1
-    return sorted(appearances, key=lambda a: -appearances[a])
+def classify_roster(games: dict[int, int], total_games: int) -> tuple[set[int], str]:
+    """Find the core players and the roster state from games played together in the window.
 
+    - Core: players with at least CORE_GAME_SHARES[0] (75%) of the games. When that does not give exactly
+      ROSTER_SIZE players, the next share (50%) is tried. When no share gives ROSTER_SIZE players, there is no
+      clear core and the team counts as a new team. Everyone else who played is a stand-in.
+    - State: only the core played = stable; a clear core plus stand-ins = stand-ins; no clear core = new team,
+      the worst state for statistics.
 
-def _tenure_samples(matches: list[TeamMatch], looked_up: set[int], now: int) -> list[tuple[TeamMatch, list[int]]]:
-    """Lineups of the newest games older than the stand-in and core thresholds (not already looked up)."""
-    picked: list[TeamMatch] = []
-    for threshold in (STANDIN_MAX_TENURE_DAYS, CORE_MIN_TENURE_DAYS):
-        older = _first_match_older_than(matches, now - threshold * DAY_SECONDS)
-        if older is not None and older.match_id not in looked_up:
-            looked_up = looked_up | {older.match_id}
-            picked.append(older)
-    return _lineups(picked)
+    Args:
+        games: Window games played per account
+        total_games: Number of window games
+
+    Returns:
+        Tuple of (core accounts, empty when there is no clear core; roster state)
+    """
+    core: set[int] = set()
+    for share in CORE_GAME_SHARES:
+        candidates = {a for a, n in games.items() if n >= share * total_games}
+        if len(candidates) == ROSTER_SIZE:
+            core = candidates
+            break
+
+    if not core:
+        state = ROSTER_NEW_TEAM
+    elif len(games) == len(core):
+        state = ROSTER_STABLE
+    else:
+        state = ROSTER_STANDINS
+    return core, state
 
 
 def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = None) -> TeamRoster:
-    """Resolve the team's active roster and other active players from its league matches.
+    """Resolve the team's main roster and other active players from its league matches.
 
-    - Activity window: the last `days` days. The newest game of each series in the window is looked up
-      (at most ACTIVE_SERIES_LIMIT series).
-    - `players` is the lineup of the latest of those games. Players who played another series in the
-      window but not the latest one go to `other_players`.
-    - Time on the team is estimated from two extra lineups: the newest game older than
-      STANDIN_MAX_TENURE_DAYS and the newest game older than CORE_MIN_TENURE_DAYS. A roster player seen in
-      neither (nor in an older game of the window) has been on the team for STANDIN_MAX_TENURE_DAYS or less
-      and counts as a stand-in. When the team has no league game older than that, nobody is counted as a
-      stand-in because time on the team is unknown.
+    - Every league game of the last `days` days is looked up (the newest ROSTER_MAX_GAMES at most).
+    - `players` are the ROSTER_SIZE players with the most of those games (ties: who played more recently),
+      whether or not they played the latest game. Everyone else who played in the window goes to `other_players`.
+    - Core players and the roster state come from classify_roster.
 
-    Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus at most
-    ACTIVE_SERIES_LIMIT + 2 lineup requests the first time; lineups are cached forever.
+    Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus one explorer request per
+    LINEUP_BATCH_SIZE games not cached yet; lineups are cached forever.
 
     Args:
         team_id: Team identifier
@@ -456,32 +474,44 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     matches = get_team_league_matches(team_id, now=now)
     roster = TeamRoster(league_form=compute_league_form(matches, days, now=now))
 
-    recent = [m for m in matches if m.start_time >= now - days * DAY_SECONDS]
-    window = _lineups(_latest_match_per_series(recent, ACTIVE_SERIES_LIMIT))
+    recent = [m for m in matches if m.start_time >= now - days * DAY_SECONDS][:ROSTER_MAX_GAMES]
+    lineups = get_match_lineups(m.match_id for m in recent) if recent else {}
+    window = _team_lineups(recent, lineups)
     if not window:
         return roster
 
-    latest, active = window[0]
-    others = _other_active_players(window, set(active))
-    samples = window + _tenure_samples(matches, {m.match_id for m, _ in window}, now)
-
-    first_seen: dict[int, int] = {}
-    for match, accounts in samples:
+    games: dict[int, int] = {}
+    last_played: dict[int, int] = {}
+    for match, accounts in window:
         for account_id in accounts:
-            first_seen[account_id] = min(first_seen.get(account_id, match.start_time), match.start_time)
+            games[account_id] = games.get(account_id, 0) + 1
+            last_played[account_id] = max(last_played.get(account_id, 0), match.start_time)
+    ranked = sorted(games, key=lambda a: (-games[a], -last_played[a]))
+    active, others = ranked[:ROSTER_SIZE], ranked[ROSTER_SIZE:]
+    active_set = set(active)
 
-    standin_limit = now - STANDIN_MAX_TENURE_DAYS * DAY_SECONDS
-    core_limit = now - CORE_MIN_TENURE_DAYS * DAY_SECONDS
-    tenure_known = any(match.start_time <= standin_limit for match, _ in samples)
+    core, state = classify_roster(games, len(window))
+    # Without a clear core, everyone outside the main roster counts as a stand-in
+    core_set = core or active_set
 
     names = _player_names([*active, *others])
-    roster.players = _to_players(active, names)
-    roster.other_players = _to_players(others, names)
-    for player in roster.players:
-        player.is_standin = tenure_known and first_seen[player.id] > standin_limit
-    roster.standins_count = sum(1 for p in roster.players if p.is_standin)
-    roster.core_count = sum(1 for a in active if first_seen[a] <= core_limit)
-    roster.series_checked = len(window)
-    roster.last_match_id = latest.match_id
-    roster.last_match_time = latest.start_time
+    roster.players = _to_players(active, names, games)
+    roster.other_players = _to_players(others, names, games)
+    for player in [*roster.players, *roster.other_players]:
+        player.is_core = player.id in core
+    roster.standins_count = sum(1 for a in ranked if a not in core_set)
+    roster.roster_state = state
+    roster.games_checked = len(window)
+
+    # The roster's own latest game: the newest one that most of the roster played together
+    main, _ = next(
+        ((m, acc) for m, acc in window if len(active_set.intersection(acc)) >= ROSTER_MAJORITY),
+        window[0],
+    )
+    roster.last_match_id = main.match_id
+    roster.last_match_time = main.start_time
+
+    latest, latest_accounts = window[0]
+    roster.latest_match_time = latest.start_time
+    roster.latest_match_standins = sum(1 for a in latest_accounts if a not in core_set)
     return roster

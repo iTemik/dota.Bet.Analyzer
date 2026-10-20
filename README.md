@@ -417,17 +417,15 @@ python scripts/init_d2ba_db.py
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
 It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
 
-**Rosters:** team statistics take the roster from the team's latest league match within the `days` window (default 20, same as the player match history)
-(`/teams/{id}/matches` + one small explorer lookup per series, both cached). If there was no league match in that
-period, the OpenDota team membership from `pro_players` is used and the UI marks the roster as unconfirmed.
-`players` is the active roster (stats are calculated from it); `other_players` holds other players who played for the team
-in the window (a playing coach, a backup). Former players are left out. `standins_count` counts roster players with
-20 days or less on the team, `core_count` those with 60 days or more.
+**Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
+`/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
+(`pro_players`) is used and marked unconfirmed. Core = players with 75% (else 50%) of the games; anyone else who
+played is a stand-in. OpenDota answers with HTTP 429 are retried up to 3 times.
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
-or even monthly when results are poor, so OpenDota's team assignments are often stale. The thresholds
-(stand-in ≤ 20 days, core ≥ 60 days on the team) are a temporary assumption and may be adjusted later.
+or even monthly when results are poor, so OpenDota's team assignments are often stale. The 75%/50% shares are a temporary
+assumption.
 
 **Sync Pro Players Data:**
 
@@ -589,9 +587,10 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `days` (default 20) sets the window for the roster and the player match history
 
 #### Roster Calculation
-- `players`: active roster, taken from the lineup of the team's latest league match in the `days` window
-- `other_players`: others who played for the team in the window (e.g. a playing coach, a backup); former players are excluded
-- `standins_count` / `core_count`: roster players with ≤ 20 / ≥ 60 days on the team
+- `players`: the 5 players with the most league games in the window, each with `games` out of `roster_games`
+- `other_players`: others who played in the window, then OpenDota team members without league games (`games` 0)
+- `is_core`: exactly 5 players with 75% (else 50%) of the games, otherwise no clear core (`classify_roster`)
+- `standins_count`, `roster_state` (`stable`, `standins`, `new_team`), `latest_match_standins`: players outside the core
 - `league_form`: league W/L in the window (pubs excluded)
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
@@ -663,7 +662,9 @@ npm test          # Run tests
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
-- **Roster**: Active players, stand-in count (fewer is better), league record and last league match
+- **Roster Changes**: Stable, Stand-ins or New team, league record and last match
+- **Team Insights**: Team #1 vs Team #2 notes next to the comparison: core players, stand-ins, other players and the
+  last tournament match; unnamed accounts show as "ID 123…"
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches
@@ -850,7 +851,8 @@ It's assumed that OpenDota provides actual, correct, and complete information. I
 
 ## Team roster calculation
 
-It is assumed that a team roster is relatively stable. The latest match is used to determine the list of players.
+It is assumed that a team roster is relatively stable. The 5 players with the most league games in the `days` window
+form the roster, and those with 75% (or 50%) of the games form the core.
 After roster changes, player swaps, and the addition of temporary stand-ins, statistical calculations may be inaccurate.
 The app uses a list of team members from the previous matches
 
