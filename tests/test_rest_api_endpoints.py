@@ -97,7 +97,7 @@ class TestResultsEndpoint:
 
     def test_results_returns_200_when_found(self, client):
         """Test that /results returns 200 when results are found."""
-        test_data = {"results": [{"account_id": 123, "matches": []}], "successful": 1, "total": 1}
+        test_data = {"results": [{"account_id": 123}], "successful": 1, "total": 1}
         with patch("backend.task_store.redis_client") as mock_redis:
             mock_redis.get.return_value = json.dumps(test_data).encode()
             rv = client.get("/api/results/test-task-123")

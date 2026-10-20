@@ -29,8 +29,8 @@ class TestGetResultsEndpoint:
         # Mock Redis returning valid results
         results_data = {
             "results": [
-                {"account_id": 12345, "match_count": 10, "matches": []},
-                {"account_id": 67890, "match_count": 15, "matches": []},
+                {"account_id": 12345, "match_count": 10},
+                {"account_id": 67890, "match_count": 15},
             ],
             "successful": 2,
             "total": 2,
@@ -125,9 +125,9 @@ class TestGetResultsEndpoint:
         # Mock results with some errors
         results_data = {
             "results": [
-                {"account_id": 12345, "match_count": 10, "matches": []},
+                {"account_id": 12345, "match_count": 10},
                 {"account_id": 67890, "error": "API rate limit exceeded"},
-                {"account_id": 11111, "match_count": 5, "matches": []},
+                {"account_id": 11111, "match_count": 5},
             ],
             "successful": 2,
             "total": 3,

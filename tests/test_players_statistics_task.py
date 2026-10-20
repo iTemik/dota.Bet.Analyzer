@@ -61,6 +61,7 @@ def test_task_progress_messages_and_results():
         ("t1", 2, "Got Player rank 1500 for account 2", 100 * (2 / steps), {"account_id": 2, "player_rank": 1500}),
         ("t1", steps, "Completed: fetched data for 2/2 players", 100, {"successful": 2, "total": 2}),
     ]
+    assert results["results"] == [{"account_id": 1, "match_count": 0}, {"account_id": 2, "match_count": 0}]
     assert results["successful"] == 2
     assert results["total"] == 2
     assert results["summary"]["avg_rank"] == 800.0

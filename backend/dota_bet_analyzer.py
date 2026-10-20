@@ -95,8 +95,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
     Saves one payload under `results:{task_id}` (read by GET /api/results/{task_id}, StatisticsResultSchema):
     - `summary`: team totals from get_team_matches_summary plus rank values; the only part the
       Team Comparison table reads (frontend getSummaryForTeam and the rows marked `summary: true`)
-    - `results`: one entry per account with its raw matches or its error; the frontend shows it only
-      in the raw "Match Statistics Summary" JSON block
+    - `results`: one entry per account with its match count or its error (raw matches are not stored)
     - `successful` / `total`: how many accounts were fetched; also sent in the final progress message
 
     Args:
@@ -123,20 +122,11 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 player_matches = get_matches_cached(account_id=account_id, days=days, on_wait=report_wait)
                 matches_stats.append(player_matches)  # Append as a list per player
 
-                # Convert MatchStats objects to dicts for JSON serialization
-                stats_data = [stat.model_dump() for stat in player_matches]
-
-                # Raw per-player matches for the results payload; the comparison table uses `summary` only
-                results.append(
-                    {
-                        "account_id": account_id,
-                        "match_count": len(stats_data),
-                        "matches": stats_data,
-                    }
-                )
+                # Only the count is kept per player; the matches themselves feed `summary`
+                results.append({"account_id": account_id, "match_count": len(player_matches)})
                 progress.report(
-                    f"Fetched {len(stats_data)} matches for account {account_id}",
-                    {"account_id": account_id, "match_count": len(stats_data)},
+                    f"Fetched {len(player_matches)} matches for account {account_id}",
+                    {"account_id": account_id, "match_count": len(player_matches)},
                 )
 
                 player_rank = get_rank_cached(account_id, on_wait=report_wait)
