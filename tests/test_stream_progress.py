@@ -23,7 +23,7 @@ def client(app):
 class TestStreamProgressEndpoint:
     """Test suite for /stream-progress/<task_id> endpoint."""
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     def test_stream_progress_task_not_found_returns_404(self, mock_redis, client):
         """Test that stream_progress returns 404 when task doesn't exist."""
         # Mock Redis returning None for non-existent task
@@ -37,7 +37,7 @@ class TestStreamProgressEndpoint:
         assert data["code"] == "RESULTS_NOT_FOUND"
         assert "nonexistent_task" in data["details"]["task_id"]
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     def test_stream_progress_redis_error_returns_500(self, mock_redis, client):
         """Test that stream_progress returns 500 when Redis connection fails."""
         # Mock Redis raising exception on initial check
@@ -50,7 +50,7 @@ class TestStreamProgressEndpoint:
         assert data["status"] == 500
         assert data["code"] == "FAILED_TO_RETRIEVE_RESULTS"
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     def test_stream_progress_returns_200_with_sse_headers(self, mock_redis, client):
         """Test that stream_progress returns 200 with proper SSE headers."""
         # Mock initial task exists
@@ -64,7 +64,7 @@ class TestStreamProgressEndpoint:
         assert rv.headers.get("Cache-Control") == "no-cache"
         assert rv.headers.get("Connection") == "keep-alive"
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_completes_on_100_percent(self, mock_sleep, mock_redis, client):
         """Test that stream completes when progress reaches 100%."""
@@ -93,7 +93,7 @@ class TestStreamProgressEndpoint:
         assert last_update["progress"] == 100
         assert last_update["step"] == 2
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_completes_on_error_state(self, mock_sleep, mock_redis, client):
         """Test that stream completes when progress is -1 (error state)."""
@@ -117,7 +117,7 @@ class TestStreamProgressEndpoint:
         assert last_update["progress"] == -1
         assert last_update["step"] == 1
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_timeout_on_no_updates(self, mock_sleep, mock_redis, client):
         """Test that stream times out when no progress updates occur."""
@@ -142,7 +142,7 @@ class TestStreamProgressEndpoint:
         assert "timed out" in last_update["message"].lower()
         assert last_update["data"]["timeout"] is True
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     @patch("backend.dota_bet_analyzer.time.time")
     def test_stream_progress_timeout_on_max_runtime(self, mock_time, mock_sleep, mock_redis, client):
@@ -171,7 +171,7 @@ class TestStreamProgressEndpoint:
         assert "maximum runtime" in last_update["message"].lower()
         assert last_update["data"]["timeout"] is True
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_timeout_on_max_iterations(self, mock_sleep, mock_redis, client):
         """Test that stream times out when max iterations is reached."""
@@ -208,7 +208,7 @@ class TestStreamProgressEndpoint:
         assert "maximum iterations" in last_update["message"].lower()
         assert last_update["data"]["timeout"] is True
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_handles_json_decode_error(self, mock_sleep, mock_redis, client):
         """Test that stream handles invalid JSON gracefully."""
@@ -234,7 +234,7 @@ class TestStreamProgressEndpoint:
         assert "invalid progress data" in last_update["message"].lower()
         assert last_update["data"]["error"] is True
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_handles_stream_exception(self, mock_sleep, mock_redis, client):
         """Test that stream handles unexpected exceptions gracefully."""
@@ -260,7 +260,7 @@ class TestStreamProgressEndpoint:
         assert "stream error" in last_update["message"].lower()
         assert last_update["data"]["error"] is True
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_only_sends_new_updates(self, mock_sleep, mock_redis, client):
         """Test that stream only sends updates when step increases."""
@@ -294,7 +294,7 @@ class TestStreamProgressEndpoint:
         assert updates[2]["step"] == 3
         assert updates[2]["progress"] == 100
 
-    @patch("backend.dota_bet_analyzer.redis_client")
+    @patch("backend.task_store.redis_client")
     @patch("backend.dota_bet_analyzer.time.sleep")
     def test_stream_progress_with_task_data(self, mock_sleep, mock_redis, client):
         """Test that stream includes data payloads from Redis."""
@@ -339,10 +339,10 @@ class TestStreamProgressEndpoint:
 
 
 def test_progress_is_rounded_to_one_decimal():
-    from backend import dota_bet_analyzer
+    from backend import task_store
 
-    with patch.object(dota_bet_analyzer, "redis_client") as redis:
-        dota_bet_analyzer.update_progress("task_1", 5, "Got Player rank", 100 * 5 / 12)
+    with patch.object(task_store, "redis_client") as redis:
+        task_store.update_progress("task_1", 5, "Got Player rank", 100 * 5 / 12)
 
     stored = json.loads(redis.setex.call_args.args[2])
     assert stored["progress"] == 41.7

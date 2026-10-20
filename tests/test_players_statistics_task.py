@@ -4,9 +4,10 @@ from unittest.mock import patch
 
 import pytest
 
-from backend import dota_bet_analyzer
-from backend.dota_bet_analyzer import ProgressReporter, players_statistics_task
+from backend import dota_bet_analyzer, task_store
+from backend.dota_bet_analyzer import players_statistics_task
 from backend.stats import BAD_RANK_THRESHOLD, MatchesSummary, RankTally
+from backend.task_store import ProgressReporter
 
 
 def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[int] | None = None):
@@ -23,7 +24,7 @@ def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[in
         return ranks.get(account_id)
 
     with (
-        patch.object(dota_bet_analyzer, "update_progress") as progress,
+        patch.object(task_store, "update_progress") as progress,
         patch.object(dota_bet_analyzer, "store_results") as store,
         patch.object(dota_bet_analyzer, "get_matches_cached", side_effect=fake_matches),
         patch.object(dota_bet_analyzer, "get_rank_cached", side_effect=fake_rank),
@@ -85,7 +86,7 @@ def test_task_account_error_is_reported_and_skipped():
 def test_task_error_reports_failure():
     """An unexpected error marks the task failed with progress -1 and re-raises."""
     with (
-        patch.object(dota_bet_analyzer, "update_progress") as progress,
+        patch.object(task_store, "update_progress") as progress,
         patch.object(dota_bet_analyzer, "get_team_matches_summary", side_effect=ValueError("bad")),
         pytest.raises(ValueError),
     ):
@@ -95,7 +96,7 @@ def test_task_error_reports_failure():
 
 def test_progress_reporter_counts_steps():
     """next() advances the step; waiting() and fail() keep it; done() reports the last step."""
-    with patch.object(dota_bet_analyzer, "update_progress") as progress:
+    with patch.object(task_store, "update_progress") as progress:
         reporter = ProgressReporter("t1", 4)
         reporter.start("start")
         reporter.next()
