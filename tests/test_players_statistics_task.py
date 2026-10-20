@@ -43,7 +43,7 @@ def test_task_progress_messages_and_results():
         (
             "t1",
             1,
-            "OpenDota rate limit reached, retrying account 1 in 5s",
+            "OpenDota limit reached, retrying account 1 in 5s",
             100 * (1 / steps),
             {"account_id": 1, "retry_in": 5},
         ),
@@ -52,7 +52,7 @@ def test_task_progress_messages_and_results():
         (
             "t1",
             2,
-            "OpenDota rate limit reached, retrying account 2 in 5s",
+            "OpenDota limit reached, retrying account 2 in 5s",
             100 * (2 / steps),
             {"account_id": 2, "retry_in": 5},
         ),
@@ -106,7 +106,7 @@ def test_progress_reporter_counts_steps():
     assert [c.args for c in progress.call_args_list] == [
         ("t1", 0, "start", 0.0, None),
         ("t1", 1, "one", 25.0, {"a": 1}),
-        ("t1", 1, "OpenDota rate limit reached, retrying account 42 in 3s", 25.0, {"account_id": 42, "retry_in": 3}),
+        ("t1", 1, "OpenDota limit reached, retrying account 42 in 3s", 25.0, {"account_id": 42, "retry_in": 3}),
         ("t1", 4, "finished", 100, None),
         ("t1", -1, "Task error: x", -1, {"error": True}),
     ]

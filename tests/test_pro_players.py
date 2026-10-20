@@ -267,7 +267,7 @@ def test_fetch_pro_players_from_api_integration():
     """Test fetch_pro_players_from_api with mocked requests."""
     sample_data = [{"account_id": 123, "name": "test"}]
 
-    with patch("backend.pro_players.requests.get") as mock_get:
+    with patch("backend.opendota.requests.get") as mock_get:
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = sample_data
         mock_get.return_value.raise_for_status.return_value = None
@@ -280,7 +280,7 @@ def test_fetch_pro_players_from_api_integration():
 
 def test_fetch_pro_players_from_api_connection_error():
     """Test fetch_pro_players_from_api raises ConnectionError on network failure."""
-    with patch("backend.pro_players.requests.get") as mock_get:
+    with patch("backend.opendota.requests.get") as mock_get:
         mock_get.side_effect = requests.RequestException("Network error")
 
         with pytest.raises(ConnectionError) as exc_info:
@@ -291,7 +291,8 @@ def test_fetch_pro_players_from_api_connection_error():
 
 def test_fetch_pro_players_from_api_invalid_response():
     """Test fetch_pro_players_from_api raises ValueError for non-list response."""
-    with patch("backend.pro_players.requests.get") as mock_get:
+    with patch("backend.opendota.requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {"error": "not a list"}
         mock_get.return_value.raise_for_status.return_value = None
 
@@ -644,7 +645,7 @@ def test_teams_upsert(client, sample_teams_data, app):
             assert team["name"] == "Team Spirit Updated"
 
 
-@patch("backend.pro_players.requests.get")
+@patch("backend.opendota.requests.get")
 def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
     """Test that fetch_teams_from_api handles pagination correctly."""
     # Create mock responses: first page with 1000 items, second with 2
@@ -652,8 +653,8 @@ def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
     page_2 = sample_teams_data  # 2 items (less than 1000, triggers stop)
 
     # Setup mock to return different data for each page
-    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "raise_for_status": lambda self: None})()
-    mock_response_2 = type("Response", (), {"json": lambda self: page_2, "raise_for_status": lambda self: None})()
+    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "status_code": 200})()
+    mock_response_2 = type("Response", (), {"json": lambda self: page_2, "status_code": 200})()
 
     mock_get.side_effect = [mock_response_1, mock_response_2]
 
@@ -666,7 +667,7 @@ def test_fetch_teams_from_api_pagination(mock_get, sample_teams_data):
     assert mock_get.call_count == 2
 
 
-@patch("backend.pro_players.requests.get")
+@patch("backend.opendota.requests.get")
 def test_fetch_teams_from_api_connection_error(mock_get):
     """Test that fetch_teams_from_api raises ConnectionError on first page failure."""
     mock_get.side_effect = requests.RequestException("Network error")
@@ -677,12 +678,10 @@ def test_fetch_teams_from_api_connection_error(mock_get):
     assert "Failed to fetch teams" in str(exc_info.value)
 
 
-@patch("backend.pro_players.requests.get")
+@patch("backend.opendota.requests.get")
 def test_fetch_teams_from_api_invalid_response(mock_get):
     """Test that fetch_teams_from_api raises ValueError for non-list response."""
-    mock_response = type(
-        "Response", (), {"json": lambda self: {"error": "not a list"}, "raise_for_status": lambda self: None}
-    )()
+    mock_response = type("Response", (), {"json": lambda self: {"error": "not a list"}, "status_code": 200})()
     mock_get.return_value = mock_response
 
     with pytest.raises(ValueError) as exc_info:
@@ -691,12 +690,12 @@ def test_fetch_teams_from_api_invalid_response(mock_get):
     assert "Expected list" in str(exc_info.value)
 
 
-@patch("backend.pro_players.requests.get")
+@patch("backend.opendota.requests.get")
 def test_fetch_teams_from_api_partial_failure_graceful_degradation(mock_get, sample_teams_data):
     """Test that fetch_teams_from_api returns partial data if later pages fail."""
     # First page succeeds, second page fails
     page_1 = sample_teams_data * 500  # 1000 items
-    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "raise_for_status": lambda self: None})()
+    mock_response_1 = type("Response", (), {"json": lambda self: page_1, "status_code": 200})()
 
     mock_get.side_effect = [mock_response_1, requests.RequestException("Network error on page 2")]
 

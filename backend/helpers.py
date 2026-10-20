@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 from urllib import parse
 
-from flask import request
+from flask import Response, jsonify, request
+from pydantic import BaseModel, Field
 
 
 @dataclass(frozen=True)
@@ -11,41 +12,6 @@ class ErrorDefinition:
 
     code: str
     message: str
-
-
-def error_response(
-    error: ErrorDefinition | str, message: str | None = None, status_code: int = 400, **extra_details
-) -> dict:
-    """Create a standardized error response dict following REST API best practices.
-
-    Args:
-        error: ErrorDefinition instance or error code string (use ErrorCode constants)
-        message: Optional message override (uses error.message if not provided)
-        status_code: HTTP status code
-        **extra_details: Additional key-value pairs to include in details
-
-    Returns:
-        Error dictionary ready for jsonify (return with status code separately)
-
-    Example:
-        # Using ErrorDefinition with default message:
-        return jsonify(error_response(ErrorCode.MISSING_TEAMS, status_code=400)), 400
-
-        # Overriding message:
-        return jsonify(error_response(ErrorCode.MISSING_TEAMS, "Custom message", 400)), 400
-
-        # Adding extra details:
-        return jsonify(error_response(ErrorCode.TOO_MANY_TEAMS, status_code=400, limit=10)), 400
-    """
-    if isinstance(error, ErrorDefinition):
-        code = error.code
-        msg = message if message is not None else error.message
-    else:
-        code = error
-        msg = message if message is not None else error
-
-    details = {"url": request.path, **extra_details}
-    return {"status": status_code, "code": code, "message": msg, "details": details}
 
 
 # Error code constants (RFC 7807 compliant)
@@ -76,6 +42,124 @@ class Errors:
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
     UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")
     UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
+
+
+class ApiError(BaseModel):
+    """API error information following REST API best practices.
+
+    Provides consistent error reporting across different response models.
+    Can be instantiated directly to represent API errors.
+
+    Attributes:
+        status: HTTP status code (e.g., 400, 404, 500)
+        code: Machine-readable error code (e.g., NETWORK_ERROR, HTTP_ERROR)
+        message: Human-readable error message
+        details: Additional error context as a dictionary (e.g., {"url": "..."})
+    """
+
+    status: Optional[int] = Field(default=None, description="HTTP status code")
+    code: Optional[str] = Field(default=None, description="Machine-readable error code")
+    message: Optional[str] = Field(default=None, description="Human-readable error message")
+    details: Optional[dict] = Field(default=None, description="Additional error context")
+
+    @classmethod
+    def of(cls, error: ErrorDefinition, status: int, **details: Any) -> "ApiError":
+        """Create an ApiError from an Errors definition.
+
+        Args:
+            error: ErrorDefinition from Errors
+            status: HTTP status code
+            **details: Additional error context
+
+        Returns:
+            ApiError with the definition's code and message
+        """
+        return cls(status=status, code=error.code, message=error.message, details=details)
+
+    @staticmethod
+    def create_response(
+        status: int,
+        *,
+        error: Optional[ErrorDefinition] = None,
+        code: Optional[str] = None,
+        message: Optional[str] = None,
+        details: Optional[dict] = None,
+    ) -> tuple[Response, int]:
+        """Create a jsonified error response (Flask Response, status_code tuple).
+
+        Args:
+            status: HTTP status code
+            error: ErrorDefinition from helpers (mutually exclusive with code)
+            code: Machine-readable error code string (mutually exclusive with error)
+            message: Human-readable error message (required with code, optional with error)
+            details: Optional additional error context
+
+        Returns:
+            Tuple of (Flask Response with JSON, status code)
+
+        Raises:
+            ValueError: If both error and code are provided, or neither is provided
+
+        Examples:
+            # Using ErrorDefinition from helpers
+            return ApiError.create_response(400, error=Errors.MISSING_TEAMS, details={"url": request.path})
+
+            # Using ErrorDefinition with custom message override:
+            return ApiError.create_response(400, error=Errors.INVALID_TEAM_NAME, message="Custom message")
+
+            # Using string code and message:
+            return ApiError.create_response(400, code="CUSTOM_ERROR", message="Something went wrong")
+        """
+        # Validate mutually exclusive parameters
+        if error is not None and code is not None:
+            raise ValueError("Cannot specify both 'error' and 'code' parameters")
+
+        if error is None and code is None:
+            raise ValueError("Must specify either 'error' or 'code' parameter")
+
+        # Extract code and message based on parameter type
+        if error is not None:
+            error_code: str = error.code
+            error_message: str = message if message is not None else error.message
+        else:
+            if message is None:
+                raise ValueError("'message' is required when using 'code' parameter")
+            if code is None:
+                raise ValueError("Must specify either 'error' or 'code' parameter")
+            error_code = code
+            error_message = message
+
+        return (
+            jsonify(
+                {
+                    "status": status,
+                    "code": error_code,
+                    "message": error_message,
+                    "details": details or {},
+                }
+            ),
+            status,
+        )
+
+
+def api_error(
+    status: int, error: ErrorDefinition, exc: Optional[BaseException] = None, **details: Any
+) -> tuple[Response, int]:
+    """Jsonified error response for the current request; adds `url` (and `exception` when exc is given) to details.
+
+    Args:
+        status: HTTP status code
+        error: ErrorDefinition from Errors
+        exc: Exception that caused the error (optional)
+        **details: Additional error context
+
+    Returns:
+        Tuple of (Flask Response with JSON, status code)
+    """
+    details = {"url": request.path, **details}
+    if exc is not None:
+        details["exception"] = str(exc)
+    return ApiError.create_response(status, error=error, details=details)
 
 
 def build_explorer_query(team: str | None = None, team_id: int | None = None) -> str:
@@ -132,48 +216,60 @@ def get_percent_encoded_str(s: str) -> str:
     return parse.quote(s, safe="")
 
 
-def get_team_id_from_explore_response(
-    response_json: dict[str, Any],
-) -> tuple[int, str, str, float | None, float | None]:
-    """Extract team info from OpenDota explorer response JSON.
+class ExplorerTeam(BaseModel):
+    """Team found by the OpenDota explorer query from build_explorer_query.
 
-    Example response JSON:
-    {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a", "rating": 2500.5, "delta": 25.3}],
-        "fields": [ { "name": "team_id",..., "format": "text"} ], }
-
-    Returns:
-        Tuple of (team_id, name, tag, rating, delta)
+    Attributes:
+        team_id: Team identifier
+        name: Team name
+        tag: Team tag
+        rating: Team rating (None if unknown)
+        delta: Latest rating change (None if unknown)
     """
-    response_preview = str(response_json)[:300]
 
-    if "command" not in response_json or response_json["command"] != "SELECT":
-        raise ValueError(f"Unexpected command in response. Response preview: {response_preview}")
+    team_id: int
+    name: str
+    tag: str
+    rating: Optional[float] = None
+    delta: Optional[float] = None
 
-    if "rows" not in response_json or not response_json["rows"]:
-        raise ValueError(f"No rows in response. Response preview: {response_preview}")
-    if len(response_json["rows"]) != 1:
-        raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
-    row = response_json["rows"][0]
+    @classmethod
+    def from_response(cls, response_json: dict[str, Any]) -> "ExplorerTeam":
+        """Create from an OpenDota explorer response JSON.
 
-    if (
-        "team_id" not in row
-        or not isinstance(row["team_id"], int)
-        or "name" not in row
-        or not isinstance(row["name"], str)
-        or "tag" not in row
-        or not isinstance(row["tag"], str)
-    ):
-        raise ValueError(
-            f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
+        Example response JSON:
+        {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a", "rating": 2500.5, "delta": 25.3}],
+            "fields": [ { "name": "team_id",..., "format": "text"} ], }
+
+        Raises:
+            ValueError: If the response is not a single valid team row
+        """
+        response_preview = str(response_json)[:300]
+
+        if "command" not in response_json or response_json["command"] != "SELECT":
+            raise ValueError(f"Unexpected command in response. Response preview: {response_preview}")
+
+        if "rows" not in response_json or not response_json["rows"]:
+            raise ValueError(f"No rows in response. Response preview: {response_preview}")
+        if len(response_json["rows"]) != 1:
+            raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
+        row = response_json["rows"][0]
+
+        if (
+            not isinstance(row.get("team_id"), int)
+            or not isinstance(row.get("name"), str)
+            or not isinstance(row.get("tag"), str)
+        ):
+            raise ValueError(
+                f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
+            )
+
+        # Rating and delta that are not numbers are treated as unknown
+        rating, delta = row.get("rating"), row.get("delta")
+        return cls(
+            team_id=row["team_id"],
+            name=row["name"],
+            tag=row["tag"],
+            rating=rating if isinstance(rating, (int, float)) else None,
+            delta=delta if isinstance(delta, (int, float)) else None,
         )
-
-    rating = row.get("rating")
-    delta = row.get("delta")
-
-    # Ensure rating and delta are floats or None
-    if rating is not None and not isinstance(rating, (int, float)):
-        rating = None
-    if delta is not None and not isinstance(delta, (int, float)):
-        delta = None
-
-    return row["team_id"], row["name"], row["tag"], rating, delta

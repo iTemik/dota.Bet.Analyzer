@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import statistics
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
-from flask import Response
 from pydantic import BaseModel, Field
 
-from backend.helpers import ErrorDefinition, Errors
+from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
-from backend.opendota import WaitCallback, opendota_get
+from backend.opendota import (
+    OPENDOTA_API,
+    OpenDotaError,
+    WaitCallback,
+    get_json,
+    is_radiant,
+)
 from backend.pro_players import Player, get_players_by_team
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
@@ -21,106 +26,6 @@ GAME_MODE_TOURNAMENT = [2]
 
 # Setup logger
 logger = setup_logging(__name__)
-
-
-class ApiError(BaseModel):
-    """API error information following REST API best practices.
-
-    Provides consistent error reporting across different response models.
-    Can be instantiated directly to represent API errors.
-
-    Attributes:
-        status: HTTP status code (e.g., 400, 404, 500)
-        code: Machine-readable error code (e.g., NETWORK_ERROR, HTTP_ERROR)
-        message: Human-readable error message
-        details: Additional error context as a dictionary (e.g., {"url": "..."})
-    """
-
-    status: Optional[int] = Field(default=None, description="HTTP status code")
-    code: Optional[str] = Field(default=None, description="Machine-readable error code")
-    message: Optional[str] = Field(default=None, description="Human-readable error message")
-    details: Optional[dict] = Field(default=None, description="Additional error context")
-
-    def set_error(self, status: int, code: str, message: str, details: Optional[dict] = None) -> None:
-        """Set error fields on this instance.
-
-        Args:
-            status: HTTP status code
-            code: Error code identifier
-            message: Error message
-            details: Optional additional error context
-        """
-        self.status = status
-        self.code = code
-        self.message = message
-        self.details = details
-
-    @staticmethod
-    def create_response(
-        status: int,
-        *,
-        error: Optional[ErrorDefinition] = None,
-        code: Optional[str] = None,
-        message: Optional[str] = None,
-        details: Optional[dict] = None,
-    ) -> tuple[Response, int]:
-        """Create a jsonified error response (Flask Response, status_code tuple).
-
-        Args:
-            status: HTTP status code
-            error: ErrorDefinition from helpers (mutually exclusive with code)
-            code: Machine-readable error code string (mutually exclusive with error)
-            message: Human-readable error message (required with code, optional with error)
-            details: Optional additional error context
-
-        Returns:
-            Tuple of (Flask Response with JSON, status code)
-
-        Raises:
-            ValueError: If both error and code are provided, or neither is provided
-
-        Examples:
-            # Using ErrorDefinition from helpers
-            return ApiError.create_response(400, error=Errors.MISSING_TEAMS, details={"url": request.path})
-
-            # Using ErrorDefinition with custom message override:
-            return ApiError.create_response(400, error=Errors.INVALID_TEAM_NAME, message="Custom message")
-
-            # Using string code and message:
-            return ApiError.create_response(400, code="CUSTOM_ERROR", message="Something went wrong")
-        """
-        from flask import jsonify
-
-        # Validate mutually exclusive parameters
-        if error is not None and code is not None:
-            raise ValueError("Cannot specify both 'error' and 'code' parameters")
-
-        if error is None and code is None:
-            raise ValueError("Must specify either 'error' or 'code' parameter")
-
-        # Extract code and message based on parameter type
-        if error is not None:
-            error_code: str = error.code
-            error_message: str = message if message is not None else error.message
-        else:
-            if message is None:
-                raise ValueError("'message' is required when using 'code' parameter")
-            if code is None:
-                raise ValueError("Must specify either 'error' or 'code' parameter")
-            error_code = code
-            error_message = message
-
-        return (
-            jsonify(
-                {
-                    "status": status,
-                    "code": error_code,
-                    "message": error_message,
-                    "details": details or {},
-                }
-            ),
-            status,
-        )
 
 
 class TeamStats(BaseModel):
@@ -170,6 +75,23 @@ class TeamStats(BaseModel):
     task_id: Optional[str] = None
     error: Optional[ApiError] = None
 
+    def apply_roster(self, roster: TeamRoster, listed_players: List[Player]) -> None:
+        """Take the players and roster details from a roster resolved from recent league matches.
+
+        Args:
+            roster: Roster with at least one player
+            listed_players: Team members from pro_players who did not play in the window (kept last)
+        """
+        self.players = roster.players
+        self.other_players = [*roster.other_players, *listed_players]
+        self.roster_source = "recent_matches"
+        self.roster_games = roster.games_checked
+        self.standins_count = roster.standins_count
+        self.roster_last_match_time = roster.last_match_time
+        self.latest_match_time = roster.latest_match_time
+        self.latest_match_standins = roster.latest_match_standins
+        self.roster_state = roster.roster_state
+
 
 class MatchStats(BaseModel):
     """Statistics for a single Dota 2 match.
@@ -191,6 +113,20 @@ class MatchStats(BaseModel):
     lobby_type: int
     hero_id: int
     average_rank: Optional[int] = None
+
+    @classmethod
+    def from_api(cls, row: dict[str, Any]) -> MatchStats:
+        """Create from a /players/{id}/matches row.
+
+        Raises:
+            pydantic.ValidationError: If the row is malformed
+        """
+        return cls.model_validate(row)
+
+    @property
+    def won(self) -> bool:
+        """Whether the player's side won the match."""
+        return is_radiant(self.player_slot) == self.radiant_win
 
 
 class StatsResponse(BaseModel):
@@ -272,7 +208,7 @@ def _safe_get_json(
     Args:
         url: URL to fetch
         timeout: Request timeout in seconds
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         Tuple of (json_data, error) where:
@@ -280,19 +216,23 @@ def _safe_get_json(
         - error is an ApiError instance (None if success)
     """
     try:
-        resp = opendota_get(url, timeout=timeout, on_wait=on_wait)
-    except Exception as exc:
-        return None, ApiError(status=503, code="NETWORK_ERROR", message=f"Network error fetching data: {exc}")
+        return get_json(url, timeout=timeout, on_wait=on_wait), None
+    except OpenDotaError as exc:
+        return None, ApiError(status=exc.status, code=exc.code, message=exc.message)
 
-    if resp.status_code != 200:
-        return None, ApiError(status=resp.status_code, code="HTTP_ERROR", message=f"HTTP {resp.status_code} from API")
 
-    try:
-        payload = resp.json()
-        # print(f"Url: {url} Payload: {payload}")
-        return payload, None
-    except Exception as exc:
-        return None, ApiError(status=502, code="JSON_DECODE_ERROR", message=f"Invalid JSON response: {exc}")
+def _team_error(team_str: Optional[str], team_id: Optional[int], error: ApiError) -> TeamStats:
+    """TeamStats for a team that could not be fetched.
+
+    Args:
+        team_str: Requested team name
+        team_id: Requested team ID
+        error: What went wrong
+
+    Returns:
+        TeamStats with only the request and the error set
+    """
+    return TeamStats(team=team_str, team_id=team_id, error=error)
 
 
 def _fetch_team_from_explorer_api(
@@ -309,41 +249,25 @@ def _fetch_team_from_explorer_api(
         TeamStats instance with all fetched data and empty players lists (or error if fetch failed)
     """
     from backend.helpers import (
+        ExplorerTeam,
         build_explorer_query,
         get_percent_encoded_str,
-        get_team_id_from_explore_response,
     )
 
     # Validate input parameters
     if team_str is not None and (not isinstance(team_str, str) or not team_str.strip()):
-        return TeamStats(
-            team=team_str,
-            error=ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_NAME.code,
-                message=Errors.INVALID_TEAM_NAME.message,
-                details={"team": team_str},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.INVALID_TEAM_NAME, 400, team=team_str))
 
     if team_id is not None and (not isinstance(team_id, int) or team_id < 0):
-        return TeamStats(
-            team_id=team_id,
-            error=ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_ID.code,
-                message=Errors.INVALID_TEAM_ID.message,
-                details={"team_id": team_id},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.INVALID_TEAM_ID, 400, team_id=team_id))
 
     try:
         sql = build_explorer_query(team=team_str, team_id=team_id)
     except ValueError as e:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
+        return _team_error(
+            team_str,
+            team_id,
+            ApiError(
                 status=400,
                 code="INVALID_PARAMETER",
                 message=str(e),
@@ -352,26 +276,22 @@ def _fetch_team_from_explorer_api(
         )
 
     team_request = get_percent_encoded_str(sql)
-    explore_team_url = f"https://api.opendota.com/api/explorer?sql={team_request}"
+    explore_team_url = f"{OPENDOTA_API}/explorer?sql={team_request}"
 
     payload, error = _safe_get_json(explore_team_url)
     if error:
         error.details = {"url": explore_team_url}
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=error,
-        )
+        return _team_error(team_str, team_id, error)
 
     assert payload is not None
 
     try:
-        team_id_result, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
+        found = ExplorerTeam.from_response(payload)
     except ValueError as exc:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
+        return _team_error(
+            team_str,
+            team_id,
+            ApiError(
                 status=502,
                 code="RESPONSE_PARSE_ERROR",
                 message=f"Malformed response: {exc}",
@@ -380,27 +300,15 @@ def _fetch_team_from_explorer_api(
         )
 
     # Fetch team logo URL
-    team_info, error = _fetch_team_info(team_id_result)
-    if error:
-        return TeamStats(
-            team_id=team_id_result,
-            team=team_name,
-            tag=tag,
-            rating=rating,
-            delta=delta,
-            error=error,
-        )
-
-    logo_url = team_info.get("logo_url") if team_info else None
-
-    return TeamStats(
-        team_id=team_id_result,
-        team=team_name,
-        tag=tag,
-        rating=rating,
-        delta=delta,
-        logo_url=logo_url,
+    team_info, error = _fetch_team_info(found.team_id)
+    team_stats = TeamStats(
+        team_id=found.team_id, team=found.name, tag=found.tag, rating=found.rating, delta=found.delta
     )
+    if error:
+        team_stats.error = error
+    else:
+        team_stats.logo_url = team_info.get("logo_url") if team_info else None
+    return team_stats
 
 
 def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
@@ -414,7 +322,7 @@ def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
         - data is the team information (None if error or not available)
         - error is an ApiError instance (None if success)
     """
-    team_info_url = f"https://api.opendota.com/api/teams/{team_id}"
+    team_info_url = f"{OPENDOTA_API}/teams/{team_id}"
     data, error = _safe_get_json(team_info_url)
 
     if error:
@@ -422,25 +330,6 @@ def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
         return None, error
 
     return data, None
-
-
-def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
-    """Fetch team logo URL from OpenDota teams API.
-
-    Args:
-        team_id: Team ID to fetch logo for
-
-    Returns:
-        Tuple of (stats_data, error) where:
-        - stats_data is json with team stats (None if error)
-        - error is an ApiError instance (None if success)
-    """
-    stats_data, error = _fetch_team_info(team_id)
-
-    if error or stats_data is None:
-        return None, error
-
-    return stats_data, None
 
 
 def _resolve_roster_safe(team_id: Optional[int], days: int) -> TeamRoster:
@@ -489,15 +378,7 @@ def _create_team_stats(
         # Main roster from recent league matches; team members from pro_players who did not play are kept last
         played = {p.id for p in [*roster.players, *roster.other_players]}
         listed = [p.model_copy(update={"games": 0}) for p in [*pro_players, *other_players] if p.id not in played]
-        team_stats.players = roster.players
-        team_stats.other_players = [*roster.other_players, *listed]
-        team_stats.roster_source = "recent_matches"
-        team_stats.roster_games = roster.games_checked
-        team_stats.standins_count = roster.standins_count
-        team_stats.roster_last_match_time = roster.last_match_time
-        team_stats.latest_match_time = roster.latest_match_time
-        team_stats.latest_match_standins = roster.latest_match_standins
-        team_stats.roster_state = roster.roster_state
+        team_stats.apply_roster(roster, listed)
     else:
         team_stats.players = pro_players
         team_stats.other_players = other_players
@@ -545,16 +426,7 @@ def _process_single_team(
         )
 
     except Exception as exc:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
-                status=500,
-                code=Errors.UNEXPECTED_ERROR.code,
-                message=Errors.UNEXPECTED_ERROR.message,
-                details={"exception": str(exc)},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.UNEXPECTED_ERROR, 500, exception=str(exc)))
 
 
 # Implement compute_statistics here for testability and reuse
@@ -632,7 +504,7 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     Args:
         account_id: Player account ID
         days: Number of days of match history to fetch (default 20)
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         List of MatchStats objects representing the player's recent matches
@@ -644,43 +516,25 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     if not isinstance(account_id, int) or account_id < 0:
         raise ValueError("account_id must be a non-negative integer")
 
-    url = f"https://api.opendota.com/api/players/{account_id}/matches?date={days}"
-
+    url = f"{OPENDOTA_API}/players/{account_id}/matches?date={days}"
+    logger.debug(f"Fetching matches for account {account_id} from URL: {url}")
     try:
-        logger.debug(f"Fetching matches for account {account_id} from URL: {url}")
-        response = opendota_get(url, timeout=60, on_wait=on_wait)
-        response.raise_for_status()
-
-        try:
-            data = response.json()
-        except (ValueError, requests.JSONDecodeError) as exc:
-            error_msg = f"Failed to fetch matches for account {account_id}: Invalid JSON - {exc}"
-            raise requests.RequestException(error_msg) from exc
-
-        if not isinstance(data, list):
-            return []
-
-        matches = []
-        for match_data in data:
-            try:
-                match = MatchStats(
-                    match_id=match_data.get("match_id"),
-                    player_slot=match_data.get("player_slot"),
-                    radiant_win=match_data.get("radiant_win"),
-                    game_mode=match_data.get("game_mode"),
-                    lobby_type=match_data.get("lobby_type"),
-                    hero_id=match_data.get("hero_id"),
-                    average_rank=match_data.get("average_rank"),
-                )
-                matches.append(match)
-            except Exception:
-                # Skip malformed match entries
-                continue
-
-        return matches
-
-    except requests.RequestException as exc:
+        data = get_json(url, timeout=60, on_wait=on_wait)
+    except OpenDotaError as exc:
         raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}") from exc
+
+    if not isinstance(data, list):
+        return []
+
+    matches = []
+    for match_data in data:
+        try:
+            matches.append(MatchStats.from_api(match_data))
+        except Exception:
+            # Skip malformed match entries
+            continue
+
+    return matches
 
 
 def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optional[int]:
@@ -688,12 +542,12 @@ def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optiona
 
     Args:
         account_id: Player's account ID
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         Leaderboard rank value (None if not found or error occurred)
     """
-    url = f"https://api.opendota.com/api/players/{account_id}"
+    url = f"{OPENDOTA_API}/players/{account_id}"
     data, error = _safe_get_json(url, on_wait=on_wait)
 
     if error:
@@ -749,9 +603,7 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
 
         for match in player_matches:
             total_matches += 1
-            won = (match.player_slot < 128 and match.radiant_win) or (
-                match.player_slot >= 128 and not match.radiant_win
-            )
+            won = match.won
             if won:
                 wins += 1
 

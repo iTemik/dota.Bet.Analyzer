@@ -42,6 +42,13 @@ def no_roster_requests(request):
         yield mock_resolve
 
 
+@pytest.fixture(autouse=True)
+def no_opendota_retry_wait():
+    """Skip the real waits between repeated OpenDota requests (429, timeouts) in tests."""
+    with patch("backend.opendota.time.sleep") as mock_sleep:
+        yield mock_sleep
+
+
 @pytest.fixture
 def app():
     """Create application for testing with isolated test database.
