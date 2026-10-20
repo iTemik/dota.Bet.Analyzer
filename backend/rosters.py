@@ -19,7 +19,7 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 from backend.logging_config import setup_logging
-from backend.opendota import OPENDOTA_API, opendota_get
+from backend.opendota import OPENDOTA_API, OpenDotaError, get_json
 from backend.pro_players import Player, get_d2ba_db
 
 logger = setup_logging(__name__)
@@ -130,12 +130,8 @@ def _get_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
         Parsed JSON payload or None
     """
     try:
-        resp = opendota_get(url, params=params, timeout=REQUEST_TIMEOUT)
-        if resp.status_code != 200:
-            logger.warning(f"HTTP {resp.status_code} from {url}")
-            return None
-        return resp.json()
-    except Exception as exc:
+        return get_json(url, params=params, timeout=REQUEST_TIMEOUT)
+    except OpenDotaError as exc:
         logger.warning(f"Failed to fetch {url}: {exc}")
         return None
 

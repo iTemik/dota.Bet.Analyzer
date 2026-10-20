@@ -420,7 +420,7 @@ It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `m
 **Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
 `/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
 (`pro_players`) is used and marked unconfirmed. Core = players with 75% (else 50%) of the games; anyone else who
-played is a stand-in. OpenDota answers with HTTP 429 are retried up to 3 times.
+played is a stand-in. Every OpenDota request is retried up to 3 times on HTTP 429 and 403, timeouts and dropped connections.
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament

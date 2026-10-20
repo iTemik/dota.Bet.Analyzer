@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from backend.helpers import ErrorDefinition, Errors
 from backend.logging_config import setup_logging
-from backend.opendota import WaitCallback, opendota_get
+from backend.opendota import OPENDOTA_API, OpenDotaError, WaitCallback, get_json
 from backend.pro_players import Player, get_players_by_team
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
@@ -241,7 +241,7 @@ def _safe_get_json(
     Args:
         url: URL to fetch
         timeout: Request timeout in seconds
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         Tuple of (json_data, error) where:
@@ -249,19 +249,9 @@ def _safe_get_json(
         - error is an ApiError instance (None if success)
     """
     try:
-        resp = opendota_get(url, timeout=timeout, on_wait=on_wait)
-    except Exception as exc:
-        return None, ApiError(status=503, code="NETWORK_ERROR", message=f"Network error fetching data: {exc}")
-
-    if resp.status_code != 200:
-        return None, ApiError(status=resp.status_code, code="HTTP_ERROR", message=f"HTTP {resp.status_code} from API")
-
-    try:
-        payload = resp.json()
-        # print(f"Url: {url} Payload: {payload}")
-        return payload, None
-    except Exception as exc:
-        return None, ApiError(status=502, code="JSON_DECODE_ERROR", message=f"Invalid JSON response: {exc}")
+        return get_json(url, timeout=timeout, on_wait=on_wait), None
+    except OpenDotaError as exc:
+        return None, ApiError(status=exc.status, code=exc.code, message=exc.message)
 
 
 def _fetch_team_from_explorer_api(
@@ -321,7 +311,7 @@ def _fetch_team_from_explorer_api(
         )
 
     team_request = get_percent_encoded_str(sql)
-    explore_team_url = f"https://api.opendota.com/api/explorer?sql={team_request}"
+    explore_team_url = f"{OPENDOTA_API}/explorer?sql={team_request}"
 
     payload, error = _safe_get_json(explore_team_url)
     if error:
@@ -383,7 +373,7 @@ def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
         - data is the team information (None if error or not available)
         - error is an ApiError instance (None if success)
     """
-    team_info_url = f"https://api.opendota.com/api/teams/{team_id}"
+    team_info_url = f"{OPENDOTA_API}/teams/{team_id}"
     data, error = _safe_get_json(team_info_url)
 
     if error:
@@ -601,7 +591,7 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     Args:
         account_id: Player account ID
         days: Number of days of match history to fetch (default 20)
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         List of MatchStats objects representing the player's recent matches
@@ -613,43 +603,34 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     if not isinstance(account_id, int) or account_id < 0:
         raise ValueError("account_id must be a non-negative integer")
 
-    url = f"https://api.opendota.com/api/players/{account_id}/matches?date={days}"
-
+    url = f"{OPENDOTA_API}/players/{account_id}/matches?date={days}"
+    logger.debug(f"Fetching matches for account {account_id} from URL: {url}")
     try:
-        logger.debug(f"Fetching matches for account {account_id} from URL: {url}")
-        response = opendota_get(url, timeout=60, on_wait=on_wait)
-        response.raise_for_status()
-
-        try:
-            data = response.json()
-        except (ValueError, requests.JSONDecodeError) as exc:
-            error_msg = f"Failed to fetch matches for account {account_id}: Invalid JSON - {exc}"
-            raise requests.RequestException(error_msg) from exc
-
-        if not isinstance(data, list):
-            return []
-
-        matches = []
-        for match_data in data:
-            try:
-                match = MatchStats(
-                    match_id=match_data.get("match_id"),
-                    player_slot=match_data.get("player_slot"),
-                    radiant_win=match_data.get("radiant_win"),
-                    game_mode=match_data.get("game_mode"),
-                    lobby_type=match_data.get("lobby_type"),
-                    hero_id=match_data.get("hero_id"),
-                    average_rank=match_data.get("average_rank"),
-                )
-                matches.append(match)
-            except Exception:
-                # Skip malformed match entries
-                continue
-
-        return matches
-
-    except requests.RequestException as exc:
+        data = get_json(url, timeout=60, on_wait=on_wait)
+    except OpenDotaError as exc:
         raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}") from exc
+
+    if not isinstance(data, list):
+        return []
+
+    matches = []
+    for match_data in data:
+        try:
+            match = MatchStats(
+                match_id=match_data.get("match_id"),
+                player_slot=match_data.get("player_slot"),
+                radiant_win=match_data.get("radiant_win"),
+                game_mode=match_data.get("game_mode"),
+                lobby_type=match_data.get("lobby_type"),
+                hero_id=match_data.get("hero_id"),
+                average_rank=match_data.get("average_rank"),
+            )
+            matches.append(match)
+        except Exception:
+            # Skip malformed match entries
+            continue
+
+    return matches
 
 
 def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optional[int]:
@@ -657,12 +638,12 @@ def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optiona
 
     Args:
         account_id: Player's account ID
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         Leaderboard rank value (None if not found or error occurred)
     """
-    url = f"https://api.opendota.com/api/players/{account_id}"
+    url = f"{OPENDOTA_API}/players/{account_id}"
     data, error = _safe_get_json(url, on_wait=on_wait)
 
     if error:

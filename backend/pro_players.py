@@ -6,11 +6,11 @@ import time
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional, cast
 
-import requests
 from flask import current_app, g
 from pydantic import BaseModel
 
 from backend.logging_config import setup_logging
+from backend.opendota import OpenDotaError, get_json
 
 logger = setup_logging(__name__)
 
@@ -59,21 +59,16 @@ def fetch_pro_players_from_api() -> list[dict[str, Any]]:
         ValueError: If API response is invalid or not a list.
     """
     try:
-        response = requests.get("https://api.opendota.com/api/proPlayers", timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        if not isinstance(data, list):
-            raise ValueError(f"Expected list from API, got {type(data).__name__}")
-
-        return data
-
-    except requests.RequestException as e:
+        data = get_json("/proPlayers", timeout=30)
+    except OpenDotaError as e:
+        if e.code == "JSON_DECODE_ERROR":
+            raise ValueError(f"Unexpected error parsing pro players response: {e}") from e
         raise ConnectionError(f"Failed to fetch pro players from OpenDota API: {e}") from e
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"Unexpected error parsing pro players response: {e}") from e
+
+    if not isinstance(data, list):
+        raise ValueError(f"Expected list from API, got {type(data).__name__}")
+
+    return data
 
 
 def store_pro_players(players_data: list[dict[str, Any]]) -> int:
@@ -286,9 +281,7 @@ def fetch_teams_from_api() -> list[dict[str, Any]]:
     try:
         while page < MAX_PAGES:
             try:
-                response = requests.get(f"https://api.opendota.com/api/teams?page={page}", timeout=30)
-                response.raise_for_status()
-                data = response.json()
+                data = get_json("/teams", params={"page": page}, timeout=30)
 
                 if not isinstance(data, list):
                     error_msg = f"Page {page}: Expected list from API, got {type(data).__name__}"
@@ -307,7 +300,7 @@ def fetch_teams_from_api() -> list[dict[str, Any]]:
 
                 page += 1
 
-            except requests.RequestException as page_error:
+            except OpenDotaError as page_error:
                 # If we have data from previous pages, return it (graceful degradation)
                 if all_teams:
                     logger.warning(
