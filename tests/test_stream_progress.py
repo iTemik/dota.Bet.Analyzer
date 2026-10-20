@@ -1,7 +1,7 @@
 """Tests for /stream-progress endpoint."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -226,31 +226,46 @@ def test_update_progress_signals_open_streams_after_storing():
     redis.publish.assert_called_once_with("progress-updates:task_1", "2")
 
 
-def test_statistics_marks_started_tasks_queued(monkeypatch):
-    """A task is queued as soon as /api/statistics returns its task_id, so its progress stream exists."""
-    from backend.stats import StatsResponse, TeamStats
+def test_team_task_is_queued_before_it_is_sent():
+    """The queued record is written before the Celery task is sent, so a finished task's progress is not overwritten."""
+    from unittest.mock import MagicMock
 
-    teams = [TeamStats(team="Alpha", team_id=1, task_id="task_1_1"), TeamStats(team="Beta", team_id=2)]
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", lambda **kwargs: StatsResponse(teams=teams))
+    from backend import stats
+    from backend.pro_players import Player
+    from backend.rosters import TeamRoster
+    from backend.stats import TeamStats
 
-    app = create_app(test_config={})
-    with patch("backend.dota_bet_analyzer.update_progress") as update:
-        rv = app.test_client().get("/api/statistics?team=Alpha&team=Beta")
+    calls = MagicMock()
+    task = MagicMock()
+    calls.attach_mock(task, "task")
+    team = TeamStats(team="Alpha", team_id=1)
+    with (
+        patch.object(stats, "get_players_by_team", return_value=([Player(id=100, name="P")], [])),
+        patch.object(stats, "_resolve_roster_safe", return_value=TeamRoster()),
+        patch("backend.task_store.update_progress") as update,
+    ):
+        calls.attach_mock(update, "update")
+        stats._create_team_stats(team, task, days=20)
 
-    assert rv.status_code == 200
-    update.assert_called_once_with("task_1_1", 0, "Queued", 0)
+    assert [c[0] for c in calls.mock_calls] == ["update", "task.delay"]
+    update.assert_called_once_with(team.task_id, 0, "Queued", 0)
+    assert team.task_id.startswith("task_1_")
 
 
-def test_players_statistics_marks_started_task_queued():
+def test_players_statistics_queues_task_before_it_is_sent():
     """Starting a task by account IDs queues it before the response returns its task_id."""
+    calls = MagicMock()
     app = create_app(test_config={})
     with (
         patch("backend.dota_bet_analyzer.players_statistics_task") as task,
         patch("backend.dota_bet_analyzer.update_progress") as update,
     ):
+        calls.attach_mock(update, "update")
+        calls.attach_mock(task.delay, "delay")
         task.delay.return_value.id = "celery-id"
         rv = app.test_client().get("/api/statistics/players?account_id=123&account_id=456")
 
     assert rv.status_code == 200
     task_id = rv.get_json()["task_id"]
+    assert [c[0] for c in calls.mock_calls] == ["update", "delay"]
     update.assert_called_once_with(task_id, 0, "Queued", 0)

@@ -283,10 +283,6 @@ def statistics(args) -> tuple[Response, int]:
             team_ids=team_ids_int if team_ids_int else None,
             days=args.get("days", 20),
         )
-        # Tasks run one at a time, so a task may wait in the queue; mark it queued so its progress stream exists
-        for team in stats.teams:
-            if team.task_id:
-                update_progress(team.task_id, 0, "Queued", 0)
         return jsonify(stats.model_dump()), 200
 
     except ValueError as e:
@@ -393,10 +389,10 @@ def players_statistics(args) -> tuple[Response, int]:
         accounts_int = [int(a) if not isinstance(a, int) else a for a in accounts]
 
         try:
-            task = players_statistics_task.delay(
-                task_id := f"task_{int(time.time())}", accounts=accounts_int, days=days
-            )
+            task_id = f"task_{int(time.time())}"
+            # Queue before the task starts, so a finished task's progress is never overwritten
             update_progress(task_id, 0, "Queued", 0)
+            task = players_statistics_task.delay(task_id=task_id, accounts=accounts_int, days=days)
             return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
         except Exception as e:
             return api_error(500, Errors.FAILED_TO_START_TASK, e, task_id=task_id)
