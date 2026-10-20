@@ -1475,6 +1475,9 @@ describe('App Component', () => {
         }
 
         const rowOf = (label: string | RegExp) => screen.getByText(label).closest('tr') as HTMLElement
+        // Text of each player line in an insights cell
+        const playerLines = (cell: Element) =>
+            Array.from(cell.querySelectorAll('.roster > div:not(.roster-source)')).map((line) => line.textContent)
 
         it('shows the roster state in the comparison and core players and stand-ins in the insights', async () => {
             await renderComparison([
@@ -1528,21 +1531,21 @@ describe('App Component', () => {
             expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
 
             const cells = (label: string) => rowOf(label).querySelectorAll('td')
-            // Core players: "(X of N)" only when a player missed games
-            expect(cells('Core Players')[1]).toHaveTextContent('Rain')
-            expect(cells('Core Players')[1]).not.toHaveTextContent('Rain (')
-            expect(cells('Core Players')[1]).toHaveTextContent('Half (8 of 10)')
-            expect(cells('Core Players')[2]).toHaveTextContent('Fresh')
-            expect(cells('Core Players')[2]).not.toHaveTextContent('Sub')
+            // Core players: games per player, "of N" only when a player missed games; no rank before the task results
+            expect(playerLines(cells('Core Players')[1])).toEqual([
+                'Rain · games: 10',
+                'Half · games: 8 of 10',
+                'ID 1150772339 · games: 10',
+            ])
+            expect(playerLines(cells('Core Players')[2])).toEqual(['Kiseki · games: 30', 'Fresh · games: 30'])
             // A player without a name is shown as an account ID
             const accountId = cells('Core Players')[1].querySelector('.account-id') as HTMLElement
             expect(accountId).toHaveTextContent('ID 1150772339')
             expect(accountId).toHaveAttribute('title', 'No player name on OpenDota; this is the account ID')
 
-            // Stand-ins: everyone outside the core, in the same "(X of N)" format as the core players
-            expect(cells('Stand-ins')[1]).toHaveTextContent('NewGuy (3 of 10)')
-            expect(cells('Stand-ins')[1]).toHaveTextContent('Backup (2 of 10)')
-            expect(cells('Stand-ins')[2]).toHaveTextContent('Sub (2 of 30)')
+            // Stand-ins: everyone outside the core, in the same format as the core players
+            expect(playerLines(cells('Stand-ins')[1])).toEqual(['NewGuy · games: 3 of 10', 'Backup · games: 2 of 10'])
+            expect(playerLines(cells('Stand-ins')[2])).toEqual(['Sub · games: 2 of 30'])
 
             // Last match: players outside the core are mentioned only when there were any
             expect(cells('Last Tournament Match')[1]).toHaveTextContent('2 players outside the core')
@@ -1550,14 +1553,76 @@ describe('App Component', () => {
             expect(cells('Stand-ins')[1]).not.toHaveTextContent('Benched')
 
             // Other players: on the team in OpenDota but no league games in the window
-            expect(cells('Other Players')[1]).toHaveTextContent('Benched')
-            expect(cells('Other Players')[1]).not.toHaveTextContent('Benched (')
+            expect(playerLines(cells('Other Players')[1])).toEqual(['Benched'])
             expect(cells('Other Players')[2]).toHaveTextContent('None')
 
             const recordRow = rowOf('Tournaments Record (20d)')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
             expect(screen.getByText('Last Match')).toBeInTheDocument()
+        })
+
+        it('shows each player\'s rank from the task results once they arrive', async () => {
+            const teams = [
+                {
+                    ...baseTeam,
+                    team: 'Team A',
+                    team_id: 1,
+                    task_id: 'task_insights_rank_1',
+                    players: [
+                        { id: 11, name: 'Rain', games: 10, is_core: true },
+                        { id: 12, name: 'Ghost', games: 10, is_core: true },
+                        { id: 13, name: 'Failed', games: 9, is_core: true },
+                    ],
+                    other_players: [{ id: 14, name: 'NewGuy', games: 3, is_core: false }],
+                    roster_source: 'recent_matches',
+                    roster_games: 10,
+                    roster_state: 'standins',
+                    standins_count: 1,
+                },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
+            ]
+            const result = {
+                // Ghost is not on the leaderboard; the fetch failed for Failed, so there is no rank for him
+                results: [
+                    { account_id: 11, match_count: 40, rank: 245 },
+                    { account_id: 12, match_count: 12, rank: null },
+                    { account_id: 13, error: 'boom' },
+                ],
+                successful: 2,
+                total: 3,
+                summary: { avg_rank: 245, bad_rank_players: 0 },
+            }
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                if (url.includes('/api/stream-progress/')) {
+                    return Promise.resolve({
+                        ok: true,
+                        text: () =>
+                            Promise.resolve(
+                                JSON.stringify({ step: 1, message: 'Complete', progress: 100, data: { successful: 2, total: 3 } }),
+                            ),
+                    })
+                }
+                if (url.includes('/api/results/')) return Promise.resolve(createMockResponse(result))
+                return Promise.resolve(createMockResponse({ teams }))
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            const cells = (label: string) => rowOf(label).querySelectorAll('td')
+            await waitFor(() =>
+                expect(playerLines(cells('Core Players')[1])).toEqual([
+                    'Rain · games: 10 · rank: 245',
+                    'Ghost · games: 10 · rank: -',
+                    'Failed · games: 9 of 10',
+                ]),
+            )
+            // Stand-ins outside the main 5 are not in the task, so they have no rank
+            expect(playerLines(cells('Stand-ins')[1])).toEqual(['NewGuy · games: 3 of 10'])
         })
 
         it('shows a stable roster without stand-ins', async () => {

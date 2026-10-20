@@ -62,16 +62,17 @@ export interface MatchesSummary {
   bad_rank_players: number | null
 }
 
-// GET /api/results/{task_id}: results[] (one entry per player: match count, or the error that stopped the fetch)
+// GET /api/results/{task_id}: results[] (one entry per player: match count and leaderboard rank, or the error that stopped the fetch)
 export interface PlayerResult {
   account_id: number
   match_count?: number
+  rank?: number | null
   error?: string
 }
 
 // GET /api/results/{task_id}. If that request fails, the app keeps the final progress data instead,
 // which has only `successful` and `total`, so `summary` is optional here.
-// The comparison table reads only `summary`
+// The comparison table reads `summary`; Team Insights reads each player's rank from `results`
 export interface StatisticsResult {
   results?: PlayerResult[]
   successful?: number

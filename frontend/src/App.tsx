@@ -277,11 +277,30 @@ function App() {
     return <span title={state.hint}>{`${state.label}${suffix}`}</span>
   }
 
-  // "(X of N)" next to a player who missed some of the team's tournament games in the window
-  const formatGamesShare = (player: Player, team: TeamData): string => {
+  // Leaderboard rank per account, from the team's task results (only the players the task fetched)
+  const getPlayerRanks = (team: TeamData): Map<number, number | null> => {
+    const results = (team.task_id && summaryData?.[team.task_id]?.results) || []
+    return new Map(results.filter((r) => 'rank' in r).map((r) => [r.account_id, r.rank ?? null]))
+  }
+
+  // " · games: N · rank: R" after a player's name; "N of total" when the player missed some of the team's
+  // tournament games in the window; rank only for players whose rank was fetched ("-" when not on the leaderboard)
+  const formatPlayerStats = (player: Player, team: TeamData, ranks: Map<number, number | null>): string => {
     const total = team.roster_games
-    if (!player.games || !total || player.games >= total) return ''
-    return ` (${player.games} of ${total})`
+    let text = ''
+    if (player.games) text += ` · games: ${player.games}${total && player.games < total ? ` of ${total}` : ''}`
+    if (ranks.has(player.id)) text += ` · rank: ${ranks.get(player.id) ?? '-'}`
+    return text
+  }
+
+  const renderPlayers = (players: Player[], team: TeamData) => {
+    const ranks = getPlayerRanks(team)
+    return players.map((p) => (
+      <div key={p.id}>
+        {renderName(p)}
+        {formatPlayerStats(p, team, ranks)}
+      </div>
+    ))
   }
 
   const renderCorePlayers = (team: TeamData | undefined) => {
@@ -289,12 +308,7 @@ function App() {
     const clearCore = team.roster_source === 'recent_matches' && hasCore(team)
     return (
       <div className="roster">
-        {getCorePlayers(team).map((p) => (
-          <div key={p.id}>
-            {renderName(p)}
-            {formatGamesShare(p, team)}
-          </div>
-        ))}
+        {renderPlayers(getCorePlayers(team), team)}
         {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
         {team.roster_source === 'recent_matches' && !clearCore && <div className="roster-source">no clear core: players rotate</div>}
       </div>
@@ -303,16 +317,7 @@ function App() {
 
   const renderPlayedList = (players: Player[], team: TeamData) => {
     if (!players.length) return 'None'
-    return (
-      <div className="roster">
-        {players.map((p) => (
-          <div key={p.id}>
-            {renderName(p)}
-            {formatGamesShare(p, team)}
-          </div>
-        ))}
-      </div>
-    )
+    return <div className="roster">{renderPlayers(players, team)}</div>
   }
 
   const renderStandinPlayers = (team: TeamData | undefined) =>

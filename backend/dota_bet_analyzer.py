@@ -98,7 +98,8 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
     Saves one payload under `results:{task_id}` (read by GET /api/results/{task_id}, StatisticsResultSchema):
     - `summary`: team totals from get_team_matches_summary plus rank values; the only part the
       Team Comparison table reads (frontend getSummaryForTeam and the rows marked `summary: true`)
-    - `results`: one entry per account with its match count or its error (raw matches are not stored)
+    - `results`: one entry per account with its match count and leaderboard rank, or its error
+      (raw matches are not stored; the Team Insights table shows each player's rank from here)
     - `successful` / `total`: how many accounts were fetched; also sent in the final progress message
 
     Args:
@@ -111,7 +112,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
         logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
         progress.start(f"Initializing match history fetch for {len(accounts)} players")
 
-        results: list[dict[str, int | str]] = []  # Per player: match_count, or the fetch error
+        results: list[dict[str, int | str | None]] = []  # Per player: match_count and rank, or the fetch error
         matches_stats = []  # List of lists: each inner list is matches for one player
         ranks = RankTally()
         for account_id in accounts:
@@ -125,14 +126,16 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 player_matches = get_matches_cached(account_id=account_id, days=days, on_wait=report_wait)
                 matches_stats.append(player_matches)  # Append as a list per player
 
-                # Only the count is kept per player; the matches themselves feed `summary`
-                results.append({"account_id": account_id, "match_count": len(player_matches)})
+                # Only the count and rank are kept per player; the matches themselves feed `summary`
+                result: dict[str, int | str | None] = {"account_id": account_id, "match_count": len(player_matches)}
+                results.append(result)
                 progress.report(
                     f"Fetched {len(player_matches)} matches for account {account_id}",
                     {"account_id": account_id, "match_count": len(player_matches)},
                 )
 
                 player_rank = get_rank_cached(account_id, on_wait=report_wait)
+                result["rank"] = player_rank
                 ranks.add(player_rank)
                 if player_rank is not None and player_rank > BAD_RANK_THRESHOLD:  # Tysyachniks ruin the games.
                     logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
