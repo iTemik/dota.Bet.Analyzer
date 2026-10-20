@@ -613,7 +613,7 @@ Async task for comprehensive player analysis:
 **Task Workflow:**
 1. Client calls `/statistics/players?account_id=123&account_id=456`
 2. Backend starts Celery task and returns task_id
-3. Frontend polls `/stream-progress/<task_id>` for real-time updates
+3. Frontend keeps `/stream-progress/<task_id>` open; a line arrives as soon as the task's progress changes (Redis pub/sub signal), and the stream is reopened if it closes after 30s without changes
 4. Task processes matches, fetches ranks, calculates statistics
 5. Results stored in Redis at `/results/<task_id>` when complete
 
@@ -683,9 +683,9 @@ npm test          # Run tests
 - **Gray (Neutral)**: No difference or not applicable
 - **Inverse Logic**: Rank and bad player count use inverse colors (lower = positive)
 
-#### Real-time Polling
-- Automatically polls for task completion every 5 seconds
-- Displays progress updates to user
+#### Real-time Progress
+- Reads the progress stream as it arrives and shows each update right away
+- Shows a failed task's error as soon as the task fails
 - Fetches summary statistics once task completes
 - Handles task cancellation when new search starts
 - Timeout protection (5-minute maximum)

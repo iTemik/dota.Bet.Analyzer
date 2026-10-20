@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
-import { type ProgressData, parseProgress } from './progress'
+import { type ProgressData, ProgressStreamError, followProgress } from './progress'
 import { ROSTER_STATES, getCorePlayers, getStandins, hasCore, renderName } from './roster'
 import type { LeagueForm, MatchesSummary, Player, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
@@ -61,7 +61,7 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
  *    - Backend fetches team data from OpenDota API (compute_statistics() -> _create_team_stats() -> resolve_roster())
  *    - Player accounts are the players with the most tournament games in the window (stale team list as fallback)
  *    - This is a background task (players_statistics_task).
- *    - It's needed to poll progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
+ *    - It's needed to follow progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
  */
 function App() {
   const team1 = useTeamInput()
@@ -74,7 +74,7 @@ function App() {
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const [showRawStats, setShowRawStats] = useState(false)
   const [showSummaryData, setShowSummaryData] = useState(false)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollAbortRef = useRef<AbortController | null>(null)
   const currentSearchIdRef = useRef<number>(0)
 
   useEffect(() => {
@@ -112,11 +112,12 @@ function App() {
     }
   }, [])
 
+  // Close open progress streams when the page goes away
+  useEffect(() => () => pollAbortRef.current?.abort(), [])
+
   const stopPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
+    pollAbortRef.current?.abort()
+    pollAbortRef.current = null
   }
 
   // Stop polling and show the error
@@ -191,97 +192,66 @@ function App() {
 
   const pollTasksProgress = async (taskIds: (string | undefined)[], searchId: number) => {
     const MAX_POLLING_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
-    const POLL_INTERVAL = 3 * 1000 // 3 seconds in milliseconds
-    const startTime = Date.now()
+    const controller = new AbortController()
+    pollAbortRef.current = controller
+    const pollTimeout = setTimeout(
+      () => failPolling('Polling timeout: Task took longer than 5 minutes'),
+      MAX_POLLING_TIME
+    )
+    controller.signal.addEventListener('abort', () => clearTimeout(pollTimeout))
 
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        // Skip processing if a new search has started
-        if (currentSearchIdRef.current !== searchId) {
-          stopPolling()
-          return
-        }
+    const isCurrentSearch = () => currentSearchIdRef.current === searchId
+    const onProgress = (progressData: ProgressData) => {
+      // Stop if a new search has started
+      if (!isCurrentSearch()) controller.abort()
+      else setProgress(progressData)
+    }
 
-        if (Date.now() - startTime > MAX_POLLING_TIME) {
-          failPolling('Polling timeout: Task took longer than 5 minutes')
-          return
-        }
-
-        let allCompleted = true
-        const summaries: Record<string, StatisticsResult> = {}
-
-        for (const taskId of taskIds) {
-          if (!taskId) continue
-
-          const progressResponse = await fetch(`/api/stream-progress/${taskId}`)
-          if (!progressResponse.ok) {
-            failPolling(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
-            return
-          }
-
-          let responseText: string
-          try {
-            responseText = await progressResponse.text()
-          } catch (textError) {
-            failPolling(`Failed to read response for task ${taskId}: ${textError}`)
-            return
-          }
-
-          const parsed = parseProgress(responseText)
-          if (!parsed.ok) {
-            failPolling(
-              parsed.reason === 'empty'
-                ? `No data found in response for task ${taskId}`
-                : `No valid JSON found in response for task ${taskId}`
-            )
-            return
-          }
-          const progressData = parsed.progress
-
-          setProgress(progressData)
-
-          // Check if task is complete (progress === 100)
-          if (progressData.progress === 100) {
-            summaries[taskId] = progressData.data as StatisticsResult
-          } else if (progressData.progress < 100) {
-            allCompleted = false
-          }
-        }
-
-        // If all tasks are complete, fetch detailed results
-        if (allCompleted && Object.keys(summaries).length > 0) {
-          setLoading(false)
-          stopPolling()
-
-          // Fetch detailed results for each completed task
-          try {
-            const detailedResults: Record<string, StatisticsResult> = {}
-
-            for (const taskId of taskIds) {
-              if (!taskId) continue
-
-              const resultsResponse = await fetch(`/api/results/${taskId}`)
-              if (resultsResponse.ok) {
-                const resultsData = await resultsResponse.json()
-                detailedResults[taskId] = resultsData
-              } else {
-                console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
-                detailedResults[taskId] = summaries[taskId]
-              }
-            }
-
-            setSummaryData(detailedResults)
-          } catch (err) {
-            console.error('Error fetching detailed results:', err)
-            // Fall back to summary data if results fetch fails
-            setSummaryData(summaries)
-          }
-        }
-      } catch (err) {
+    const ids = taskIds.filter((taskId): taskId is string => Boolean(taskId))
+    let summaries: Record<string, StatisticsResult>
+    try {
+      // Follow all task streams at once; each line updates the progress bar as it arrives
+      const finals = await Promise.all(ids.map(taskId => followProgress(taskId, controller.signal, onProgress)))
+      summaries = Object.fromEntries(ids.map((taskId, i) => [taskId, finals[i].data as StatisticsResult]))
+    } catch (err) {
+      if (controller.signal.aborted) return
+      if (err instanceof ProgressStreamError) {
+        failPolling(err.message)
+      } else {
         console.error('Error polling progress:', err)
         failPolling(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
       }
-    }, POLL_INTERVAL)
+      return
+    }
+    if (!isCurrentSearch()) return
+
+    // All tasks are complete, fetch detailed results
+    setLoading(false)
+    stopPolling()
+
+    // Fetch detailed results for each completed task
+    try {
+      const detailedResults: Record<string, StatisticsResult> = {}
+
+      for (const taskId of taskIds) {
+        if (!taskId) continue
+
+        const resultsResponse = await fetch(`/api/results/${taskId}`)
+        if (resultsResponse.ok) {
+          const resultsData = await resultsResponse.json()
+          detailedResults[taskId] = resultsData
+        } else {
+          console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
+          detailedResults[taskId] = summaries[taskId]
+        }
+      }
+
+      setSummaryData(detailedResults)
+    } catch (err) {
+      console.error('Error fetching detailed results:', err)
+      // Fall back to summary data if results fetch fails
+      setSummaryData(summaries)
+    }
   }
 
   const getDeltaBackgroundColor = (delta: number | undefined): string => {

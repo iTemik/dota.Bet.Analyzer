@@ -20,13 +20,61 @@ def client(app):
     return app.test_client()
 
 
+def snapshot(step: int, progress: float, message: str = "Working", data: dict | None = None) -> bytes:
+    """Build a stored progress snapshot as update_progress writes it."""
+    return json.dumps({"step": step, "message": message, "progress": progress, "data": data or {}}).encode()
+
+
+class FakeProgress:
+    """Stand-in for Redis and the clock: each wait for a progress signal moves to the next snapshot.
+
+    The last snapshot stays stored once the list runs out. Each wait advances the clock by
+    `wait_seconds`, as a blocking wait without a signal would.
+    """
+
+    def __init__(self, mock_redis, mock_monotonic, snapshots: list, wait_seconds: float = 0.1) -> None:
+        self.snapshots = snapshots
+        self.index = 0
+        self.now = 1000.0
+        self.wait_seconds = wait_seconds
+        self.subscription = mock_redis.pubsub.return_value
+        mock_redis.get.side_effect = self.get
+        self.subscription.get_message.side_effect = self.wait
+        mock_monotonic.side_effect = lambda: self.now
+
+    def get(self, key: str):
+        value = self.snapshots[min(self.index, len(self.snapshots) - 1)]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def wait(self, timeout: float):
+        self.index += 1
+        self.now += self.wait_seconds
+        return None
+
+
+@pytest.fixture
+def fake_progress():
+    """Patch Redis and the stream clock; call the result with the snapshots to serve."""
+    with (
+        patch("backend.task_store.redis_client") as mock_redis,
+        patch("backend.dota_bet_analyzer.time.monotonic") as mock_monotonic,
+    ):
+        yield lambda snapshots, **kwargs: FakeProgress(mock_redis, mock_monotonic, snapshots, **kwargs)
+
+
+def stream_lines(rv) -> list[dict]:
+    """Decode the NDJSON stream body."""
+    return [json.loads(line) for line in rv.data.decode("utf-8").split("\n") if line.strip()]
+
+
 class TestStreamProgressEndpoint:
     """Test suite for /stream-progress/<task_id> endpoint."""
 
     @patch("backend.task_store.redis_client")
     def test_stream_progress_task_not_found_returns_404(self, mock_redis, client):
         """Test that stream_progress returns 404 when task doesn't exist."""
-        # Mock Redis returning None for non-existent task
         mock_redis.get.return_value = None
 
         rv = client.get("/api/stream-progress/nonexistent_task")
@@ -40,7 +88,6 @@ class TestStreamProgressEndpoint:
     @patch("backend.task_store.redis_client")
     def test_stream_progress_redis_error_returns_500(self, mock_redis, client):
         """Test that stream_progress returns 500 when Redis connection fails."""
-        # Mock Redis raising exception on initial check
         mock_redis.get.side_effect = ConnectionError("Redis connection failed")
 
         rv = client.get("/api/stream-progress/task_123")
@@ -50,12 +97,9 @@ class TestStreamProgressEndpoint:
         assert data["status"] == 500
         assert data["code"] == "FAILED_TO_RETRIEVE_RESULTS"
 
-    @patch("backend.task_store.redis_client")
-    def test_stream_progress_returns_200_with_sse_headers(self, mock_redis, client):
+    def test_stream_progress_returns_200_with_sse_headers(self, fake_progress, client):
         """Test that stream_progress returns 200 with proper SSE headers."""
-        # Mock initial task exists
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}})
-        mock_redis.get.return_value = initial_progress.encode()
+        fake_progress([snapshot(1, 100, "Complete")])
 
         rv = client.get("/api/stream-progress/task_123")
 
@@ -64,278 +108,101 @@ class TestStreamProgressEndpoint:
         assert rv.headers.get("Cache-Control") == "no-cache"
         assert rv.headers.get("Connection") == "keep-alive"
 
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_completes_on_100_percent(self, mock_sleep, mock_redis, client):
-        """Test that stream completes when progress reaches 100%."""
-        # Setup progress sequence: 0% -> 50% -> 100%
-        progress_sequence = [
-            json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode(),
-            json.dumps({"step": 1, "message": "Processing", "progress": 50, "data": {}}).encode(),
-            json.dumps({"step": 2, "message": "Complete", "progress": 100, "data": {}}).encode(),
-        ]
-
-        mock_redis.get.side_effect = progress_sequence
-        mock_sleep.return_value = None  # Skip actual sleep
+    def test_stream_sends_each_change_and_completes_on_100_percent(self, fake_progress, client):
+        """Every change is sent once, including a same-step message such as a rate-limit wait."""
+        waiting = snapshot(1, 25, "OpenDota limit reached, retrying account 7 in 20s", {"retry_in": 20})
+        fake_progress(
+            [
+                snapshot(0, 0, "Starting"),
+                snapshot(1, 25, "Step 1"),
+                snapshot(1, 25, "Step 1"),  # unchanged, not sent again
+                waiting,
+                snapshot(2, 100, "Complete", {"successful": 1, "total": 1}),
+            ]
+        )
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        # Parse SSE stream
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
+        lines = stream_lines(rv)
+        assert [(line["step"], line["message"]) for line in lines] == [
+            (0, "Starting"),
+            (1, "Step 1"),
+            (1, "OpenDota limit reached, retrying account 7 in 20s"),
+            (2, "Complete"),
+        ]
+        assert lines[2]["data"] == {"retry_in": 20}
+        assert lines[-1]["progress"] == 100
+        assert lines[-1]["data"] == {"successful": 1, "total": 1}
 
-        # Should have 3 progress updates
-        assert len(lines) >= 2  # At least step 1 and step 2 (step 0 might not be sent if not > last_step)
-
-        # Last update should be 100%
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == 100
-        assert last_update["step"] == 2
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_completes_on_error_state(self, mock_sleep, mock_redis, client):
+    def test_stream_completes_on_error_state(self, fake_progress, client):
         """Test that stream completes when progress is -1 (error state)."""
-        # Setup progress sequence: 0% -> error (-1)
-        progress_sequence = [
-            json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode(),
-            json.dumps({"step": 1, "message": "Error occurred", "progress": -1, "data": {"error": True}}).encode(),
-        ]
-
-        mock_redis.get.side_effect = progress_sequence
-        mock_sleep.return_value = None
+        fake_progress([snapshot(0, 0, "Starting"), snapshot(-1, -1, "Task error: boom", {"error": True})])
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
+        lines = stream_lines(rv)
+        assert lines[-1] == {"step": -1, "message": "Task error: boom", "progress": -1, "data": {"error": True}}
 
-        # Last update should be error state
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert last_update["step"] == 1
+    def test_stream_waits_for_progress_signal_between_reads(self, fake_progress, client):
+        """The stream subscribes before reading, waits on the signal instead of sleeping, and unsubscribes."""
+        progress = fake_progress([snapshot(0, 0), snapshot(1, 50), snapshot(2, 100)])
 
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_timeout_on_no_updates(self, mock_sleep, mock_redis, client):
-        """Test that stream times out when no progress updates occur."""
-        # Initial check passes
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}})
+        with patch("backend.dota_bet_analyzer.time.sleep") as mock_sleep:
+            rv = client.get("/api/stream-progress/task_123")
+            stream_lines(rv)
 
-        # After initial check, Redis keeps returning same step (no progress)
-        # This simulates a stuck task
-        mock_redis.get.return_value = initial_progress.encode()
-        mock_sleep.return_value = None
+        mock_sleep.assert_not_called()
+        progress.subscription.subscribe.assert_called_once_with("progress-updates:task_123")
+        assert progress.subscription.get_message.call_count == 2
+        progress.subscription.get_message.assert_called_with(timeout=1.0)
+        progress.subscription.close.assert_called_once()
 
-        rv = client.get("/api/stream-progress/task_123")
-
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
-
-        # Should have timeout error message
-        assert len(lines) > 0
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert "timed out" in last_update["message"].lower()
-        assert last_update["data"]["timeout"] is True
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    @patch("backend.dota_bet_analyzer.time.time")
-    def test_stream_progress_timeout_on_max_runtime(self, mock_time, mock_sleep, mock_redis, client):
-        """Test that stream times out when max runtime is exceeded."""
-        # Initial check passes
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode()
-        mock_redis.get.return_value = initial_progress
-
-        # Simulate time passing beyond max_runtime (120 seconds)
-        start_time = 1000.0
-        mock_time.side_effect = [
-            start_time,  # start_time assignment
-            start_time + 121,  # First check exceeds 120s limit
-        ]
-        mock_sleep.return_value = None
+    def test_stream_times_out_after_idle_limit(self, fake_progress, client):
+        """With no changes for 30s the stream sends a timeout line and ends."""
+        progress = fake_progress([snapshot(1, 10)], wait_seconds=1.0)
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
+        lines = stream_lines(rv)
+        assert len(lines) == 2
+        assert lines[-1]["progress"] == -1
+        assert lines[-1]["message"] == "Task timed out - no progress updates for 30s"
+        assert lines[-1]["data"] == {"error": True, "timeout": True}
+        # One blocking wait per second of idle time, not a busy loop
+        assert progress.subscription.get_message.call_count == 31
 
-        # Should have runtime timeout error
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert "maximum runtime" in last_update["message"].lower()
-        assert last_update["data"]["timeout"] is True
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_timeout_on_max_iterations(self, mock_sleep, mock_redis, client):
-        """Test that stream times out when max iterations is reached."""
-        # Initial check passes
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode()
-
-        # Create a side effect that:
-        # 1. Returns initial progress for the pre-flight check
-        # 2. Returns progressing steps but never reaches 100%
-        call_count = [0]
-
-        def redis_side_effect(*args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # Pre-flight check
-                return initial_progress
-            else:
-                # Keep returning increasing steps but never complete
-                step = min(call_count[0] - 1, 5999)  # Cap at max_iterations - 1
-                return json.dumps({"step": step, "message": f"Step {step}", "progress": 50, "data": {}}).encode()
-
-        mock_redis.get.side_effect = redis_side_effect
-        mock_sleep.return_value = None
+    def test_stream_times_out_on_max_runtime(self, fake_progress, client):
+        """A task that keeps changing but never completes is cut off after 120s."""
+        fake_progress([snapshot(step, 50, f"Step {step}") for step in range(200)], wait_seconds=1.0)
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
+        lines = stream_lines(rv)
+        assert lines[-1]["message"] == "Task exceeded maximum runtime (120s)"
+        assert lines[-1]["data"]["timeout"] is True
 
-        # Should have max iterations error
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert "maximum iterations" in last_update["message"].lower()
-        assert last_update["data"]["timeout"] is True
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_handles_json_decode_error(self, mock_sleep, mock_redis, client):
+    def test_stream_handles_json_decode_error(self, fake_progress, client):
         """Test that stream handles invalid JSON gracefully."""
-        # Initial check passes with valid JSON
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode()
-
-        # After initial check, Redis returns invalid JSON
-        mock_redis.get.side_effect = [
-            initial_progress,  # Pre-flight check
-            b"invalid json {{{",  # Invalid JSON in stream
-        ]
-        mock_sleep.return_value = None
+        progress = fake_progress([b"invalid json {{{"])
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
+        lines = stream_lines(rv)
+        assert lines[-1]["progress"] == -1
+        assert "invalid progress data" in lines[-1]["message"].lower()
+        assert lines[-1]["data"]["error"] is True
+        progress.subscription.close.assert_called_once()
 
-        # Should have JSON decode error
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert "invalid progress data" in last_update["message"].lower()
-        assert last_update["data"]["error"] is True
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_handles_stream_exception(self, mock_sleep, mock_redis, client):
+    def test_stream_handles_stream_exception(self, fake_progress, client):
         """Test that stream handles unexpected exceptions gracefully."""
-        # Initial check passes
-        initial_progress = json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode()
-
-        # After initial check, Redis raises unexpected exception
-        mock_redis.get.side_effect = [
-            initial_progress,  # Pre-flight check
-            RuntimeError("Unexpected error"),  # Unexpected exception in stream
-        ]
-        mock_sleep.return_value = None
+        fake_progress([snapshot(0, 0), RuntimeError("Unexpected error")])
 
         rv = client.get("/api/stream-progress/task_123")
 
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
-
-        # Should have stream error
-        last_update = json.loads(lines[-1])
-        assert last_update["progress"] == -1
-        assert "stream error" in last_update["message"].lower()
-        assert last_update["data"]["error"] is True
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_only_sends_new_updates(self, mock_sleep, mock_redis, client):
-        """Test that stream only sends updates when step increases."""
-        # Setup: Same step returned multiple times, then new step
-        progress_sequence = [
-            json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode(),  # Pre-flight
-            json.dumps({"step": 1, "message": "Step 1", "progress": 25, "data": {}}).encode(),  # First new
-            json.dumps({"step": 1, "message": "Step 1", "progress": 25, "data": {}}).encode(),  # Duplicate
-            json.dumps({"step": 1, "message": "Step 1", "progress": 25, "data": {}}).encode(),  # Duplicate
-            json.dumps({"step": 2, "message": "Step 2", "progress": 50, "data": {}}).encode(),  # Second new
-            json.dumps({"step": 2, "message": "Step 2", "progress": 50, "data": {}}).encode(),  # Duplicate
-            json.dumps({"step": 3, "message": "Complete", "progress": 100, "data": {}}).encode(),  # Complete
-        ]
-
-        mock_redis.get.side_effect = progress_sequence
-        mock_sleep.return_value = None
-
-        rv = client.get("/api/stream-progress/task_123")
-
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
-
-        # Should only have 3 updates (steps 1, 2, 3) - duplicates not sent
-        assert len(lines) == 3
-
-        # Verify steps are in order
-        updates = [json.loads(line) for line in lines]
-        assert updates[0]["step"] == 1
-        assert updates[1]["step"] == 2
-        assert updates[2]["step"] == 3
-        assert updates[2]["progress"] == 100
-
-    @patch("backend.task_store.redis_client")
-    @patch("backend.dota_bet_analyzer.time.sleep")
-    def test_stream_progress_with_task_data(self, mock_sleep, mock_redis, client):
-        """Test that stream includes data payloads from Redis."""
-        # Setup progress with data payloads
-        progress_sequence = [
-            json.dumps({"step": 0, "message": "Starting", "progress": 0, "data": {}}).encode(),
-            json.dumps(
-                {
-                    "step": 1,
-                    "message": "Fetched matches",
-                    "progress": 50,
-                    "data": {"account_id": 12345, "match_count": 10},
-                }
-            ).encode(),
-            json.dumps(
-                {
-                    "step": 2,
-                    "message": "Complete",
-                    "progress": 100,
-                    "data": {"successful": 1, "total": 1},
-                }
-            ).encode(),
-        ]
-
-        mock_redis.get.side_effect = progress_sequence
-        mock_sleep.return_value = None
-
-        rv = client.get("/api/stream-progress/task_123")
-
-        assert rv.status_code == 200
-        stream_data = rv.data.decode("utf-8")
-        lines = [line for line in stream_data.split("\n") if line.strip()]
-
-        # Verify data is included
-        update_1 = json.loads(lines[0])
-        assert update_1["data"]["account_id"] == 12345
-        assert update_1["data"]["match_count"] == 10
-
-        update_2 = json.loads(lines[1])
-        assert update_2["data"]["successful"] == 1
-        assert update_2["data"]["total"] == 1
+        lines = stream_lines(rv)
+        assert lines[-1]["progress"] == -1
+        assert lines[-1]["message"] == "Stream error: Unexpected error"
+        assert lines[-1]["data"]["error"] is True
 
 
 def test_progress_is_rounded_to_one_decimal():
@@ -346,3 +213,14 @@ def test_progress_is_rounded_to_one_decimal():
 
     stored = json.loads(redis.setex.call_args.args[2])
     assert stored["progress"] == 41.7
+
+
+def test_update_progress_signals_open_streams_after_storing():
+    """The progress signal goes out after the snapshot is stored, so a woken stream reads the new one."""
+    from backend import task_store
+
+    with patch.object(task_store, "redis_client") as redis:
+        task_store.update_progress("task_1", 2, "Got matches", 50)
+
+    assert [call[0] for call in redis.method_calls] == ["setex", "publish"]
+    redis.publish.assert_called_once_with("progress-updates:task_1", "2")

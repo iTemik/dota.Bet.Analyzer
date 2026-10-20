@@ -4,6 +4,7 @@ import json
 import time
 
 import redis
+from redis.client import PubSub
 
 from backend.config import Config
 from backend.logging_config import setup_logging
@@ -14,6 +15,11 @@ logger = setup_logging(__name__)
 
 # Redis for progress, results and the player cache
 redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
+
+
+def _progress_channel(task_id: str) -> str:
+    """Pub/sub channel that signals a task's progress changed."""
+    return f"progress-updates:{task_id}"
 
 
 def update_progress(task_id: str, step: int, message: str, progress: float, data: dict | None = None) -> None:
@@ -36,6 +42,8 @@ def update_progress(task_id: str, step: int, message: str, progress: float, data
             "timestamp": time.time(),
         }
         redis_client.setex(f"progress:{task_id}", 3600, json.dumps(progress_data))  # Expire after 1 hour
+        # Wake open progress streams; they read the snapshot above, so the message carries no data
+        redis_client.publish(_progress_channel(task_id), str(step))
         logger.debug(f"Progress updated for task {task_id}: {message} ({progress}%)")
     except Exception as e:
         # Log error but don't fail the task if Redis is unavailable
@@ -234,38 +242,47 @@ def get_rank_cached(account_id: int, on_wait: WaitCallback | None = None) -> int
     return rank
 
 
-def process_progress_data(task_id: str, last_step: int) -> tuple[dict | None, int, bool]:
-    """Process progress data from Redis.
+def subscribe_progress(task_id: str) -> PubSub:
+    """Subscribe to a task's progress signals (published by update_progress).
 
     Args:
-        task_id: Task identifier
-        last_step: Last processed step number
+        task_id: Unique task identifier
 
     Returns:
-        Tuple of (progress_data, new_last_step, is_complete)
-        - progress_data: Parsed JSON data or None if no progress
-        - new_last_step: Updated last step value
-        - is_complete: True if task is complete or errored
+        Subscription to pass to wait_for_progress; close it when done
+
+    Raises:
+        Exception: If Redis is unavailable
     """
-    try:
-        progress_bytes = redis_client.get(f"progress:{task_id}")
-        if not progress_bytes:
-            return None, last_step, False
+    subscription = redis_client.pubsub(ignore_subscribe_messages=True)
+    subscription.subscribe(_progress_channel(task_id))
+    return subscription
 
-        progress_data = json.loads(progress_bytes)
-        current_step = progress_data["step"]
 
-        # No new progress
-        if current_step <= last_step:
-            return None, last_step, False
+def wait_for_progress(subscription: PubSub, timeout: float) -> None:
+    """Block until the task signals a progress change or the timeout passes.
 
-        # Check for completion or error
-        is_complete = progress_data["progress"] >= 100 or progress_data["progress"] == -1
-        return progress_data, current_step, is_complete
+    Args:
+        subscription: Subscription from subscribe_progress
+        timeout: Maximum seconds to wait
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error for task {task_id}: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Error processing progress for task {task_id}: {e}")
-        raise
+    Raises:
+        Exception: If Redis is unavailable
+    """
+    subscription.get_message(timeout=timeout)
+
+
+def read_progress(task_id: str) -> bytes | None:
+    """Read a task's stored progress snapshot.
+
+    Args:
+        task_id: Unique task identifier
+
+    Returns:
+        Raw JSON snapshot or None if not stored
+
+    Raises:
+        Exception: If Redis is unavailable
+    """
+    progress: bytes | None = redis_client.get(f"progress:{task_id}")
+    return progress

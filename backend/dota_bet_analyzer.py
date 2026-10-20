@@ -39,9 +39,11 @@ from backend.task_store import (
     get_matches_cached,
     get_rank_cached,
     load_results,
-    process_progress_data,
     progress_exists,
+    read_progress,
     store_results,
+    subscribe_progress,
+    wait_for_progress,
 )
 
 # Setup logger
@@ -419,23 +421,29 @@ def _create_error_message(message: str, timeout: bool = False) -> str:
     return f"{json.dumps(error_msg)}\n"
 
 
-def _check_timeouts(start_time: float, no_update_count: int, max_runtime: int, max_no_update: int) -> str | None:
+# Progress stream limits (seconds). A stream that ends early is reopened by the client.
+STREAM_MAX_RUNTIME = 120
+STREAM_IDLE_TIMEOUT = 30
+# Safety net: re-read the snapshot this often even if a progress signal is missed
+STREAM_RECHECK_INTERVAL = 1.0
+
+
+def _check_timeouts(start_time: float, last_update_time: float) -> str | None:
     """Check for timeout conditions.
 
     Args:
-        start_time: Task start timestamp
-        no_update_count: Number of iterations without progress
-        max_runtime: Maximum runtime in seconds
-        max_no_update: Maximum iterations without update
+        start_time: Stream start time (time.monotonic)
+        last_update_time: Time of the last sent update (time.monotonic)
 
     Returns:
         Error message string if timeout occurred, None otherwise
     """
-    if time.time() - start_time > max_runtime:
-        return _create_error_message(f"Task exceeded maximum runtime ({max_runtime}s)", timeout=True)
+    now = time.monotonic()
+    if now - start_time > STREAM_MAX_RUNTIME:
+        return _create_error_message(f"Task exceeded maximum runtime ({STREAM_MAX_RUNTIME}s)", timeout=True)
 
-    if no_update_count >= max_no_update:
-        return _create_error_message(f"Task timed out - no progress updates for {max_no_update * 0.01}s", timeout=True)
+    if now - last_update_time > STREAM_IDLE_TIMEOUT:
+        return _create_error_message(f"Task timed out - no progress updates for {STREAM_IDLE_TIMEOUT}s", timeout=True)
 
     return None
 
@@ -443,63 +451,48 @@ def _check_timeouts(start_time: float, no_update_count: int, max_runtime: int, m
 def _generate_progress_stream(task_id: str):
     """Generate progress updates stream for a task.
 
-    Reads lightweight progress snapshots from Redis and emits them
-    until the task reaches completion or an error state.
+    Sends the task's progress snapshot from Redis each time it changes, until the task
+    reaches completion or an error state. Between changes it waits for the task's
+    progress signal instead of polling Redis.
 
     Args:
         task_id: Task identifier
 
     Yields:
         JSON-formatted progress updates or error messages
-
-    Safety mechanisms:
-    - Max iterations: 6000 (60 seconds at 0.01s sleep)
-    - Timeout on no updates: 300 iterations (3 seconds)
-    - Max runtime: 120 seconds absolute limit
     """
-    last_step = 0
-    no_update_count = 0
-    max_no_update = 300  # 3 seconds at 0.01s sleep
-    max_iterations = 6000  # 60 seconds at 0.01s sleep
-    max_runtime = 120  # 2 minutes absolute limit
-    start_time = time.time()
+    start_time = time.monotonic()
+    last_update_time = start_time
+    last_sent: bytes | None = None
+    subscription = None
 
-    for _ in range(max_iterations):
-        # Check for timeout conditions
-        timeout_error = _check_timeouts(start_time, no_update_count, max_runtime, max_no_update)
-        if timeout_error:
-            yield timeout_error
-            return
+    try:
+        # Subscribe before the first read, so a change between the two is not missed
+        subscription = subscribe_progress(task_id)
+        while True:
+            snapshot = read_progress(task_id)
+            if snapshot is not None and snapshot != last_sent:
+                progress_data = json.loads(snapshot)
+                yield f"{json.dumps(progress_data)}\n"
+                last_sent = snapshot
+                last_update_time = time.monotonic()
+                if progress_data["progress"] >= 100 or progress_data["progress"] == -1:
+                    return
 
-        try:
-            # Process progress data
-            progress_data, last_step, is_complete = process_progress_data(task_id, last_step)
-
-            # No new progress
-            if progress_data is None:
-                no_update_count += 1
-                time.sleep(0.01)
-                continue
-
-            # Send progress update
-            yield f"{json.dumps(progress_data)}\n"
-            no_update_count = 0
-
-            # Check for completion
-            if is_complete:
+            timeout_error = _check_timeouts(start_time, last_update_time)
+            if timeout_error:
+                yield timeout_error
                 return
 
-            time.sleep(0.01)
+            wait_for_progress(subscription, STREAM_RECHECK_INTERVAL)
 
-        except json.JSONDecodeError as e:
-            yield _create_error_message(f"Invalid progress data: {e}")
-            return
-        except Exception as e:
-            yield _create_error_message(f"Stream error: {e}")
-            return
-
-    # Max iterations reached without completion
-    yield _create_error_message(f"Stream exceeded maximum iterations ({max_iterations})", timeout=True)
+    except json.JSONDecodeError as e:
+        yield _create_error_message(f"Invalid progress data: {e}")
+    except Exception as e:
+        yield _create_error_message(f"Stream error: {e}")
+    finally:
+        if subscription is not None:
+            subscription.close()
 
 
 @bp.route("/stream-progress/<task_id>")
@@ -529,8 +522,10 @@ def _generate_progress_stream(task_id: str):
 def stream_progress(task_id: str) -> tuple[Response, int] | Response:
     """Stream progress updates via Server-Sent Events.
 
-    Returns a continuous stream of progress data for the specified task.
-    Stream continues until task completes or encounters an error.
+    Returns a continuous stream of progress data for the specified task, one JSON object
+    per line, sent as soon as the task's progress changes. The stream ends when the task
+    completes (100) or fails (-1), or with a timeout line after 30s without changes or 120s
+    in total; clients reopen it until the task completes.
 
     Path Parameters:
         - `task_id`: Task identifier returned from `/api/statistics/players`
