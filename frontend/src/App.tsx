@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
+import { type ProgressData, parseProgress } from './progress'
 import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
@@ -8,6 +9,50 @@ const COLOR_POSITIVE = '#6b9d7a'
 const COLOR_NEGATIVE = '#9d6b6b'
 // Roster and match history window, sent to /api/statistics as `days` (same default as the backend)
 const STATS_DAYS = 20
+
+type Summary = Record<string, unknown> | null
+
+// Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
+interface CompareRowConfig {
+  label: ReactNode
+  title?: string
+  summary?: boolean // shown only once the match summary has arrived
+  compare?: (team: TeamData | undefined, summary: Summary) => number | null
+  better?: 'higher' | 'lower'
+  threshold?: number // differences up to this are not coloured
+  color?: (team: TeamData | undefined) => string // per-team colour, for rows that don't compare
+  render: (team: TeamData | undefined, summary: Summary) => ReactNode
+}
+
+const asNumber = (value: unknown): number | null => (typeof value === 'number' ? value : null)
+
+// Colours for team 1 and team 2: the better value is positive, the other negative
+const compareColors = (a: number | null, b: number | null, better: 'higher' | 'lower', threshold = 0): [string, string] => {
+  if (a === null || b === null || Math.abs(a - b) <= threshold) return ['transparent', 'transparent']
+  const firstWins = better === 'higher' ? a > b : a < b
+  return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
+}
+
+const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
+  let colors: string[] | null = null
+  if (row.compare && row.better) {
+    colors = compareColors(row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1]), row.better, row.threshold)
+  } else if (row.color) {
+    colors = teams.map(row.color)
+  }
+  return (
+    <tr>
+      <td className="row-label" title={row.title}>
+        {row.label}
+      </td>
+      {teams.map((team, i) => (
+        <td key={i} style={colors ? { backgroundColor: colors[i] } : undefined}>
+          {row.render(team, summaries[i])}
+        </td>
+      ))}
+    </tr>
+  )
+}
 
 interface Player {
   name: string
@@ -48,14 +93,6 @@ interface TeamData {
 
 interface Statistics {
   teams: TeamData[]
-}
-
-interface ProgressData {
-  step: number
-  message: string
-  progress: number
-  data: unknown
-  timestamp: number
 }
 
 /**
@@ -119,6 +156,20 @@ function App() {
     }
   }, [])
 
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
+
+  // Stop polling and show the error
+  const failPolling = (message: string) => {
+    setError(message)
+    setLoading(false)
+    stopPolling()
+  }
+
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
       setError('Please enter both team names')
@@ -129,11 +180,7 @@ function App() {
     currentSearchIdRef.current += 1
     const thisSearchId = currentSearchIdRef.current
 
-    // Stop any existing polling
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
+    stopPolling()
 
     setLoading(true)
     setError(null)
@@ -208,23 +255,12 @@ function App() {
       try {
         // Skip processing if a new search has started
         if (currentSearchIdRef.current !== searchId) {
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+          stopPolling()
           return
         }
 
-        const elapsedTime = Date.now() - startTime
-
-        // Check if polling timeout exceeded
-        if (elapsedTime > MAX_POLLING_TIME) {
-          setError('Polling timeout: Task took longer than 5 minutes')
-          setLoading(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+        if (Date.now() - startTime > MAX_POLLING_TIME) {
+          failPolling('Polling timeout: Task took longer than 5 minutes')
           return
         }
 
@@ -234,89 +270,30 @@ function App() {
         for (const taskId of taskIds) {
           if (!taskId) continue
 
-          const progressUrl = `/api/stream-progress/${taskId}`
-          const progressResponse = await fetch(progressUrl)
+          const progressResponse = await fetch(`/api/stream-progress/${taskId}`)
           if (!progressResponse.ok) {
-            setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+            failPolling(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
             return
           }
 
-          // Read response text once
           let responseText: string
           try {
             responseText = await progressResponse.text()
           } catch (textError) {
-            setError(`Failed to read response for task ${taskId}: ${textError}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+            failPolling(`Failed to read response for task ${taskId}: ${textError}`)
             return
           }
 
-          // Parse NDJSON format (newline-delimited JSON)
-          let progressData: ProgressData
-          try {
-            // Split by newlines and filter out empty lines
-            const lines = responseText.split('\n').filter(line => line.trim())
-
-            if (lines.length === 0) {
-              setError(`No data found in response for task ${taskId}`)
-              setLoading(false)
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current)
-                pollIntervalRef.current = null
-              }
-              return
-            }
-
-            // Try to parse each line until we find valid JSON
-            // Use the last valid JSON line as the most recent progress
-            let lastValidJson: ProgressData | null = null
-            const allLines: unknown[] = []
-
-            for (const line of lines) {
-              try {
-                const parsedLine = JSON.parse(line)
-                // A stream timeout only means no new step yet (e.g. waiting for the OpenDota rate limit);
-                // keep showing the last real progress message instead
-                const isStreamTimeout = (parsedLine as ProgressData)?.data && ((parsedLine as ProgressData).data as { timeout?: boolean }).timeout
-                if (!isStreamTimeout || !lastValidJson) {
-                  lastValidJson = parsedLine as ProgressData
-                }
-                allLines.push(parsedLine)
-              } catch (e) {
-                // Skip lines that aren't valid JSON
-                continue
-              }
-            }
-
-            if (!lastValidJson) {
-              setError(`No valid JSON found in response for task ${taskId}`)
-              setLoading(false)
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current)
-                pollIntervalRef.current = null
-              }
-              return
-            }
-
-            progressData = lastValidJson
-          } catch (parseError) {
-            setError(`Error parsing response for task ${taskId}: ${parseError}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+          const parsed = parseProgress(responseText)
+          if (!parsed.ok) {
+            failPolling(
+              parsed.reason === 'empty'
+                ? `No data found in response for task ${taskId}`
+                : `No valid JSON found in response for task ${taskId}`
+            )
             return
           }
+          const progressData = parsed.progress
 
           setProgress(progressData)
 
@@ -331,10 +308,7 @@ function App() {
         // If all tasks are complete, fetch detailed results
         if (allCompleted && Object.keys(summaries).length > 0) {
           setLoading(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+          stopPolling()
 
           // Fetch detailed results for each completed task
           try {
@@ -362,12 +336,7 @@ function App() {
         }
       } catch (err) {
         console.error('Error polling progress:', err)
-        setError(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
-        setLoading(false)
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current)
-          pollIntervalRef.current = null
-        }
+        failPolling(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
       }
     }, POLL_INTERVAL)
   }
@@ -377,62 +346,6 @@ function App() {
     if (delta < -15) return COLOR_NEGATIVE
     if (delta > 15) return COLOR_POSITIVE
     return 'transparent'
-  }
-
-  const getRatingBackgroundColors = (
-    rating1: number | null | undefined,
-    rating2: number | null | undefined
-  ): [string, string] => {
-    if (!rating1 || !rating2) {
-      return ['transparent', 'transparent']
-    }
-    const diff = Math.abs(rating1 - rating2)
-    if (diff <= 100) {
-      return ['transparent', 'transparent']
-    }
-
-    if (rating1 > rating2) {
-      return [COLOR_POSITIVE, COLOR_NEGATIVE]
-    } else {
-      return [COLOR_NEGATIVE, COLOR_POSITIVE]
-    }
-  }
-
-  const getSummaryValueColors = (value1: unknown, value2: unknown): [string, string] => {
-    const num1 = typeof value1 === 'number' ? value1 : null
-    const num2 = typeof value2 === 'number' ? value2 : null
-
-    if (num1 === null || num2 === null) {
-      return ['transparent', 'transparent']
-    }
-    if (num1 === num2) {
-      return ['transparent', 'transparent']
-    }
-
-    if (num1 > num2) {
-      return [COLOR_POSITIVE, COLOR_NEGATIVE]
-    } else {
-      return [COLOR_NEGATIVE, COLOR_POSITIVE]
-    }
-  }
-
-  const getInverseSummaryValueColors = (value1: unknown, value2: unknown): [string, string] => {
-    const num1 = typeof value1 === 'number' ? value1 : null
-    const num2 = typeof value2 === 'number' ? value2 : null
-
-    if (num1 === null || num2 === null) {
-      return ['transparent', 'transparent']
-    }
-    if (num1 === num2) {
-      return ['transparent', 'transparent']
-    }
-
-    // Inverse logic: lower values are positive, higher values are negative
-    if (num1 < num2) {
-      return [COLOR_POSITIVE, COLOR_NEGATIVE]
-    } else {
-      return [COLOR_NEGATIVE, COLOR_POSITIVE]
-    }
   }
 
   const formatDate = (unixTime: number | null | undefined): string => {
@@ -578,6 +491,111 @@ function App() {
     return null
   }
 
+  const formatPercent = (value: unknown): string => (typeof value === 'number' ? value.toFixed(1) + '%' : '-')
+  const formatFixed = (value: unknown, digits: number): string => (value ? (value as number).toFixed(digits) : '-')
+
+  const teams = [statistics?.teams?.[0], statistics?.teams?.[1]]
+  const summaries = teams.map((team) => getSummaryForTeam(team?.task_id))
+
+  // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list
+  const compareRows: CompareRowConfig[] = [
+    { label: 'Team Tag', render: (team) => (team?.tag ? team.tag : '-') },
+    { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
+    {
+      label: 'Rating',
+      compare: (team) => team?.rating || null,
+      better: 'higher',
+      threshold: 100,
+      render: (team) => (team?.rating ? team.rating : '-'),
+    },
+    {
+      label: 'Last match rating',
+      color: (team) => getDeltaBackgroundColor(team?.delta),
+      render: (team) => (team?.delta ? team.delta.toFixed(1) : '-'),
+    },
+    { label: 'Roster Changes', compare: getRosterRank, better: 'lower', render: renderRosterState },
+    {
+      label: `Tournaments Record (${teams[0]?.league_form?.days ?? STATS_DAYS}d)`,
+      compare: (team) => asNumber(team?.league_form?.win_percentage),
+      better: 'higher',
+      render: (team) => formatLeagueRecord(team?.league_form),
+    },
+    {
+      label: 'Last Match',
+      title: 'Latest tournament game played by at least 3 of the 5 players',
+      render: (team) => formatDate(team?.roster_last_match_time ?? team?.league_form?.last_match_time),
+    },
+    {
+      label: 'Rating Matches',
+      summary: true,
+      compare: (_, s) => asNumber(s?.rating_matches),
+      better: 'higher',
+      render: (_, s) => String(s?.rating_matches ?? '-'),
+    },
+    {
+      label: (
+        <>
+          Lobby Matches
+          <br />
+          (tournaments + scrims)
+        </>
+      ),
+      summary: true,
+      compare: (_, s) => asNumber(s?.tournament_matches),
+      better: 'higher',
+      render: (_, s) => String(s?.tournament_matches ?? '-'),
+    },
+    {
+      label: 'Pub Win %',
+      summary: true,
+      compare: (_, s) => asNumber(s?.rating_win_percentage),
+      better: 'higher',
+      render: (_, s) => formatPercent(s?.rating_win_percentage),
+    },
+    {
+      label: 'Lobby Win %',
+      summary: true,
+      compare: (_, s) => asNumber(s?.tournament_win_percentage),
+      better: 'higher',
+      render: (_, s) => formatPercent(s?.tournament_win_percentage),
+    },
+    {
+      label: 'Average Player Rank',
+      summary: true,
+      compare: (_, s) => asNumber(s?.avg_rank),
+      better: 'lower',
+      render: (_, s) => formatFixed(s?.avg_rank, 0),
+    },
+    {
+      label: (
+        <>
+          Low Rank Players
+          <br />
+          (тысячники в команде)
+        </>
+      ),
+      summary: true,
+      compare: (_, s) => asNumber(s?.bad_rank_players),
+      better: 'lower',
+      render: (_, s) => String(s?.bad_rank_players ?? '-'),
+    },
+    { label: 'Other Matches', summary: true, render: (_, s) => String(s?.other_matches ?? '-') },
+    {
+      label: 'Average Matches Per Player',
+      summary: true,
+      compare: (_, s) => asNumber(s?.matches_avg),
+      better: 'higher',
+      render: (_, s) => formatFixed(s?.matches_avg, 2),
+    },
+    {
+      label: 'Median Matches Per Player',
+      summary: true,
+      compare: (_, s) => asNumber(s?.matches_median),
+      better: 'higher',
+      render: (_, s) => formatFixed(s?.matches_median, 2),
+    },
+  ]
+
   return (
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem' }}>
@@ -664,159 +682,28 @@ function App() {
                     <th></th>
                     <th>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</span>
-                        {statistics.teams?.[0]?.logo_url && (
-                          <img src={statistics.teams[0].logo_url} alt="Team 1 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                        <span>{teams[0]?.team ? teams[0].team : 'Team #1'}</span>
+                        {teams[0]?.logo_url && (
+                          <img src={teams[0].logo_url} alt="Team 1 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
                         )}
                       </div>
                     </th>
                     <th>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</span>
-                        {statistics.teams?.[1]?.logo_url && (
-                          <img src={statistics.teams[1].logo_url} alt="Team 2 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                        <span>{teams[1]?.team ? teams[1].team : 'Team #2'}</span>
+                        {teams[1]?.logo_url && (
+                          <img src={teams[1].logo_url} alt="Team 2 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
                         )}
                       </div>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td className="row-label">Team Tag</td>
-                    <td>{statistics.teams?.[0]?.tag ? statistics.teams[0].tag : '-'}</td>
-                    <td>{statistics.teams?.[1]?.tag ? statistics.teams[1].tag : '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-label">Team ID</td>
-                    <td>{statistics.teams?.[0]?.team_id ? statistics.teams[0].team_id : '-'}</td>
-                    <td>{statistics.teams?.[1]?.team_id ? statistics.teams[1].team_id : '-'}</td>
-                  </tr>
-                  <tr>
-                    <td className="row-label">Rating</td>
-                    <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[0] }}>
-                      {statistics.teams?.[0]?.rating ? statistics.teams[0].rating : '-'}
-                    </td>
-                    <td style={{ backgroundColor: getRatingBackgroundColors(statistics.teams?.[0]?.rating, statistics.teams?.[1]?.rating)[1] }}>
-                      {statistics.teams?.[1]?.rating ? statistics.teams[1].rating : '-'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="row-label">Last match rating</td>
-                    <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[0]?.delta) }}>
-                      {statistics.teams?.[0]?.delta ? statistics.teams[0].delta.toFixed(1) : '-'}
-                    </td>
-                    <td style={{ backgroundColor: getDeltaBackgroundColor(statistics.teams?.[1]?.delta) }}>
-                      {statistics.teams?.[1]?.delta ? statistics.teams[1].delta.toFixed(1) : '-'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="row-label">Roster Changes</td>
-                    <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[0] }}>
-                      {renderRosterState(statistics.teams?.[0])}
-                    </td>
-                    <td style={{ backgroundColor: getInverseSummaryValueColors(getRosterRank(statistics.teams?.[0]), getRosterRank(statistics.teams?.[1]))[1] }}>
-                      {renderRosterState(statistics.teams?.[1])}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="row-label">Tournaments Record ({statistics.teams?.[0]?.league_form?.days ?? STATS_DAYS}d)</td>
-                    <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[0] }}>
-                      {formatLeagueRecord(statistics.teams?.[0]?.league_form)}
-                    </td>
-                    <td style={{ backgroundColor: getSummaryValueColors(statistics.teams?.[0]?.league_form?.win_percentage, statistics.teams?.[1]?.league_form?.win_percentage)[1] }}>
-                      {formatLeagueRecord(statistics.teams?.[1]?.league_form)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="row-label" title="Latest tournament game played by at least 3 of the 5 players">Last Match</td>
-                    <td>{formatDate(statistics.teams?.[0]?.roster_last_match_time ?? statistics.teams?.[0]?.league_form?.last_match_time)}</td>
-                    <td>{formatDate(statistics.teams?.[1]?.roster_last_match_time ?? statistics.teams?.[1]?.league_form?.last_match_time)}</td>
-                  </tr>
-                  {summaryData && (() => {
-                    const team0Summary = getSummaryForTeam(statistics.teams?.[0]?.task_id)
-                    const team1Summary = getSummaryForTeam(statistics.teams?.[1]?.task_id)
-                    return (
-                      <>
-                        <tr>
-                          <td className="row-label">Rating Matches</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[0] }}>
-                            {String(team0Summary?.rating_matches ?? '-')}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_matches, team1Summary?.rating_matches)[1] }}>
-                            {String(team1Summary?.rating_matches ?? '-')}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Lobby Matches<br />(tournaments + scrims)</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
-                            {String(team0Summary?.tournament_matches ?? '-')}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[1] }}>
-                            {String(team1Summary?.tournament_matches ?? '-')}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Pub Win %</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[0] }}>
-                            {typeof team0Summary?.rating_win_percentage === 'number' ? team0Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.rating_win_percentage, team1Summary?.rating_win_percentage)[1] }}>
-                            {typeof team1Summary?.rating_win_percentage === 'number' ? team1Summary.rating_win_percentage.toFixed(1) + '%' : '-'}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Lobby Win %</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[0] }}>
-                            {typeof team0Summary?.tournament_win_percentage === 'number' ? team0Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_win_percentage, team1Summary?.tournament_win_percentage)[1] }}>
-                            {typeof team1Summary?.tournament_win_percentage === 'number' ? team1Summary.tournament_win_percentage.toFixed(1) + '%' : '-'}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Average Player Rank</td>
-                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[0] }}>
-                            {team0Summary?.avg_rank ? (team0Summary.avg_rank as number).toFixed(0) : '-'}
-                          </td>
-                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.avg_rank, team1Summary?.avg_rank)[1] }}>
-                            {team1Summary?.avg_rank ? (team1Summary.avg_rank as number).toFixed(0) : '-'}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Low Rank Players<br />(тысячники в команде)</td>
-                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[0] }}>
-                            {String(team0Summary?.bad_rank_players ?? '-')}
-                          </td>
-                          <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[1] }}>
-                            {String(team1Summary?.bad_rank_players ?? '-')}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Other Matches</td>
-                          <td>{String(team0Summary?.other_matches ?? '-')}</td>
-                          <td>{String(team1Summary?.other_matches ?? '-')}</td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Average Matches Per Player</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[0] }}>
-                            {team0Summary?.matches_avg ? (team0Summary.matches_avg as number).toFixed(2) : '-'}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_avg, team1Summary?.matches_avg)[1] }}>
-                            {team1Summary?.matches_avg ? (team1Summary.matches_avg as number).toFixed(2) : '-'}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="row-label">Median Matches Per Player</td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[0] }}>
-                            {team0Summary?.matches_median ? (team0Summary.matches_median as number).toFixed(2) : '-'}
-                          </td>
-                          <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.matches_median, team1Summary?.matches_median)[1] }}>
-                            {team1Summary?.matches_median ? (team1Summary.matches_median as number).toFixed(2) : '-'}
-                          </td>
-                        </tr>
-                      </>
-                    )
-                  })()}
+                  {compareRows
+                    .filter((row) => !row.summary || summaryData)
+                    .map((row, i) => (
+                      <CompareRow key={i} row={row} teams={teams} summaries={summaries} />
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -827,16 +714,16 @@ function App() {
                 <thead>
                   <tr>
                     <th></th>
-                    <th>{statistics.teams?.[0]?.team ? statistics.teams[0].team : 'Team #1'}</th>
-                    <th>{statistics.teams?.[1]?.team ? statistics.teams[1].team : 'Team #2'}</th>
+                    <th>{teams[0]?.team ? teams[0].team : 'Team #1'}</th>
+                    <th>{teams[1]?.team ? teams[1].team : 'Team #2'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {insightRows.map((row) => (
                     <tr key={row.label}>
                       <td className="row-label">{row.label}</td>
-                      <td>{row.render(statistics.teams?.[0])}</td>
-                      <td>{row.render(statistics.teams?.[1])}</td>
+                      <td>{row.render(teams[0])}</td>
+                      <td>{row.render(teams[1])}</td>
                     </tr>
                   ))}
                 </tbody>

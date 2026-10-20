@@ -1117,8 +1117,10 @@ describe('App Component', () => {
 
             // Wait for summary data to be polled and the rows to be rendered
             await waitFor(() => {
-                expect(screen.getByText(/Low Rank Players\s*\(тысячники в команде\)/i)).toBeInTheDocument()
+                expect(screen.getByText(/Low Rank Players/i)).toBeInTheDocument()
             }, { timeout: 5000 })
+            // The label is split by a line break, so check the whole cell text
+            expect(screen.getByText(/Low Rank Players/i).closest('td')).toHaveTextContent('Low Rank Players(тысячники в команде)')
         }, 10000)
     })
 
@@ -1170,6 +1172,35 @@ describe('App Component', () => {
             }, { timeout: 5000 })
             expect(screen.queryByText(/Task timed out/)).not.toBeInTheDocument()
         }, 10000)
+
+        it('shows the error and stops polling when the progress request fails', async () => {
+            let progressCalls = 0
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                }
+                if (url.includes('/api/stream-progress/')) {
+                    // Other tests may leave their polling running, so only count this test's task
+                    if (url.endsWith('/task_err')) progressCalls += 1
+                    return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('') })
+                }
+                return Promise.resolve(
+                    createMockResponse({ teams: [{ team: 'Team A', team_id: 1, task_id: 'task_err', players: [], other_players: [] }] })
+                )
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            await waitFor(() => {
+                expect(screen.getByText(/Failed to fetch progress for task task_err: HTTP 500/)).toBeInTheDocument()
+            }, { timeout: 5000 })
+            expect(screen.getByRole('button', { name: /Check Statistics/i })).not.toBeDisabled()
+            await new Promise(resolve => setTimeout(resolve, 3500))
+            expect(progressCalls).toBe(1)
+        }, 15000)
     })
 
     describe('Polling Management', () => {
