@@ -1127,6 +1127,8 @@ describe('App Component', () => {
     describe('Backend Version', () => {
         it('retries the version request while the backend is starting', async () => {
             let versionCalls = 0
+            // The first request fails on purpose, so silence the expected log and check it instead
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
             globalThis.fetch = vi.fn((url: string) => {
                 if (url === '/api/version') {
                     versionCalls += 1
@@ -1140,6 +1142,8 @@ describe('App Component', () => {
             expect(screen.getByText(/Backend: v loading/)).toBeInTheDocument()
             await waitFor(() => expect(screen.getByText(/Backend: v 0\.11\.DEV/)).toBeInTheDocument(), { timeout: 5000 })
             expect(versionCalls).toBe(2)
+            expect(consoleError).toHaveBeenCalledWith('Failed to fetch backend version:', expect.any(Error))
+            consoleError.mockRestore()
         }, 10000)
     })
 
