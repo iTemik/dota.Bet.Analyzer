@@ -166,7 +166,14 @@ class MatchesSummary(BaseModel):
 
 
 # Players ranked worse than this on the leaderboard ruin the games for high rank players
-BAD_RANK_THRESHOLD = 1000
+# Notes about this magic number: The term Tysyachniki means The player is not even top 1000
+# It was introduced when MMR top 1 was ~16k and top 1000 was ~10-11k.
+# Top competitive players hated them.
+# MMR was reworked on July 30, 2026. Multiple players were recalibrated with with much lower MMR
+# I guess current tysyachnik is in ~ top 100-200 of the ladder.
+# and in 1-2 years it will go back to top 1000.
+# on Oct 20 2026 top 1 is ~9600 and top 1000 is ~5600
+BAD_RANK_THRESHOLD = 150
 
 
 class RankTally:
