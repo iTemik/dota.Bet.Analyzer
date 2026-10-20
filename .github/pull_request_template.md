@@ -1,8 +1,12 @@
-<!-- Keep it short. No player names. Backend, Frontend, API and DB are optional, but expected for big changes. -->
+<!-- Keep it short. No player names. API, Backend, Frontend and DB are optional, but expected for big changes. -->
 
 Before: <!-- what a user saw or what was wrong, one or two sentences -->
 
 After: <!-- what a user sees now, one or two sentences -->
+
+**API**
+<!-- Group by endpoint: `METHOD /api/path`, then the JSON path in the response (e.g. `teams[].players[]`).
+     One bullet per field: added / changed / removed `field`: what it holds. -->
 
 **Backend**
 -
@@ -10,11 +14,8 @@ After: <!-- what a user sees now, one or two sentences -->
 **Frontend**
 -
 
-**API**
-- <!-- request/response fields added, removed or changed -->
-
 **DB**
 - <!-- every table, column or migration change; flag anything that is not add-only -->
 
 **Other**
-- <!-- tests, README, scripts to run -->
+- <!-- one bullet per item: tests, README, scripts to run -->

@@ -38,7 +38,7 @@
 - New feature → add to README Core Features
 - DB: minimize new tables/columns; add only fields read by current code, extend later via migration
 - OpenDota: minimize requests; cache frequent/immutable responses (SQLite for finished matches, Redis TTL for volatile data)
-- PR description: follow [.github/pull_request_template.md](.github/pull_request_template.md): short Before/After, then Backend, Frontend, API and DB changes as separate bullet lists (list every DB change, it needs owner approval); no player names
+- PR description: follow [.github/pull_request_template.md](.github/pull_request_template.md): short Before/After, then API (by endpoint and JSON path), Backend, Frontend, DB and Other as separate bullet lists, one item per bullet (list every DB change, it needs owner approval); no player names
 
 ## PowerShell Only
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
