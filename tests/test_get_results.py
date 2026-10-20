@@ -29,8 +29,8 @@ class TestGetResultsEndpoint:
         # Mock Redis returning valid results
         results_data = {
             "results": [
-                {"account_id": 12345, "match_count": 10},
-                {"account_id": 67890, "match_count": 15},
+                {"account_id": 12345, "match_count": 10, "rank": 120},
+                {"account_id": 67890, "match_count": 15, "rank": None},
             ],
             "successful": 2,
             "total": 2,
@@ -45,6 +45,8 @@ class TestGetResultsEndpoint:
         assert data["successful"] == 2
         assert data["total"] == 2
         assert len(data["results"]) == 2
+        assert data["results"][0]["rank"] == 120
+        assert data["results"][1]["rank"] is None
         assert data["summary"]["avg_rank"] == 500
 
     @patch("backend.task_store.redis_client")

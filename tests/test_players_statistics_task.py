@@ -61,7 +61,10 @@ def test_task_progress_messages_and_results():
         ("t1", 2, "Got Player rank 1500 for account 2", 100 * (2 / steps), {"account_id": 2, "player_rank": 1500}),
         ("t1", steps, "Completed: fetched data for 2/2 players", 100, {"successful": 2, "total": 2}),
     ]
-    assert results["results"] == [{"account_id": 1, "match_count": 0}, {"account_id": 2, "match_count": 0}]
+    assert results["results"] == [
+        {"account_id": 1, "match_count": 0, "rank": 100},
+        {"account_id": 2, "match_count": 0, "rank": 1500},
+    ]
     assert results["successful"] == 2
     assert results["total"] == 2
     assert results["summary"]["avg_rank"] == 800.0
@@ -79,6 +82,7 @@ def test_task_account_error_is_reported_and_skipped():
         {"account_id": 1, "error": "boom"},
     )
     assert results["results"][0] == {"account_id": 1, "error": "boom"}
+    assert results["results"][1] == {"account_id": 2, "match_count": 0, "rank": None}
     assert results["successful"] == 1
     assert results["summary"]["avg_rank"] == 0.0
     assert results["summary"]["bad_rank_players"] == 0

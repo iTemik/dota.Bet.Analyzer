@@ -326,6 +326,9 @@ class PlayerResultSchema(Schema):
 
     account_id = fields.Int(required=True, metadata={"description": "Player account ID"})
     match_count = fields.Int(metadata={"description": "Number of matches fetched for this player"})
+    rank = fields.Int(
+        allow_none=True, metadata={"description": "Leaderboard rank, null when the player is not on the leaderboard"}
+    )
     error = fields.Str(metadata={"description": "Error message if player data fetch failed"})
 
 
