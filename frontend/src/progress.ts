@@ -44,6 +44,8 @@ export function parseProgress(text: string): ParsedProgress {
 export class ProgressStreamError extends Error {}
 
 const STREAM_RECONNECT_DELAY = 1000 // ms before reopening a stream that ended before the task finished
+// The backend answers 404 until the worker has stored the task's first progress. Retry that for a while.
+const STREAM_NOT_FOUND_RETRIES = 10
 
 /**
  * Call onLine for each non-empty line of an NDJSON response as soon as it arrives.
@@ -85,6 +87,8 @@ const delay = (ms: number, signal: AbortSignal) =>
  * The stream is reopened when it ends before the task finished (the backend closes idle streams).
  * Stream timeout lines are not passed to onProgress.
  *
+ * A 404 is retried for a few seconds, since the worker may not have started the task yet.
+ *
  * Returns the final line (progress 100). Throws ProgressStreamError when the request fails,
  * the response has no usable lines or the task failed (progress -1), and the abort reason when aborted.
  */
@@ -93,11 +97,18 @@ export async function followProgress(
   signal: AbortSignal,
   onProgress: (progress: ProgressData) => void
 ): Promise<ProgressData> {
+  let notFoundCount = 0
   for (;;) {
     const response = await fetch(`/api/stream-progress/${taskId}`, { signal })
+    if (response.status === 404 && notFoundCount < STREAM_NOT_FOUND_RETRIES) {
+      notFoundCount += 1
+      await delay(STREAM_RECONNECT_DELAY, signal)
+      continue
+    }
     if (!response.ok) {
       throw new ProgressStreamError(`Failed to fetch progress for task ${taskId}: HTTP ${response.status}`)
     }
+    notFoundCount = 0
 
     let lineCount = 0
     let validCount = 0
