@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
+import { type ProgressData, parseProgress } from './progress'
 import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
@@ -94,14 +95,6 @@ interface Statistics {
   teams: TeamData[]
 }
 
-interface ProgressData {
-  step: number
-  message: string
-  progress: number
-  data: unknown
-  timestamp: number
-}
-
 /**
  * Team roster (account lists) is collected indirectly:
  *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
@@ -163,6 +156,20 @@ function App() {
     }
   }, [])
 
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
+
+  // Stop polling and show the error
+  const failPolling = (message: string) => {
+    setError(message)
+    setLoading(false)
+    stopPolling()
+  }
+
   const handleCheck = async () => {
     if (!team1.trim() || !team2.trim()) {
       setError('Please enter both team names')
@@ -173,11 +180,7 @@ function App() {
     currentSearchIdRef.current += 1
     const thisSearchId = currentSearchIdRef.current
 
-    // Stop any existing polling
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
+    stopPolling()
 
     setLoading(true)
     setError(null)
@@ -252,23 +255,12 @@ function App() {
       try {
         // Skip processing if a new search has started
         if (currentSearchIdRef.current !== searchId) {
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+          stopPolling()
           return
         }
 
-        const elapsedTime = Date.now() - startTime
-
-        // Check if polling timeout exceeded
-        if (elapsedTime > MAX_POLLING_TIME) {
-          setError('Polling timeout: Task took longer than 5 minutes')
-          setLoading(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+        if (Date.now() - startTime > MAX_POLLING_TIME) {
+          failPolling('Polling timeout: Task took longer than 5 minutes')
           return
         }
 
@@ -278,89 +270,30 @@ function App() {
         for (const taskId of taskIds) {
           if (!taskId) continue
 
-          const progressUrl = `/api/stream-progress/${taskId}`
-          const progressResponse = await fetch(progressUrl)
+          const progressResponse = await fetch(`/api/stream-progress/${taskId}`)
           if (!progressResponse.ok) {
-            setError(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+            failPolling(`Failed to fetch progress for task ${taskId}: HTTP ${progressResponse.status}`)
             return
           }
 
-          // Read response text once
           let responseText: string
           try {
             responseText = await progressResponse.text()
           } catch (textError) {
-            setError(`Failed to read response for task ${taskId}: ${textError}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+            failPolling(`Failed to read response for task ${taskId}: ${textError}`)
             return
           }
 
-          // Parse NDJSON format (newline-delimited JSON)
-          let progressData: ProgressData
-          try {
-            // Split by newlines and filter out empty lines
-            const lines = responseText.split('\n').filter(line => line.trim())
-
-            if (lines.length === 0) {
-              setError(`No data found in response for task ${taskId}`)
-              setLoading(false)
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current)
-                pollIntervalRef.current = null
-              }
-              return
-            }
-
-            // Try to parse each line until we find valid JSON
-            // Use the last valid JSON line as the most recent progress
-            let lastValidJson: ProgressData | null = null
-            const allLines: unknown[] = []
-
-            for (const line of lines) {
-              try {
-                const parsedLine = JSON.parse(line)
-                // A stream timeout only means no new step yet (e.g. waiting for the OpenDota rate limit);
-                // keep showing the last real progress message instead
-                const isStreamTimeout = (parsedLine as ProgressData)?.data && ((parsedLine as ProgressData).data as { timeout?: boolean }).timeout
-                if (!isStreamTimeout || !lastValidJson) {
-                  lastValidJson = parsedLine as ProgressData
-                }
-                allLines.push(parsedLine)
-              } catch (e) {
-                // Skip lines that aren't valid JSON
-                continue
-              }
-            }
-
-            if (!lastValidJson) {
-              setError(`No valid JSON found in response for task ${taskId}`)
-              setLoading(false)
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current)
-                pollIntervalRef.current = null
-              }
-              return
-            }
-
-            progressData = lastValidJson
-          } catch (parseError) {
-            setError(`Error parsing response for task ${taskId}: ${parseError}`)
-            setLoading(false)
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
+          const parsed = parseProgress(responseText)
+          if (!parsed.ok) {
+            failPolling(
+              parsed.reason === 'empty'
+                ? `No data found in response for task ${taskId}`
+                : `No valid JSON found in response for task ${taskId}`
+            )
             return
           }
+          const progressData = parsed.progress
 
           setProgress(progressData)
 
@@ -375,10 +308,7 @@ function App() {
         // If all tasks are complete, fetch detailed results
         if (allCompleted && Object.keys(summaries).length > 0) {
           setLoading(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
+          stopPolling()
 
           // Fetch detailed results for each completed task
           try {
@@ -406,12 +336,7 @@ function App() {
         }
       } catch (err) {
         console.error('Error polling progress:', err)
-        setError(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
-        setLoading(false)
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current)
-          pollIntervalRef.current = null
-        }
+        failPolling(`Polling error: ${err instanceof Error ? err.message : String(err)}`)
       }
     }, POLL_INTERVAL)
   }
