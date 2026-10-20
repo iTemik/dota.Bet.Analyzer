@@ -321,27 +321,11 @@ class SyncResponseSchema(Schema):
     message = fields.Str(required=True, metadata={"description": "Operation result message"})
 
 
-class MatchStatsSchema(Schema):
-    """Schema for individual match statistics."""
-
-    match_id = fields.Int(required=True, metadata={"description": "Unique match identifier"})
-    player_slot = fields.Int(required=True, metadata={"description": "Player slot number (0-127)"})
-    radiant_win = fields.Bool(required=True, metadata={"description": "True if Radiant won"})
-    game_mode = fields.Int(required=True, metadata={"description": "Game mode ID"})
-    lobby_type = fields.Int(required=True, metadata={"description": "Lobby type ID"})
-    hero_id = fields.Int(required=True, metadata={"description": "Hero ID played"})
-    average_rank = fields.Int(allow_none=True, metadata={"description": "Average rank tier of the match"})
-
-
 class PlayerResultSchema(Schema):
     """Schema for individual player result entry."""
 
     account_id = fields.Int(required=True, metadata={"description": "Player account ID"})
     match_count = fields.Int(metadata={"description": "Number of matches fetched for this player"})
-    matches = fields.List(
-        fields.Nested(MatchStatsSchema),
-        metadata={"description": "List of match statistics for this player"},
-    )
     error = fields.Str(metadata={"description": "Error message if player data fetch failed"})
 
 
@@ -370,7 +354,8 @@ class StatisticsResultSchema(Schema):
     """Complete statistics computation result schema.
 
     This is the final result structure returned by /api/results/<task_id>
-    after the background task completes.
+    after the background task completes. The Team Comparison table reads only `summary`;
+    `results` lists each player's match count or error (no raw matches).
     """
 
     results = fields.List(
