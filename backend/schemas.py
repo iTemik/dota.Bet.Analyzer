@@ -288,15 +288,6 @@ class TaskResponseSchema(Schema):
     status = fields.Str(required=True, metadata={"description": "Task status"})
 
 
-class ProgressUpdateSchema(Schema):
-    """Progress update schema for SSE streaming."""
-
-    step = fields.Int(required=True, metadata={"description": "Current step number"})
-    message = fields.Str(required=True, metadata={"description": "Progress message"})
-    progress = fields.Float(required=True, metadata={"description": "Progress percentage (0-100)"})
-    data = fields.Dict(keys=fields.Str(), values=fields.Raw(), metadata={"description": "Additional progress data"})
-
-
 class TeamSchema(Schema):
     """Team information schema."""
 
@@ -328,28 +319,6 @@ class SyncResponseSchema(Schema):
 
     synced_count = fields.Int(required=True, metadata={"description": "Number of records synced"})
     message = fields.Str(required=True, metadata={"description": "Operation result message"})
-
-
-class StatisticsQuerySchema(Schema):
-    """Query parameters for statistics computation endpoint."""
-
-    team_id = fields.Int(required=True, metadata={"description": "Team ID to analyze"})
-    num_matches = fields.Int(
-        load_default=20,
-        validate=validate.Range(min=1, max=100),
-        metadata={"description": "Number of matches to analyze (default: 20, max: 100)"},
-    )
-
-
-class StatisticsBodySchema(Schema):
-    """Request body for statistics computation endpoint."""
-
-    team_id = fields.Int(required=True, metadata={"description": "Team ID to analyze"})
-    num_matches = fields.Int(
-        load_default=20,
-        validate=validate.Range(min=1, max=100),
-        metadata={"description": "Number of matches to analyze (default: 20, max: 100)"},
-    )
 
 
 class MatchStatsSchema(Schema):
