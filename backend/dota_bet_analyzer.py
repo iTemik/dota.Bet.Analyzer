@@ -142,7 +142,7 @@ def get_matches_cached(account_id: int, days: int, on_wait: WaitCallback | None 
     Args:
         account_id: Player account ID
         days: Number of days of match history
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         List of MatchStats
@@ -164,7 +164,7 @@ def get_rank_cached(account_id: int, on_wait: WaitCallback | None = None) -> int
 
     Args:
         account_id: Player account ID
-        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota rate limit
+        on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
         Leaderboard rank or None
@@ -256,7 +256,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 update_progress(
                     task_id,
                     step,
-                    f"OpenDota rate limit reached, retrying account {account_id} in {delay}s",
+                    f"OpenDota limit reached, retrying account {account_id} in {delay}s",
                     100 * (step / steps),
                     {"account_id": account_id, "retry_in": delay},
                 )
