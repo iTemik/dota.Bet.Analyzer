@@ -150,6 +150,7 @@ Once your environment is set up, these are the commands you'll use most:
 dota.Bet.Analyzer/
 ├── backend/                 # Flask API + Celery tasks
 │   ├── dota_bet_analyzer.py # Main app & routes
+│   ├── task_store.py       # Redis progress, results & player cache
 │   ├── stats.py            # Statistics logic
 │   ├── pro_players.py      # Pro player management
 │   └── db.py               # Database initialization

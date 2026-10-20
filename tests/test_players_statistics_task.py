@@ -4,9 +4,10 @@ from unittest.mock import patch
 
 import pytest
 
-from backend import dota_bet_analyzer
-from backend.dota_bet_analyzer import ProgressReporter, players_statistics_task
+from backend import dota_bet_analyzer, task_store
+from backend.dota_bet_analyzer import players_statistics_task
 from backend.stats import BAD_RANK_THRESHOLD, MatchesSummary, RankTally
+from backend.task_store import ProgressReporter
 
 
 def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[int] | None = None):
@@ -23,7 +24,7 @@ def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[in
         return ranks.get(account_id)
 
     with (
-        patch.object(dota_bet_analyzer, "update_progress") as progress,
+        patch.object(task_store, "update_progress") as progress,
         patch.object(dota_bet_analyzer, "store_results") as store,
         patch.object(dota_bet_analyzer, "get_matches_cached", side_effect=fake_matches),
         patch.object(dota_bet_analyzer, "get_rank_cached", side_effect=fake_rank),
@@ -36,7 +37,7 @@ def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[in
 
 def test_task_progress_messages_and_results():
     """Steps, percentages, messages and data match the original hand-written progress calls."""
-    calls, results = _run_task([1, 2], {1: 500, 2: 1500}, failing=set())
+    calls, results = _run_task([1, 2], {1: 100, 2: 1500}, failing=set())
     steps = 6
     assert calls == [
         ("t1", 0, "Initializing match history fetch for 2 players", 0.0, None),
@@ -48,7 +49,7 @@ def test_task_progress_messages_and_results():
             {"account_id": 1, "retry_in": 5},
         ),
         ("t1", 1, "Fetched 0 matches for account 1", 100 * (1 / steps), {"account_id": 1, "match_count": 0}),
-        ("t1", 1, "Got Player rank 500 for account 1", 100 * (1 / steps), {"account_id": 1, "player_rank": 500}),
+        ("t1", 1, "Got Player rank 100 for account 1", 100 * (1 / steps), {"account_id": 1, "player_rank": 100}),
         (
             "t1",
             2,
@@ -62,7 +63,7 @@ def test_task_progress_messages_and_results():
     ]
     assert results["successful"] == 2
     assert results["total"] == 2
-    assert results["summary"]["avg_rank"] == 1000.0
+    assert results["summary"]["avg_rank"] == 800.0
     assert results["summary"]["bad_rank_players"] == 1
 
 
@@ -85,7 +86,7 @@ def test_task_account_error_is_reported_and_skipped():
 def test_task_error_reports_failure():
     """An unexpected error marks the task failed with progress -1 and re-raises."""
     with (
-        patch.object(dota_bet_analyzer, "update_progress") as progress,
+        patch.object(task_store, "update_progress") as progress,
         patch.object(dota_bet_analyzer, "get_team_matches_summary", side_effect=ValueError("bad")),
         pytest.raises(ValueError),
     ):
@@ -95,7 +96,7 @@ def test_task_error_reports_failure():
 
 def test_progress_reporter_counts_steps():
     """next() advances the step; waiting() and fail() keep it; done() reports the last step."""
-    with patch.object(dota_bet_analyzer, "update_progress") as progress:
+    with patch.object(task_store, "update_progress") as progress:
         reporter = ProgressReporter("t1", 4)
         reporter.start("start")
         reporter.next()

@@ -67,7 +67,7 @@ class TestStreamProgressEndpoint:
 
     def test_stream_progress_returns_200_status(self, client):
         """Test that /stream-progress returns 200 status code."""
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             # Mock Redis to return completed progress immediately
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
             rv = client.get("/api/stream-progress/test-task-123")
@@ -75,7 +75,7 @@ class TestStreamProgressEndpoint:
 
     def test_stream_progress_returns_event_stream(self, client):
         """Test that /stream-progress returns correct Content-Type."""
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             # Return completed task immediately to avoid streaming
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
             rv = client.get("/api/stream-progress/test-task-123")
@@ -84,7 +84,7 @@ class TestStreamProgressEndpoint:
 
     def test_stream_progress_includes_cors_headers(self, client):
         """Test that /stream-progress includes CORS headers."""
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             # Return completed task immediately
             mock_redis.get.side_effect = [json.dumps({"step": 1, "message": "test", "progress": 100}).encode()]
             rv = client.get("/api/stream-progress/test-task-123")
@@ -98,14 +98,14 @@ class TestResultsEndpoint:
     def test_results_returns_200_when_found(self, client):
         """Test that /results returns 200 when results are found."""
         test_data = {"results": [{"account_id": 123, "matches": []}], "successful": 1, "total": 1}
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             mock_redis.get.return_value = json.dumps(test_data).encode()
             rv = client.get("/api/results/test-task-123")
             assert rv.status_code == 200
 
     def test_results_returns_404_when_not_found(self, client):
         """Test that /results returns 404 when results not found."""
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             mock_redis.get.return_value = None
             rv = client.get("/api/results/nonexistent-task")
             assert rv.status_code == 404
@@ -113,7 +113,7 @@ class TestResultsEndpoint:
     def test_results_returns_json_response(self, client):
         """Test that /results returns valid JSON response."""
         test_data = {"results": [], "successful": 0, "total": 1}
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             mock_redis.get.return_value = json.dumps(test_data).encode()
             rv = client.get("/api/results/test-task-456")
             assert rv.status_code == 200
@@ -123,7 +123,7 @@ class TestResultsEndpoint:
 
     def test_results_404_response_contains_error(self, client):
         """Test that 404 response contains error message."""
-        with patch("backend.dota_bet_analyzer.redis_client") as mock_redis:
+        with patch("backend.task_store.redis_client") as mock_redis:
             mock_redis.get.return_value = None
             rv = client.get("/api/results/nonexistent")
             assert rv.status_code == 404
