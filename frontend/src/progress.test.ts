@@ -112,6 +112,35 @@ describe('followProgress', () => {
     expect(seen).toEqual([step1, step1, done])
   })
 
+  it('retries a 404 while the task has not started yet, then follows its progress', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(Promise.resolve(new Response('', { status: 404 })))
+      .mockReturnValueOnce(Promise.resolve(new Response('', { status: 404 })))
+      .mockReturnValueOnce(streamResponse(`${line(step1)}\n${line(done)}\n`))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const following = followProgress('task_1', new AbortController().signal, () => {})
+    await vi.advanceTimersByTimeAsync(2000)
+
+    await expect(following).resolves.toEqual(done)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('fails with the HTTP error when a 404 persists', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('', { status: 404 })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const following = expect(followProgress('task_1', new AbortController().signal, () => {})).rejects.toThrow(
+      'Failed to fetch progress for task task_1: HTTP 404'
+    )
+    await vi.advanceTimersByTimeAsync(20000)
+    await following
+    expect(fetchMock).toHaveBeenCalledTimes(11)
+  })
+
   it('fails with the task error message when the task fails', async () => {
     const failed = { step: -1, message: 'Task error: boom', progress: -1, data: { error: true } }
     vi.stubGlobal('fetch', vi.fn(() => streamResponse(`${line(step1)}\n${line(failed)}\n`)))
