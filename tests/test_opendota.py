@@ -62,3 +62,18 @@ def test_get_json_errors():
         with pytest.raises(OpenDotaError) as exc_info:
             get_json("/proPlayers")
     assert (exc_info.value.status, exc_info.value.code) == (502, "JSON_DECODE_ERROR")
+
+
+def test_forbidden_is_repeated_like_rate_limit():
+    side_effect = [_response(None, status=403), _response(None, status=429), _response([2])]
+    with patch("backend.opendota.requests.get", side_effect=side_effect) as mock_get:
+        assert get_json("/teams/1") == [2]
+    assert mock_get.call_count == 3
+
+
+def test_forbidden_after_last_repeat_is_an_http_error():
+    with patch("backend.opendota.requests.get", return_value=_response(None, status=403)) as mock_get:
+        with pytest.raises(OpenDotaError) as exc_info:
+            get_json("/teams/1")
+    assert (exc_info.value.status, exc_info.value.code) == (403, "HTTP_ERROR")
+    assert mock_get.call_count == RATE_LIMIT_RETRIES + 1

@@ -1,9 +1,9 @@
 """OpenDota HTTP access shared by every OpenDota request in the app.
 
-OpenDota limits requests in two ways: HTTP 429 when the per-minute limit is used up (the free tier allows
-about 60 requests per minute), and requests that time out or get the connection dropped when requests come
-too often in a short time window. In both cases the request is postponed and repeated a few times instead of
-failing right away.
+OpenDota limits requests in several ways: HTTP 429 when the per-minute limit is used up (the free tier allows
+about 60 requests per minute), HTTP 403 when requests are blocked for a while, and requests that time out or get
+the connection dropped when requests come too often in a short time window. In all these cases the request is
+postponed and repeated a few times instead of failing right away.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from backend.logging_config import setup_logging
 logger = setup_logging(__name__)
 
 OPENDOTA_API = "https://api.opendota.com/api"
-RATE_LIMIT_STATUS = 429
+RATE_LIMIT_STATUSES = (403, 429)  # Answers that mean the limit was reached
 RATE_LIMIT_RETRIES = 3  # Repeats after the first rate-limited answer or timeout
 RATE_LIMIT_WAITS = (10, 20, 40)  # Seconds to wait before each repeat when the API gives no Retry-After
 RATE_LIMIT_MAX_WAIT = 60  # Never wait longer than this for one repeat
@@ -66,7 +66,7 @@ def opendota_get(
     timeout: float = 30,
     on_wait: Optional[WaitCallback] = None,
 ) -> requests.Response:
-    """GET an OpenDota URL, postponing and repeating the request on HTTP 429, timeouts and dropped connections.
+    """GET an OpenDota URL, postponing and repeating the request on HTTP 403/429, timeouts and dropped connections.
 
     Args:
         url: URL or API path (e.g. "/teams/123")
@@ -75,7 +75,7 @@ def opendota_get(
         on_wait: Called with the delay in seconds before each repeat (e.g. to report progress)
 
     Returns:
-        The last response (still HTTP 429 when every repeat was rate-limited)
+        The last response (still HTTP 403/429 when every repeat was rate-limited)
 
     Raises:
         requests.RequestException: On network errors, or a timeout after the last repeat
@@ -94,9 +94,9 @@ def opendota_get(
                 raise
             reason = f"no answer ({type(exc).__name__})"
         else:
-            if resp.status_code != RATE_LIMIT_STATUS or attempt >= RATE_LIMIT_RETRIES:
+            if resp.status_code not in RATE_LIMIT_STATUSES or attempt >= RATE_LIMIT_RETRIES:
                 return resp
-            reason = "rate limit reached"
+            reason = f"limit reached (HTTP {resp.status_code})"
         delay = _retry_delay(resp, attempt)
         attempt += 1
         logger.warning(f"OpenDota {reason} for {url}, retry {attempt}/{RATE_LIMIT_RETRIES} in {delay}s")
