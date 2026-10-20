@@ -108,7 +108,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
         logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
         progress.start(f"Initializing match history fetch for {len(accounts)} players")
 
-        results = []
+        results: list[dict[str, int | str]] = []  # Per player: match_count, or the fetch error
         matches_stats = []  # List of lists: each inner list is matches for one player
         ranks = RankTally()
         for account_id in accounts:
