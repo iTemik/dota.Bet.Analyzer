@@ -25,7 +25,14 @@ RATE_LIMIT_WAITS = (10, 20, 40)  # Seconds to wait before each repeat when the A
 RATE_LIMIT_MAX_WAIT = 60  # Never wait longer than this for one repeat
 RETRY_ERRORS = (requests.Timeout, requests.ConnectionError)  # Short-window protection: no answer instead of 429
 
+RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
+
 WaitCallback = Callable[[int], None]
+
+
+def is_radiant(player_slot: int) -> bool:
+    """Whether an OpenDota player_slot is on the Radiant side."""
+    return player_slot < RADIANT_SLOT_LIMIT
 
 
 class OpenDotaError(Exception):

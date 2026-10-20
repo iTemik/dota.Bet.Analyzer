@@ -19,7 +19,7 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 from backend.logging_config import setup_logging
-from backend.opendota import OPENDOTA_API, OpenDotaError, get_json
+from backend.opendota import OPENDOTA_API, OpenDotaError, get_json, is_radiant
 from backend.pro_players import Player, get_d2ba_db
 
 logger = setup_logging(__name__)
@@ -36,8 +36,12 @@ ROSTER_STABLE = "stable"  # Only the core played
 ROSTER_STANDINS = "standins"  # A clear core, plus stand-ins in some games
 ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
 DAY_SECONDS = 24 * 60 * 60
-RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 REQUEST_TIMEOUT = 30
+
+
+def window_start(days: int, now: int) -> int:
+    """Unix time `days` days before `now`: the start of an activity window."""
+    return now - days * DAY_SECONDS
 
 
 class TeamMatch(BaseModel):
@@ -58,6 +62,34 @@ class TeamMatch(BaseModel):
     radiant: bool
     radiant_win: Optional[bool] = None
     opposing_team_id: Optional[int] = None
+
+    @classmethod
+    def from_api(cls, row: dict[str, Any]) -> TeamMatch:
+        """Create from a /teams/{id}/matches row.
+
+        Raises:
+            KeyError, TypeError, ValueError: If the row is malformed
+        """
+        return cls(
+            match_id=int(row["match_id"]),
+            start_time=int(row["start_time"]),
+            leagueid=row.get("leagueid"),
+            radiant=bool(row["radiant"]),
+            radiant_win=row.get("radiant_win"),
+            opposing_team_id=row.get("opposing_team_id"),
+        )
+
+    @classmethod
+    def from_db(cls, row: sqlite3.Row) -> TeamMatch:
+        """Create from a cached team_matches row."""
+        return cls(
+            match_id=row["match_id"],
+            start_time=row["start_time"],
+            leagueid=row["leagueid"],
+            radiant=bool(row["radiant"]),
+            radiant_win=None if row["radiant_win"] is None else bool(row["radiant_win"]),
+            opposing_team_id=row["opposing_team_id"],
+        )
 
     @property
     def won(self) -> Optional[bool]:
@@ -139,14 +171,7 @@ def _get_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
 def _parse_team_match(row: dict[str, Any]) -> Optional[TeamMatch]:
     """Convert a /teams/{id}/matches row into a TeamMatch (None if malformed)."""
     try:
-        return TeamMatch(
-            match_id=int(row["match_id"]),
-            start_time=int(row["start_time"]),
-            leagueid=row.get("leagueid"),
-            radiant=bool(row["radiant"]),
-            radiant_win=row.get("radiant_win"),
-            opposing_team_id=row.get("opposing_team_id"),
-        )
+        return TeamMatch.from_api(row)
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -163,17 +188,7 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
             "FROM team_matches WHERE team_id = ? ORDER BY start_time DESC",
             (team_id,),
         ).fetchall()
-        return [
-            TeamMatch(
-                match_id=row["match_id"],
-                start_time=row["start_time"],
-                leagueid=row["leagueid"],
-                radiant=bool(row["radiant"]),
-                radiant_win=None if row["radiant_win"] is None else bool(row["radiant_win"]),
-                opposing_team_id=row["opposing_team_id"],
-            )
-            for row in rows
-        ]
+        return [TeamMatch.from_db(row) for row in rows]
     except sqlite3.Error as exc:
         logger.warning(f"Team matches cache unavailable (run scripts/init_d2ba_db.py): {exc}")
         return None
@@ -228,7 +243,7 @@ def get_team_league_matches(team_id: int, now: Optional[int] = None) -> list[Tea
     if not isinstance(payload, list):
         return []
 
-    min_time = now - TEAM_MATCHES_KEEP_DAYS * 24 * 60 * 60
+    min_time = window_start(TEAM_MATCHES_KEEP_DAYS, now)
     matches = [m for m in (_parse_team_match(row) for row in payload if isinstance(row, dict)) if m]
     matches = [m for m in matches if m.start_time >= min_time and m.leagueid]
     matches.sort(key=lambda m: m.start_time, reverse=True)
@@ -347,7 +362,7 @@ def get_match_lineup(match_id: int) -> list[tuple[int, int]]:
 
 def _team_side_accounts(lineup: list[tuple[int, int]], radiant: bool) -> list[int]:
     """Return account ids of the players on the given side, ordered by slot."""
-    return [account_id for slot, account_id in sorted(lineup) if (slot < RADIANT_SLOT_LIMIT) == radiant and account_id]
+    return [account_id for slot, account_id in sorted(lineup) if is_radiant(slot) == radiant and account_id]
 
 
 def _player_names(account_ids: list[int]) -> dict[int, str]:
@@ -390,7 +405,7 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
         LeagueForm with match, win and loss counts
     """
     now = now if now is not None else int(time.time())
-    min_time = now - days * 24 * 60 * 60
+    min_time = window_start(days, now)
     recent = [m for m in matches if m.start_time >= min_time and m.won is not None]
     wins = sum(1 for m in recent if m.won)
     return LeagueForm(
@@ -470,7 +485,7 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     matches = get_team_league_matches(team_id, now=now)
     roster = TeamRoster(league_form=compute_league_form(matches, days, now=now))
 
-    recent = [m for m in matches if m.start_time >= now - days * DAY_SECONDS][:ROSTER_MAX_GAMES]
+    recent = [m for m in matches if m.start_time >= window_start(days, now)][:ROSTER_MAX_GAMES]
     lineups = get_match_lineups(m.match_id for m in recent) if recent else {}
     window = _team_lineups(recent, lineups)
     if not window:

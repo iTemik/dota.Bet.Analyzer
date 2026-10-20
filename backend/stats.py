@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import statistics
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
 from pydantic import BaseModel, Field
 
 from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
-from backend.opendota import OPENDOTA_API, OpenDotaError, WaitCallback, get_json
+from backend.opendota import (
+    OPENDOTA_API,
+    OpenDotaError,
+    WaitCallback,
+    get_json,
+    is_radiant,
+)
 from backend.pro_players import Player, get_players_by_team
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
@@ -69,6 +75,23 @@ class TeamStats(BaseModel):
     task_id: Optional[str] = None
     error: Optional[ApiError] = None
 
+    def apply_roster(self, roster: TeamRoster, listed_players: List[Player]) -> None:
+        """Take the players and roster details from a roster resolved from recent league matches.
+
+        Args:
+            roster: Roster with at least one player
+            listed_players: Team members from pro_players who did not play in the window (kept last)
+        """
+        self.players = roster.players
+        self.other_players = [*roster.other_players, *listed_players]
+        self.roster_source = "recent_matches"
+        self.roster_games = roster.games_checked
+        self.standins_count = roster.standins_count
+        self.roster_last_match_time = roster.last_match_time
+        self.latest_match_time = roster.latest_match_time
+        self.latest_match_standins = roster.latest_match_standins
+        self.roster_state = roster.roster_state
+
 
 class MatchStats(BaseModel):
     """Statistics for a single Dota 2 match.
@@ -90,6 +113,20 @@ class MatchStats(BaseModel):
     lobby_type: int
     hero_id: int
     average_rank: Optional[int] = None
+
+    @classmethod
+    def from_api(cls, row: dict[str, Any]) -> MatchStats:
+        """Create from a /players/{id}/matches row.
+
+        Raises:
+            pydantic.ValidationError: If the row is malformed
+        """
+        return cls.model_validate(row)
+
+    @property
+    def won(self) -> bool:
+        """Whether the player's side won the match."""
+        return is_radiant(self.player_slot) == self.radiant_win
 
 
 class StatsResponse(BaseModel):
@@ -181,9 +218,9 @@ def _fetch_team_from_explorer_api(
         TeamStats instance with all fetched data and empty players lists (or error if fetch failed)
     """
     from backend.helpers import (
+        ExplorerTeam,
         build_explorer_query,
         get_percent_encoded_str,
-        get_team_id_from_explore_response,
     )
 
     # Validate input parameters
@@ -218,7 +255,7 @@ def _fetch_team_from_explorer_api(
     assert payload is not None
 
     try:
-        team_id_result, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
+        found = ExplorerTeam.from_response(payload)
     except ValueError as exc:
         return _team_error(
             team_str,
@@ -232,27 +269,15 @@ def _fetch_team_from_explorer_api(
         )
 
     # Fetch team logo URL
-    team_info, error = _fetch_team_info(team_id_result)
-    if error:
-        return TeamStats(
-            team_id=team_id_result,
-            team=team_name,
-            tag=tag,
-            rating=rating,
-            delta=delta,
-            error=error,
-        )
-
-    logo_url = team_info.get("logo_url") if team_info else None
-
-    return TeamStats(
-        team_id=team_id_result,
-        team=team_name,
-        tag=tag,
-        rating=rating,
-        delta=delta,
-        logo_url=logo_url,
+    team_info, error = _fetch_team_info(found.team_id)
+    team_stats = TeamStats(
+        team_id=found.team_id, team=found.name, tag=found.tag, rating=found.rating, delta=found.delta
     )
+    if error:
+        team_stats.error = error
+    else:
+        team_stats.logo_url = team_info.get("logo_url") if team_info else None
+    return team_stats
 
 
 def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
@@ -322,15 +347,7 @@ def _create_team_stats(
         # Main roster from recent league matches; team members from pro_players who did not play are kept last
         played = {p.id for p in [*roster.players, *roster.other_players]}
         listed = [p.model_copy(update={"games": 0}) for p in [*pro_players, *other_players] if p.id not in played]
-        team_stats.players = roster.players
-        team_stats.other_players = [*roster.other_players, *listed]
-        team_stats.roster_source = "recent_matches"
-        team_stats.roster_games = roster.games_checked
-        team_stats.standins_count = roster.standins_count
-        team_stats.roster_last_match_time = roster.last_match_time
-        team_stats.latest_match_time = roster.latest_match_time
-        team_stats.latest_match_standins = roster.latest_match_standins
-        team_stats.roster_state = roster.roster_state
+        team_stats.apply_roster(roster, listed)
     else:
         team_stats.players = pro_players
         team_stats.other_players = other_players
@@ -481,16 +498,7 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     matches = []
     for match_data in data:
         try:
-            match = MatchStats(
-                match_id=match_data.get("match_id"),
-                player_slot=match_data.get("player_slot"),
-                radiant_win=match_data.get("radiant_win"),
-                game_mode=match_data.get("game_mode"),
-                lobby_type=match_data.get("lobby_type"),
-                hero_id=match_data.get("hero_id"),
-                average_rank=match_data.get("average_rank"),
-            )
-            matches.append(match)
+            matches.append(MatchStats.from_api(match_data))
         except Exception:
             # Skip malformed match entries
             continue
@@ -564,9 +572,7 @@ def get_team_matches_summary(matches_by_player: list[list[MatchStats]]) -> Match
 
         for match in player_matches:
             total_matches += 1
-            won = (match.player_slot < 128 and match.radiant_win) or (
-                match.player_slot >= 128 and not match.radiant_win
-            )
+            won = match.won
             if won:
                 wins += 1
 
