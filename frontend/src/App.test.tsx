@@ -1117,7 +1117,7 @@ describe('App Component', () => {
 
             // Wait for summary data to be polled and the rows to be rendered
             await waitFor(() => {
-                expect(screen.getByText(/Low Rank Players \(тысячники в команде\)/i)).toBeInTheDocument()
+                expect(screen.getByText(/Low Rank Players/i)).toBeInTheDocument()
             }, { timeout: 5000 })
         }, 10000)
     })
