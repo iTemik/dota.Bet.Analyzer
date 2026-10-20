@@ -36,7 +36,7 @@ def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[in
 
 def test_task_progress_messages_and_results():
     """Steps, percentages, messages and data match the original hand-written progress calls."""
-    calls, results = _run_task([1, 2], {1: 500, 2: 1500}, failing=set())
+    calls, results = _run_task([1, 2], {1: 100, 2: 1500}, failing=set())
     steps = 6
     assert calls == [
         ("t1", 0, "Initializing match history fetch for 2 players", 0.0, None),
@@ -48,7 +48,7 @@ def test_task_progress_messages_and_results():
             {"account_id": 1, "retry_in": 5},
         ),
         ("t1", 1, "Fetched 0 matches for account 1", 100 * (1 / steps), {"account_id": 1, "match_count": 0}),
-        ("t1", 1, "Got Player rank 500 for account 1", 100 * (1 / steps), {"account_id": 1, "player_rank": 500}),
+        ("t1", 1, "Got Player rank 100 for account 1", 100 * (1 / steps), {"account_id": 1, "player_rank": 100}),
         (
             "t1",
             2,
@@ -62,7 +62,7 @@ def test_task_progress_messages_and_results():
     ]
     assert results["successful"] == 2
     assert results["total"] == 2
-    assert results["summary"]["avg_rank"] == 1000.0
+    assert results["summary"]["avg_rank"] == 800.0
     assert results["summary"]["bad_rank_players"] == 1
 
 
