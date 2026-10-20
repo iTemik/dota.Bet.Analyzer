@@ -216,48 +216,60 @@ def get_percent_encoded_str(s: str) -> str:
     return parse.quote(s, safe="")
 
 
-def get_team_id_from_explore_response(
-    response_json: dict[str, Any],
-) -> tuple[int, str, str, float | None, float | None]:
-    """Extract team info from OpenDota explorer response JSON.
+class ExplorerTeam(BaseModel):
+    """Team found by the OpenDota explorer query from build_explorer_query.
 
-    Example response JSON:
-    {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a", "rating": 2500.5, "delta": 25.3}],
-        "fields": [ { "name": "team_id",..., "format": "text"} ], }
-
-    Returns:
-        Tuple of (team_id, name, tag, rating, delta)
+    Attributes:
+        team_id: Team identifier
+        name: Team name
+        tag: Team tag
+        rating: Team rating (None if unknown)
+        delta: Latest rating change (None if unknown)
     """
-    response_preview = str(response_json)[:300]
 
-    if "command" not in response_json or response_json["command"] != "SELECT":
-        raise ValueError(f"Unexpected command in response. Response preview: {response_preview}")
+    team_id: int
+    name: str
+    tag: str
+    rating: Optional[float] = None
+    delta: Optional[float] = None
 
-    if "rows" not in response_json or not response_json["rows"]:
-        raise ValueError(f"No rows in response. Response preview: {response_preview}")
-    if len(response_json["rows"]) != 1:
-        raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
-    row = response_json["rows"][0]
+    @classmethod
+    def from_response(cls, response_json: dict[str, Any]) -> "ExplorerTeam":
+        """Create from an OpenDota explorer response JSON.
 
-    if (
-        "team_id" not in row
-        or not isinstance(row["team_id"], int)
-        or "name" not in row
-        or not isinstance(row["name"], str)
-        or "tag" not in row
-        or not isinstance(row["tag"], str)
-    ):
-        raise ValueError(
-            f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
+        Example response JSON:
+        {"command": "SELECT",...,"rows": [ {"team_id": 1, "name": "aa", "tag": "a", "rating": 2500.5, "delta": 25.3}],
+            "fields": [ { "name": "team_id",..., "format": "text"} ], }
+
+        Raises:
+            ValueError: If the response is not a single valid team row
+        """
+        response_preview = str(response_json)[:300]
+
+        if "command" not in response_json or response_json["command"] != "SELECT":
+            raise ValueError(f"Unexpected command in response. Response preview: {response_preview}")
+
+        if "rows" not in response_json or not response_json["rows"]:
+            raise ValueError(f"No rows in response. Response preview: {response_preview}")
+        if len(response_json["rows"]) != 1:
+            raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
+        row = response_json["rows"][0]
+
+        if (
+            not isinstance(row.get("team_id"), int)
+            or not isinstance(row.get("name"), str)
+            or not isinstance(row.get("tag"), str)
+        ):
+            raise ValueError(
+                f"team_id, name, or tag cannot be found in the row {row}. Response preview: {response_preview}"
+            )
+
+        # Rating and delta that are not numbers are treated as unknown
+        rating, delta = row.get("rating"), row.get("delta")
+        return cls(
+            team_id=row["team_id"],
+            name=row["name"],
+            tag=row["tag"],
+            rating=rating if isinstance(rating, (int, float)) else None,
+            delta=delta if isinstance(delta, (int, float)) else None,
         )
-
-    rating = row.get("rating")
-    delta = row.get("delta")
-
-    # Ensure rating and delta are floats or None
-    if rating is not None and not isinstance(rating, (int, float)):
-        rating = None
-    if delta is not None and not isinstance(delta, (int, float)):
-        delta = None
-
-    return row["team_id"], row["name"], row["tag"], rating, delta
