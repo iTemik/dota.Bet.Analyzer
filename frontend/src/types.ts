@@ -63,7 +63,8 @@ export interface MatchesSummary {
 }
 
 // GET /api/results/{task_id}. If that request fails, the app keeps the final progress data instead,
-// which has only `successful` and `total`, so `summary` is optional here
+// which has only `successful` and `total`, so `summary` is optional here.
+// The comparison table reads only `summary`; `results` (raw matches per player) is shown in the raw JSON block
 export interface StatisticsResult {
   results?: unknown[]
   successful?: number

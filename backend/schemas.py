@@ -370,7 +370,8 @@ class StatisticsResultSchema(Schema):
     """Complete statistics computation result schema.
 
     This is the final result structure returned by /api/results/<task_id>
-    after the background task completes.
+    after the background task completes. The Team Comparison table reads only `summary`;
+    `results`, `successful` and `total` are shown in the frontend's raw JSON block.
     """
 
     results = fields.List(

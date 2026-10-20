@@ -92,6 +92,13 @@ def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response
 def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
     """Celery task to fetch match statistics for multiple players.
 
+    Saves one payload under `results:{task_id}` (read by GET /api/results/{task_id}, StatisticsResultSchema):
+    - `summary`: team totals from get_team_matches_summary plus rank values; the only part the
+      Team Comparison table reads (frontend getSummaryForTeam and the rows marked `summary: true`)
+    - `results`: one entry per account with its raw matches or its error; the frontend shows it only
+      in the raw "Match Statistics Summary" JSON block
+    - `successful` / `total`: how many accounts were fetched; also sent in the final progress message
+
     Args:
         task_id: Unique task identifier for progress tracking
         accounts: List of account IDs to fetch statistics for
@@ -119,7 +126,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                 # Convert MatchStats objects to dicts for JSON serialization
                 stats_data = [stat.model_dump() for stat in player_matches]
 
-                # TODO: rework, why do we need these results?
+                # Raw per-player matches for the results payload; the comparison table uses `summary` only
                 results.append(
                     {
                         "account_id": account_id,
@@ -143,7 +150,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
 
             except Exception as e:
                 # Handle per-account errors gracefully
-                # TODO: rework, why do we need these results?
+                # The player is left out of `summary`; the error stays visible in the results payload
                 results.append({"account_id": account_id, "error": str(e)})
                 progress.report(
                     f"Error fetching data for account {account_id}: {e!s}",
