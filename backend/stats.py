@@ -165,6 +165,37 @@ class MatchesSummary(BaseModel):
     bad_rank_players: Optional[int] = None
 
 
+# Players ranked worse than this on the leaderboard ruin the games for high rank players
+BAD_RANK_THRESHOLD = 1000
+
+
+class RankTally:
+    """Running average of known player ranks and count of players above BAD_RANK_THRESHOLD."""
+
+    def __init__(self) -> None:
+        self.total: int = 0
+        self.count: int = 0
+        self.bad_rank_players: int = 0
+
+    def add(self, rank: Optional[int]) -> None:
+        """Count a player's rank; unknown ranks (None) are skipped.
+
+        Args:
+            rank: Leaderboard rank or None
+        """
+        if rank is None:
+            return
+        self.total += rank
+        self.count += 1
+        if rank > BAD_RANK_THRESHOLD:
+            self.bad_rank_players += 1
+
+    @property
+    def average(self) -> float:
+        """Average of the known ranks, 0.0 when there are none."""
+        return self.total / self.count if self.count else 0.0
+
+
 class StatisticsError(Exception):
     """Raised when fetching or parsing statistics for a team fails."""
 

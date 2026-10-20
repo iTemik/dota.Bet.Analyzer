@@ -31,7 +31,9 @@ from backend.schemas import (
     VersionSchema,
 )
 from backend.stats import (
+    BAD_RANK_THRESHOLD,
     MatchStats,
+    RankTally,
     compute_statistics,
     get_matches,
     get_rank,
@@ -82,6 +84,70 @@ def update_progress(task_id: str, step: int, message: str, progress: float, data
     except Exception as e:
         # Log error but don't fail the task if Redis is unavailable
         logger.warning(f"Failed to update progress for task {task_id}: {e}")
+
+
+class ProgressReporter:
+    """Reports a task's progress, keeping the step counter and percentage in one place.
+
+    Args:
+        task_id: Unique task identifier
+        total_steps: Number of steps the task reports before it is done
+    """
+
+    def __init__(self, task_id: str, total_steps: int) -> None:
+        self.task_id = task_id
+        self.total_steps = total_steps
+        self.step = 0
+
+    def report(self, message: str, data: dict | None = None) -> None:
+        """Report a message for the current step.
+
+        Args:
+            message: Progress message
+            data: Additional lightweight data (optional)
+        """
+        update_progress(self.task_id, self.step, message, 100 * (self.step / self.total_steps), data)
+
+    def start(self, message: str) -> None:
+        """Report the initial step (step 0).
+
+        Args:
+            message: Progress message
+        """
+        self.report(message)
+
+    def next(self) -> None:
+        """Advance to the next step."""
+        self.step += 1
+
+    def waiting(self, delay: int, account_id: int) -> None:
+        """Report that an OpenDota request for an account is postponed by the rate limit.
+
+        Args:
+            delay: Seconds until the retry
+            account_id: Player account ID being fetched
+        """
+        self.report(
+            f"OpenDota limit reached, retrying account {account_id} in {delay}s",
+            {"account_id": account_id, "retry_in": delay},
+        )
+
+    def done(self, message: str, data: dict | None = None) -> None:
+        """Report the last step at 100%.
+
+        Args:
+            message: Progress message
+            data: Additional lightweight data (optional)
+        """
+        update_progress(self.task_id, self.total_steps, message, 100, data)
+
+    def fail(self, exc: Exception) -> None:
+        """Mark the task failed (step and progress -1).
+
+        Args:
+            exc: The error that stopped the task
+        """
+        update_progress(self.task_id, -1, f"Task error: {exc!s}", -1, {"error": True})
 
 
 def store_results(task_id: str, results_data: dict) -> None:
@@ -214,34 +280,19 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
         accounts: List of account IDs to fetch statistics for
         days: Number of days of match history to fetch
     """
+    progress = ProgressReporter(task_id, 2 + 2 * len(accounts))  # Initial + per-account + final
     try:
         logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
-        steps: int = 2 + 2 * len(accounts)  # Initial + per-account + final
-        step_num: int = 0
-
-        update_progress(
-            task_id,
-            step_num,
-            f"Initializing match history fetch for {len(accounts)} players",
-            100 * (step_num / steps),
-        )
+        progress.start(f"Initializing match history fetch for {len(accounts)} players")
 
         results = []
         matches_stats = []  # List of lists: each inner list is matches for one player
-        bad_rank_players: int = 0
-        players_avg_rank: float = 0.0
-        players_with_rank: int = 0
+        ranks = RankTally()
         for account_id in accounts:
-            step_num += 1
+            progress.next()
 
-            def report_wait(delay: int, account_id: int = account_id, step: int = step_num) -> None:
-                update_progress(
-                    task_id,
-                    step,
-                    f"OpenDota limit reached, retrying account {account_id} in {delay}s",
-                    100 * (step / steps),
-                    {"account_id": account_id, "retry_in": delay},
-                )
+            def report_wait(delay: int, account_id: int = account_id) -> None:
+                progress.waiting(delay, account_id)
 
             try:
                 # Fetch match data for this account
@@ -259,79 +310,57 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20):
                         "matches": stats_data,
                     }
                 )
-
-                update_progress(
-                    task_id,
-                    step_num,
+                progress.report(
                     f"Fetched {len(stats_data)} matches for account {account_id}",
-                    100 * (step_num / steps),
                     {"account_id": account_id, "match_count": len(stats_data)},
                 )
 
                 player_rank = get_rank_cached(account_id, on_wait=report_wait)
-                if player_rank is not None:
-                    players_with_rank += 1
-                    players_avg_rank += player_rank
-                    if player_rank > 1000:  # Tysyachniks ruin the games.
-                        bad_rank_players += 1
-                        logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
-
-                update_progress(
-                    task_id,
-                    step_num,
+                ranks.add(player_rank)
+                if player_rank is not None and player_rank > BAD_RANK_THRESHOLD:  # Tysyachniks ruin the games.
+                    logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
+                progress.report(
                     f"Got Player rank {player_rank} for account {account_id}",
-                    100 * (step_num / steps),
                     {"account_id": account_id, "player_rank": player_rank},
                 )
 
             except Exception as e:
                 # Handle per-account errors gracefully
                 # TODO: rework, why do we need these results?
-                results.append(
-                    {
-                        "account_id": account_id,
-                        "error": str(e),
-                    }
-                )
-
-                update_progress(
-                    task_id,
-                    step_num,
+                results.append({"account_id": account_id, "error": str(e)})
+                progress.report(
                     f"Error fetching data for account {account_id}: {e!s}",
-                    100 * (step_num / steps),
                     {"account_id": account_id, "error": str(e)},
                 )
 
             time.sleep(0.01)  # Short sleep to prevent overwhelming the API
-        players_avg_rank /= players_with_rank if players_with_rank else 1
-        step_num += 1  # Final summary
+
         summary = get_team_matches_summary(matches_stats)  # This is heavy logic. To check.
-        summary.avg_rank = players_avg_rank
-        summary.bad_rank_players = bad_rank_players
+        summary.avg_rank = ranks.average
+        summary.bad_rank_players = ranks.bad_rank_players
 
         successful = len([r for r in results if "error" not in r])
 
         # Store heavy results separately (not in progress stream)
-        final_results = {
-            "results": results,
-            "successful": successful,
-            "total": len(accounts),
-            "summary": summary.model_dump(),
-        }
-        store_results(task_id, final_results)
-
-        # Update progress with lightweight final message (no heavy data)
-        update_progress(
+        store_results(
             task_id,
-            steps,
+            {
+                "results": results,
+                "successful": successful,
+                "total": len(accounts),
+                "summary": summary.model_dump(),
+            },
+        )
+
+        # Lightweight final message (no heavy data)
+        progress.done(
             f"Completed: fetched data for {successful}/{len(accounts)} players",
-            100,
-            {"successful": successful, "total": len(accounts)},  # Lightweight summary only
+            {"successful": successful, "total": len(accounts)},
         )
 
     except Exception as exc:
         logger.error(f"Task error for task_id={task_id}: {exc}", exc_info=True)
-        update_progress(task_id, -1, f"Task error: {exc!s}", -1, {"error": True})
+        progress.fail(exc)
         raise
 
 
