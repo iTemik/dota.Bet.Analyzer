@@ -1150,7 +1150,7 @@ describe('App Component', () => {
     describe('Progress Messages', () => {
         it('keeps the rate-limit wait message when the progress stream times out', async () => {
             const waitLine = { step: 1, message: 'OpenDota rate limit reached, retrying account 7 in 20s', progress: 10, data: {}, timestamp: 1 }
-            const timeoutLine = { step: -1, message: 'Task timed out - no progress updates for 3.0s', progress: -1, data: { error: true, timeout: true } }
+            const timeoutLine = { step: -1, message: 'Task timed out - no progress updates for 30s', progress: -1, data: { error: true, timeout: true } }
             globalThis.fetch = vi.fn((url: string) => {
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
@@ -1205,6 +1205,61 @@ describe('App Component', () => {
             await new Promise(resolve => setTimeout(resolve, 3500))
             expect(progressCalls).toBe(1)
         }, 15000)
+        it('shows a failed task error right away and stops following its progress', async () => {
+            let progressCalls = 0
+            const failedLine = { step: -1, message: 'Task error: OpenDota unavailable', progress: -1, data: { error: true } }
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') {
+                    return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                }
+                if (url.includes('/api/stream-progress/')) {
+                    if (url.endsWith('/task_failed')) progressCalls += 1
+                    return Promise.resolve(new Response(`${JSON.stringify(failedLine)}\n`))
+                }
+                return Promise.resolve(
+                    createMockResponse({ teams: [{ team: 'Team A', team_id: 1, task_id: 'task_failed', players: [], other_players: [] }] })
+                )
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            await waitFor(() => {
+                expect(screen.getByText(/Task error: OpenDota unavailable/)).toBeInTheDocument()
+            })
+            expect(screen.getByRole('button', { name: /Check Statistics/i })).not.toBeDisabled()
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            expect(progressCalls).toBe(1)
+        }, 10000)
+
+        it('closes the open progress stream when the page is closed', async () => {
+            let streamSignal: AbortSignal | undefined
+            globalThis.fetch = vi.fn((url: string, init?: RequestInit) => {
+                if (url === '/api/version') {
+                    return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                }
+                if (url.includes('/api/stream-progress/')) {
+                    streamSignal = init?.signal ?? undefined
+                    // A stream that stays open until it is aborted
+                    return Promise.resolve(new Response(new ReadableStream()))
+                }
+                return Promise.resolve(
+                    createMockResponse({ teams: [{ team: 'Team A', team_id: 1, task_id: 'task_open', players: [], other_players: [] }] })
+                )
+            }) as unknown as typeof fetch
+
+            const { unmount } = render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            await waitFor(() => expect(streamSignal).toBeDefined())
+            expect(streamSignal?.aborted).toBe(false)
+            unmount()
+            expect(streamSignal?.aborted).toBe(true)
+        }, 10000)
     })
 
     describe('Polling Management', () => {
