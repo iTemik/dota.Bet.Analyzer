@@ -168,7 +168,7 @@ class MatchesSummary(BaseModel):
 # Players ranked worse than this on the leaderboard ruin the games for high rank players
 # Notes about this magic number: The term Tysyachniki means The player is not even top 1000
 # It was introduced when MMR top 1 was ~16k and top 1000 was ~10-11k.
-# Top competitive players hated them.
+# Top competitive players hated them, blame them for everything and can't collabarate
 # MMR was reworked on July 30, 2026. Multiple players were recalibrated with with much lower MMR
 # I guess current tysyachnik is in ~ top 100-200 of the ladder.
 # and in 1-2 years it will go back to top 1000.
