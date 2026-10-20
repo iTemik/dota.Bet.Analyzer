@@ -2,6 +2,8 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import './App.css'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { type ProgressData, parseProgress } from './progress'
+import { ROSTER_STATES, getCorePlayers, getStandins, hasCore, renderName } from './roster'
+import type { LeagueForm, MatchesSummary, Player, Statistics, StatisticsResult, TeamData } from './types'
 import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
@@ -10,7 +12,7 @@ const COLOR_NEGATIVE = '#9d6b6b'
 // Roster and match history window, sent to /api/statistics as `days` (same default as the backend)
 const STATS_DAYS = 20
 
-type Summary = Record<string, unknown> | null
+type Summary = MatchesSummary | null
 
 // Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
 interface CompareRowConfig {
@@ -23,8 +25,6 @@ interface CompareRowConfig {
   color?: (team: TeamData | undefined) => string // per-team colour, for rows that don't compare
   render: (team: TeamData | undefined, summary: Summary) => ReactNode
 }
-
-const asNumber = (value: unknown): number | null => (typeof value === 'number' ? value : null)
 
 // Colours for team 1 and team 2: the better value is positive, the other negative
 const compareColors = (a: number | null, b: number | null, better: 'higher' | 'lower', threshold = 0): [string, string] => {
@@ -54,47 +54,6 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
   )
 }
 
-interface Player {
-  name: string
-  id: number
-  games?: number | null
-  is_core?: boolean | null
-}
-
-interface LeagueForm {
-  days: number
-  matches: number
-  wins: number
-  losses: number
-  win_percentage: number | null
-  last_match_time: number | null
-}
-
-interface TeamData {
-  error_code: null | string
-  rating: null | number
-  delta: number
-  logo_url?: string
-  task_id?: string | null
-  other_players: Player[]
-  players: Player[]
-  roster_source?: 'recent_matches' | 'pro_players' | null
-  roster_games?: number | null
-  standins_count?: number
-  roster_last_match_time?: number | null
-  latest_match_time?: number | null
-  latest_match_standins?: number | null
-  roster_state?: 'stable' | 'new_players' | 'new_team' | null
-  league_form?: LeagueForm | null
-  tag: string
-  team: string
-  team_id: number
-}
-
-interface Statistics {
-  teams: TeamData[]
-}
-
 /**
  * Team roster (account lists) is collected indirectly:
  *    - Frontend calls: GET /api/statistics?team=Alliance&team=OG
@@ -111,7 +70,7 @@ function App() {
   const [team1SelectedName, setTeam1SelectedName] = useState<string>('')
   const [team2SelectedName, setTeam2SelectedName] = useState<string>('')
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [summaryData, setSummaryData] = useState<Record<string, unknown> | null>(null)
+  const [summaryData, setSummaryData] = useState<Record<string, StatisticsResult> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
@@ -265,7 +224,7 @@ function App() {
         }
 
         let allCompleted = true
-        const summaries: Record<string, unknown> = {}
+        const summaries: Record<string, StatisticsResult> = {}
 
         for (const taskId of taskIds) {
           if (!taskId) continue
@@ -299,7 +258,7 @@ function App() {
 
           // Check if task is complete (progress === 100)
           if (progressData.progress === 100) {
-            summaries[taskId] = progressData.data
+            summaries[taskId] = progressData.data as StatisticsResult
           } else if (progressData.progress < 100) {
             allCompleted = false
           }
@@ -312,7 +271,7 @@ function App() {
 
           // Fetch detailed results for each completed task
           try {
-            const detailedResults: Record<string, unknown> = {}
+            const detailedResults: Record<string, StatisticsResult> = {}
 
             for (const taskId of taskIds) {
               if (!taskId) continue
@@ -353,13 +312,6 @@ function App() {
     return new Date(unixTime * 1000).toLocaleDateString()
   }
 
-  // Roster state, from best to worst; stand-ins are players outside the core (below 75%, or 50%, of the games)
-  const ROSTER_STATES: Record<string, { rank: number; label: string; hint: string }> = {
-    stable: { rank: 0, label: 'Stable', hint: 'Only the core players played' },
-    standins: { rank: 1, label: 'Stand-ins', hint: 'A clear core of 5 players, plus stand-ins in some games' },
-    new_team: { rank: 2, label: 'New team', hint: 'No clear core of 5 players: players rotate' },
-  }
-
   const getRosterRank = (team: TeamData | undefined): number | null =>
     team?.roster_source === 'recent_matches' && team.roster_state ? (ROSTER_STATES[team.roster_state]?.rank ?? null) : null
 
@@ -376,27 +328,6 @@ function App() {
     const total = team.roster_games
     if (!player.games || !total || player.games >= total) return ''
     return ` (${player.games} of ${total})`
-  }
-
-  // Players without a name on OpenDota come as "#<account id>"; show them as an ID so they don't read as a nickname
-  const renderName = (player: Player) => {
-    const accountId = /^#(\d+)$/.exec(player.name)?.[1]
-    if (!accountId) return player.name
-    return (
-      <span className="account-id" title="No player name on OpenDota; this is the account ID">
-        ID {accountId}
-      </span>
-    )
-  }
-
-  // Core: players with 75% (or 50%) of the games; without a clear core, the main 5
-  const hasCore = (team: TeamData) => team.players.some((p) => p.is_core)
-  const getCorePlayers = (team: TeamData): Player[] =>
-    team.roster_source === 'recent_matches' && hasCore(team) ? team.players.filter((p) => p.is_core) : team.players
-  // Stand-ins: everyone else who played for the team in the window
-  const getStandins = (team: TeamData): Player[] => {
-    const core = new Set(getCorePlayers(team).map((p) => p.id))
-    return [...team.players, ...(team.other_players ?? [])].filter((p) => !core.has(p.id) && p.games !== 0)
   }
 
   const renderCorePlayers = (team: TeamData | undefined) => {
@@ -462,37 +393,11 @@ function App() {
     return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
   }
 
-  const getSummaryForTeam = (taskId: string | null | undefined) => {
-    if (!taskId || !summaryData) {
-      return null
-    }
+  const getSummaryForTeam = (taskId: string | null | undefined): Summary =>
+    (taskId && summaryData?.[taskId]?.summary) || null
 
-    const data = summaryData[taskId]
-    if (!data) {
-      console.warn(`No summary data found for taskId: ${taskId}, available keys: ${Object.keys(summaryData).join(', ')}`)
-      return null
-    }
-
-    // Handle different possible data structures
-    if (typeof data === 'object') {
-      // If it's wrapped in a 'summary' key, unwrap it (this is the expected structure)
-      const obj = data as Record<string, unknown>
-      if (obj.summary && typeof obj.summary === 'object') {
-        const summary = obj.summary as Record<string, unknown>
-        return summary
-      }
-      if (obj.data && typeof obj.data === 'object') {
-        return obj.data as Record<string, unknown>
-      }
-      // Otherwise assume it's the summary object directly
-      return obj as Record<string, unknown>
-    }
-
-    return null
-  }
-
-  const formatPercent = (value: unknown): string => (typeof value === 'number' ? value.toFixed(1) + '%' : '-')
-  const formatFixed = (value: unknown, digits: number): string => (value ? (value as number).toFixed(digits) : '-')
+  const formatPercent = (value: number | null | undefined): string => (typeof value === 'number' ? value.toFixed(1) + '%' : '-')
+  const formatFixed = (value: number | null | undefined, digits: number): string => (value ? value.toFixed(digits) : '-')
 
   const teams = [statistics?.teams?.[0], statistics?.teams?.[1]]
   const summaries = teams.map((team) => getSummaryForTeam(team?.task_id))
@@ -516,7 +421,7 @@ function App() {
     { label: 'Roster Changes', compare: getRosterRank, better: 'lower', render: renderRosterState },
     {
       label: `Tournaments Record (${teams[0]?.league_form?.days ?? STATS_DAYS}d)`,
-      compare: (team) => asNumber(team?.league_form?.win_percentage),
+      compare: (team) => team?.league_form?.win_percentage ?? null,
       better: 'higher',
       render: (team) => formatLeagueRecord(team?.league_form),
     },
@@ -528,7 +433,7 @@ function App() {
     {
       label: 'Rating Matches',
       summary: true,
-      compare: (_, s) => asNumber(s?.rating_matches),
+      compare: (_, s) => s?.rating_matches ?? null,
       better: 'higher',
       render: (_, s) => String(s?.rating_matches ?? '-'),
     },
@@ -541,28 +446,28 @@ function App() {
         </>
       ),
       summary: true,
-      compare: (_, s) => asNumber(s?.tournament_matches),
+      compare: (_, s) => s?.tournament_matches ?? null,
       better: 'higher',
       render: (_, s) => String(s?.tournament_matches ?? '-'),
     },
     {
       label: 'Pub Win %',
       summary: true,
-      compare: (_, s) => asNumber(s?.rating_win_percentage),
+      compare: (_, s) => s?.rating_win_percentage ?? null,
       better: 'higher',
       render: (_, s) => formatPercent(s?.rating_win_percentage),
     },
     {
       label: 'Lobby Win %',
       summary: true,
-      compare: (_, s) => asNumber(s?.tournament_win_percentage),
+      compare: (_, s) => s?.tournament_win_percentage ?? null,
       better: 'higher',
       render: (_, s) => formatPercent(s?.tournament_win_percentage),
     },
     {
       label: 'Average Player Rank',
       summary: true,
-      compare: (_, s) => asNumber(s?.avg_rank),
+      compare: (_, s) => s?.avg_rank ?? null,
       better: 'lower',
       render: (_, s) => formatFixed(s?.avg_rank, 0),
     },
@@ -575,7 +480,7 @@ function App() {
         </>
       ),
       summary: true,
-      compare: (_, s) => asNumber(s?.bad_rank_players),
+      compare: (_, s) => s?.bad_rank_players ?? null,
       better: 'lower',
       render: (_, s) => String(s?.bad_rank_players ?? '-'),
     },
@@ -583,14 +488,14 @@ function App() {
     {
       label: 'Average Matches Per Player',
       summary: true,
-      compare: (_, s) => asNumber(s?.matches_avg),
+      compare: (_, s) => s?.matches_avg ?? null,
       better: 'higher',
       render: (_, s) => formatFixed(s?.matches_avg, 2),
     },
     {
       label: 'Median Matches Per Player',
       summary: true,
-      compare: (_, s) => asNumber(s?.matches_median),
+      compare: (_, s) => s?.matches_median ?? null,
       better: 'higher',
       render: (_, s) => formatFixed(s?.matches_median, 2),
     },
