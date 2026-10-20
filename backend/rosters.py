@@ -190,7 +190,7 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
         ).fetchall()
         return [TeamMatch.from_db(row) for row in rows]
     except sqlite3.Error as exc:
-        logger.warning(f"Team matches cache unavailable (run scripts/init_d2ba_db.py): {exc}")
+        logger.warning(f"Team matches cache unavailable (migrations apply on npm run dev or npm run migrate): {exc}")
         return None
 
 
@@ -263,7 +263,7 @@ def _load_cached_lineup(match_id: int) -> Optional[list[tuple[int, int]]]:
             .fetchall()
         )
     except sqlite3.Error as exc:
-        logger.warning(f"Lineup cache unavailable (run scripts/init_d2ba_db.py): {exc}")
+        logger.warning(f"Lineup cache unavailable (migrations apply on npm run dev or npm run migrate): {exc}")
         return None
     if not rows:
         return None

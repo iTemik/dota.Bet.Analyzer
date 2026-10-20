@@ -22,3 +22,6 @@ frontend/.vite/
 
 # Test artifacts (GitHub Actions)
 test-results/
+
+# Local test logs (e.g. npm test > test-output.txt)
+frontend/test-*.txt
