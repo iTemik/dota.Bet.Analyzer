@@ -120,7 +120,7 @@ Once your environment is set up, these are the commands you'll use most:
 | **Start backend only** | `npm run backend` |
 | **Start frontend only** | `npm run frontend` |
 | **Activate Python venv** | `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (Linux) |
-| **Initialize databases** | `flask --app backend init-db` then `python scripts/init_d2ba_db.py` |
+| **Initialize databases** | `flask --app backend init-db`; `npm run dev` applies d2ba migrations (or `npm run migrate`) |
 | **View API docs** | Open http://localhost:5000/api/swagger-ui |
 | **Stop Redis** | `docker stop redis-dota && docker rm redis-dota` |
 
@@ -415,7 +415,7 @@ python scripts/init_d2ba_db.py
 ```
 
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
-It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); re-run it after pulling to apply new migrations.
+It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
 
 **Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
 `/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
@@ -841,3 +841,20 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Prefer updating `backend/schema.txt` and running `scripts/generate_schema.py` rather than editing `opendota_schema.sql` manually
 - Verify schema: `python scripts/generate_schema.py --check`
 - Add CI checks to ensure schema is up to date on push
+
+
+# Assumptions
+
+## Dependence on Opendota API
+
+It's assumed that OpenDota provides actual, correct, and complete information. If this service malfunctions, this solution becomes useless.
+
+## Team roster calculation
+
+It is assumed that a team roster is relatively stable. The latest match is used to determine the list of players.
+After roster changes, player swaps, and the addition of temporary stand-ins, statistical calculations may be inaccurate.
+The app uses a list of team members from the previous matches
+
+## Past performance reflects current performance
+
+It is assumed that there is no match-fixing (322) and that team performance is stable, so recently played matches can be used for statistical calculations.
