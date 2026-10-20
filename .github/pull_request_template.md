@@ -1,4 +1,4 @@
-<!-- Keep it short. No player names. Skip a section that has nothing in it. -->
+<!-- Keep it short. No player names. Backend, Frontend, API and DB are optional, but expected for big changes. -->
 
 Before: <!-- what a user saw or what was wrong, one or two sentences -->
 
@@ -10,5 +10,11 @@ After: <!-- what a user sees now, one or two sentences -->
 **Frontend**
 -
 
+**API**
+- <!-- request/response fields added, removed or changed -->
+
+**DB**
+- <!-- every table, column or migration change; flag anything that is not add-only -->
+
 **Other**
-- <!-- tests, README, DB migrations, scripts to run -->
+- <!-- tests, README, scripts to run -->

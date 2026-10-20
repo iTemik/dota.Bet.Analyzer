@@ -851,7 +851,8 @@ It's assumed that OpenDota provides actual, correct, and complete information. I
 
 ## Team roster calculation
 
-It is assumed that a team roster is relatively stable. The latest match is used to determine the list of players.
+It is assumed that a team roster is relatively stable. The 5 players with the most league games in the `days` window
+form the roster, and those with 75% (or 50%) of the games form the core.
 After roster changes, player swaps, and the addition of temporary stand-ins, statistical calculations may be inaccurate.
 The app uses a list of team members from the previous matches
 
