@@ -4,6 +4,7 @@ import TeamAutocomplete from './components/TeamAutocomplete'
 import { type ProgressData, parseProgress } from './progress'
 import { ROSTER_STATES, getCorePlayers, getStandins, hasCore, renderName } from './roster'
 import type { LeagueForm, MatchesSummary, Player, Statistics, StatisticsResult, TeamData } from './types'
+import { useTeamInput } from './useTeamInput'
 import { VERSION } from './version'
 
 // Color constants - defined in App.css as CSS variables
@@ -63,12 +64,8 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
  *    - It's needed to poll progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
  */
 function App() {
-  const [team1, setTeam1] = useState('')
-  const [team2, setTeam2] = useState('')
-  const [team1Id, setTeam1Id] = useState<number | null>(null)
-  const [team2Id, setTeam2Id] = useState<number | null>(null)
-  const [team1SelectedName, setTeam1SelectedName] = useState<string>('')
-  const [team2SelectedName, setTeam2SelectedName] = useState<string>('')
+  const team1 = useTeamInput()
+  const team2 = useTeamInput()
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [summaryData, setSummaryData] = useState<Record<string, StatisticsResult> | null>(null)
   const [loading, setLoading] = useState(false)
@@ -130,7 +127,7 @@ function App() {
   }
 
   const handleCheck = async () => {
-    if (!team1.trim() || !team2.trim()) {
+    if (!team1.value.trim() || !team2.value.trim()) {
       setError('Please enter both team names')
       return
     }
@@ -149,21 +146,8 @@ function App() {
 
     try {
       const params = new URLSearchParams()
-
-      // For team1: Only send team_id if the user selected from the list (name matches selected name)
-      if (team1Id !== null && team1 === team1SelectedName) {
-        params.append('team_id', String(team1Id))
-      } else {
-        params.append('team', team1)
-      }
-
-      // For team2: Only send team_id if the user selected from the list (name matches selected name)
-      if (team2Id !== null && team2 === team2SelectedName) {
-        params.append('team_id', String(team2Id))
-      } else {
-        params.append('team', team2)
-      }
-
+      params.append(...team1.queryParam())
+      params.append(...team2.queryParam())
       params.append('days', String(STATS_DAYS))
 
       const response = await fetch(`/api/statistics?${params.toString()}`)
@@ -503,11 +487,11 @@ function App() {
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem' }}>
+      <div className="app-header">
         <h1>Dota 2 Bet Analyzer</h1>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-          <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: '500' }}>Frontend: v{VERSION}</span>
-          <span style={{ color: '#999', fontSize: '0.8rem' }}>Backend: v {backendVersion || 'loading...'}</span>
+        <div className="app-versions">
+          <span className="app-version-frontend">Frontend: v{VERSION}</span>
+          <span className="app-version-backend">Backend: v {backendVersion || 'loading...'}</span>
         </div>
       </div>
 
@@ -516,17 +500,9 @@ function App() {
           <div className="input-group">
             <label htmlFor="team1">Team #1</label>
             <TeamAutocomplete
-              value={team1}
-              onChange={(value) => {
-                setTeam1(value)
-                // Mark that no explicit selection is active
-                // onSelect will set the selectedName if user picks from list
-                setTeam1SelectedName('')
-              }}
-              onSelect={(team) => {
-                setTeam1Id(team.team_id)
-                setTeam1SelectedName(team.name)
-              }}
+              value={team1.value}
+              onChange={team1.onChange}
+              onSelect={team1.onSelect}
               placeholder="Enter first team name"
               autoFocus
             />
@@ -535,17 +511,9 @@ function App() {
           <div className="input-group">
             <label htmlFor="team2">Team #2</label>
             <TeamAutocomplete
-              value={team2}
-              onChange={(value) => {
-                setTeam2(value)
-                // Mark that no explicit selection is active
-                // onSelect will set the selectedName if user picks from list
-                setTeam2SelectedName('')
-              }}
-              onSelect={(team) => {
-                setTeam2Id(team.team_id)
-                setTeam2SelectedName(team.name)
-              }}
+              value={team2.value}
+              onChange={team2.onChange}
+              onSelect={team2.onSelect}
               placeholder="Enter second team name"
             />
           </div>
@@ -586,18 +554,18 @@ function App() {
                   <tr>
                     <th></th>
                     <th>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <div className="team-header">
                         <span>{teams[0]?.team ? teams[0].team : 'Team #1'}</span>
                         {teams[0]?.logo_url && (
-                          <img src={teams[0].logo_url} alt="Team 1 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                          <img src={teams[0].logo_url} alt="Team 1 Logo" className="team-logo" />
                         )}
                       </div>
                     </th>
                     <th>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <div className="team-header">
                         <span>{teams[1]?.team ? teams[1].team : 'Team #2'}</span>
                         {teams[1]?.logo_url && (
-                          <img src={teams[1].logo_url} alt="Team 2 Logo" style={{ height: '80px', width: '100px', objectFit: 'contain' }} />
+                          <img src={teams[1].logo_url} alt="Team 2 Logo" className="team-logo" />
                         )}
                       </div>
                     </th>
