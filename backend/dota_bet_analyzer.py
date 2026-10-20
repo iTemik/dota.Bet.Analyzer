@@ -9,7 +9,7 @@ from flask_smorest import Blueprint
 
 from backend import __version__
 from backend.config import Config
-from backend.helpers import Errors
+from backend.helpers import Errors, api_error
 from backend.logging_config import setup_logging
 from backend.opendota import WaitCallback
 from backend.pro_players import (
@@ -31,7 +31,6 @@ from backend.schemas import (
     VersionSchema,
 )
 from backend.stats import (
-    ApiError,
     MatchStats,
     compute_statistics,
     get_matches,
@@ -188,37 +187,20 @@ def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response
     Returns:
         Tuple of (parsed_team_ids_int, error_response) where:
         - parsed_team_ids_int is the list of validated integer team IDs
-        - error_response is an ApiError response tuple if validation failed, None otherwise
+        - error_response is an api_error response tuple if validation failed, None otherwise
     """
     team_ids_int: list[int] = []
     for tid in team_ids:
-        if tid is None or tid == "":
+        value = tid.strip() if isinstance(tid, str) else tid
+        if value is None or value == "":
             continue
-        if isinstance(tid, int):
-            team_ids_int.append(tid)
-            continue
-        if isinstance(tid, str):
-            tid_str = tid.strip()
-            if not tid_str:
-                continue
-            if not tid_str.isdigit():
-                return [], (
-                    ApiError.create_response(
-                        422,
-                        error=Errors.INVALID_REQUEST,
-                        details={"url": request.path, "invalid_team_id": tid},
-                    )
-                )
-            team_ids_int.append(int(tid_str))
-            continue
-        # Unsupported type for team_id
-        return [], (
-            ApiError.create_response(
-                422,
-                error=Errors.INVALID_REQUEST,
-                details={"url": request.path, "invalid_team_id": tid},
-            )
-        )
+        if isinstance(value, int):
+            team_ids_int.append(value)
+        elif isinstance(value, str) and value.isdigit():
+            team_ids_int.append(int(value))
+        else:
+            # Not a number, or an unsupported type
+            return [], api_error(422, Errors.INVALID_REQUEST, invalid_team_id=tid)
 
     return team_ids_int, None
 
@@ -442,14 +424,12 @@ def statistics(args) -> tuple[Response, int]:
 
         # Validate at least one is provided
         if not teams and not team_ids_int:
-            return ApiError.create_response(422, error=Errors.MISSING_TEAMS, details={"url": request.path})
+            return api_error(422, Errors.MISSING_TEAMS)
 
         # Validate total count doesn't exceed limit
         total_teams = len(teams) + len(team_ids_int)
         if total_teams > 10:
-            return ApiError.create_response(
-                422, error=Errors.TOO_MANY_TEAMS, details={"url": request.path, "limit": 10}
-            )
+            return api_error(422, Errors.TOO_MANY_TEAMS, limit=10)
 
         # Compute statistics with both lists
         stats = compute_statistics(
@@ -461,16 +441,10 @@ def statistics(args) -> tuple[Response, int]:
 
     except ValueError as e:
         logger.error(f"Validation error in compute_statistics: {e}")
-        return ApiError.create_response(
-            400, error=Errors.INVALID_REQUEST, details={"url": request.path, "exception": str(e)}
-        )
+        return api_error(400, Errors.INVALID_REQUEST, e)
     except Exception as e:
         logger.error(f"Unexpected error in statistics computation: {e}", exc_info=True)
-        return ApiError.create_response(
-            500,
-            error=Errors.COMPUTATION_ERROR,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(500, Errors.COMPUTATION_ERROR, e)
 
 
 @bp.route("/statistics/players", methods=["GET"])
@@ -574,16 +548,10 @@ def players_statistics(args) -> tuple[Response, int]:
             )
             return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
         except Exception as e:
-            return ApiError.create_response(
-                500,
-                error=Errors.FAILED_TO_START_TASK,
-                details={"task_id": task_id, "url": request.path, "exception": str(e)},
-            )
+            return api_error(500, Errors.FAILED_TO_START_TASK, e, task_id=task_id)
 
     except Exception as e:
-        return ApiError.create_response(
-            400, error=Errors.INVALID_REQUEST, details={"url": request.path, "exception": str(e)}
-        )
+        return api_error(400, Errors.INVALID_REQUEST, e)
 
 
 def _create_error_message(message: str, timeout: bool = False) -> str:
@@ -775,18 +743,10 @@ def stream_progress(task_id: str) -> tuple[Response, int] | Response:
     try:
         initial_progress = redis_client.get(f"progress:{task_id}")
         if initial_progress is None:
-            return ApiError.create_response(
-                404,
-                error=Errors.RESULTS_NOT_FOUND,
-                details={"url": request.path, "task_id": task_id},
-            )
+            return api_error(404, Errors.RESULTS_NOT_FOUND, task_id=task_id)
     except Exception as e:
         logger.error(f"Redis error checking task {task_id}: {e}")
-        return ApiError.create_response(
-            500,
-            error=Errors.FAILED_TO_RETRIEVE_RESULTS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(500, Errors.FAILED_TO_RETRIEVE_RESULTS, e)
 
     return Response(
         stream_with_context(_generate_progress_stream(task_id)),
@@ -868,21 +828,13 @@ def get_results(task_id: str) -> tuple[Response, int]:
     try:
         results_data = redis_client.get(f"results:{task_id}")
         if not results_data:
-            return ApiError.create_response(
-                404,
-                error=Errors.RESULTS_NOT_FOUND,
-                details={"url": request.path, "task_id": task_id},
-            )
+            return api_error(404, Errors.RESULTS_NOT_FOUND, task_id=task_id)
 
         results = json.loads(results_data)
         return jsonify(results), 200
     except Exception as e:
         logger.error(f"Error retrieving results for task {task_id}: {e}")
-        return ApiError.create_response(
-            500,
-            error=Errors.FAILED_TO_RETRIEVE_RESULTS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(500, Errors.FAILED_TO_RETRIEVE_RESULTS, e)
 
 
 @bp.route("/pro-players/sync", methods=["POST"])
@@ -932,17 +884,9 @@ def sync_pro_players() -> tuple[Response, int]:
     try:
         players_data = fetch_pro_players_from_api()
     except ConnectionError as e:
-        return ApiError.create_response(
-            503,
-            error=Errors.FAILED_TO_FETCH_PRO_PLAYERS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(503, Errors.FAILED_TO_FETCH_PRO_PLAYERS, e)
     except ValueError as e:
-        return ApiError.create_response(
-            502,
-            error=Errors.FAILED_TO_FETCH_PRO_PLAYERS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(502, Errors.FAILED_TO_FETCH_PRO_PLAYERS, e)
 
     if not players_data:
         return jsonify({"synced_count": 0, "message": "No pro players data available"}), 200
@@ -952,11 +896,7 @@ def sync_pro_players() -> tuple[Response, int]:
         count = store_pro_players(players_data)
         return jsonify({"synced_count": count, "message": f"Stored {count} pro players"}), 200
     except Exception as e:
-        return ApiError.create_response(
-            500,
-            error=Errors.FAILED_TO_STORE_PRO_PLAYERS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(500, Errors.FAILED_TO_STORE_PRO_PLAYERS, e)
 
 
 @bp.route("/teams/sync", methods=["POST"])
@@ -1006,17 +946,9 @@ def sync_teams() -> tuple[Response, int]:
     try:
         teams_data = fetch_teams_from_api()
     except ConnectionError as e:
-        return ApiError.create_response(
-            503,
-            error=Errors.FAILED_TO_FETCH_TEAMS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(503, Errors.FAILED_TO_FETCH_TEAMS, e)
     except ValueError as e:
-        return ApiError.create_response(
-            502,
-            error=Errors.FAILED_TO_FETCH_TEAMS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(502, Errors.FAILED_TO_FETCH_TEAMS, e)
 
     if not teams_data:
         return jsonify({"synced_count": 0, "message": "No teams data available"}), 200
@@ -1026,11 +958,7 @@ def sync_teams() -> tuple[Response, int]:
         count = store_teams(teams_data)
         return jsonify({"synced_count": count, "message": f"Stored {count} teams"}), 200
     except Exception as e:
-        return ApiError.create_response(
-            500,
-            error=Errors.FAILED_TO_STORE_TEAMS,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(500, Errors.FAILED_TO_STORE_TEAMS, e)
 
 
 @bp.route("/teams/search", methods=["GET"])
@@ -1099,11 +1027,7 @@ def search_teams(args):
 
     except Exception as e:
         logger.error(f"Error searching teams: {e!s}")
-        return ApiError.create_response(
-            503,
-            error=Errors.SEARCH_ERROR,
-            details={"url": request.path, "exception": str(e)},
-        )
+        return api_error(503, Errors.SEARCH_ERROR, e)
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildIt
 
 ## Files
 - Backend: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py), [backend/stats.py](backend/stats.py), [backend/schemas.py](backend/schemas.py)
-- Helpers: [backend/helpers.py](backend/helpers.py) (Errors class, error_response)
+- Helpers: [backend/helpers.py](backend/helpers.py) (Errors, ApiError, api_error)
 - Frontend: [frontend/src/App.tsx](frontend/src/App.tsx)
 - Config: [pyproject.toml](pyproject.toml), [.pre-commit-config.yaml](.pre-commit-config.yaml)
 
