@@ -601,7 +601,7 @@ Async task for comprehensive player analysis:
 - **Player Rankings**: Fetches leaderboard rank for each player from OpenDota API
 - **Rank Analysis**:
   - Calculates average player rank across the team
-  - Tracks players "Tysyachniki"  with not so high rank (>1000) who may negatively impact team performance
+  - Tracks players "Tysyachniki" with not so high rank (out of top 150) who may negatively impact team performance
 - **Match Statistics**: Computes aggregate stats including:
   - Win percentage across rating matches
   - Tournament vs rating vs other match counts
@@ -626,7 +626,7 @@ Async task for comprehensive player analysis:
 Comprehensive test suite with 76+ tests covering:
 - Team statistics calculation
 - Player rank fetching from OpenDota API
-- Match summary computation (win percentage, average rank, bad rank players)
+- Match summary computation (win percentage, average rank, low rank players)
 - API endpoint validation
 - Error handling and edge cases
 
@@ -674,7 +674,7 @@ npm test          # Run tests
   - Average matches per player
 - **Team Quality Metrics**:
   - Average player rank (lower is better - inverted color logic)
-  - Bad rank players count (players with rank >1000, lower is better)
+  - Low rank players count (players outside of top 200 in the leaderboards. Lower rank = better)
 
 #### Color Highlighting
 - **Green (Positive)**: Better performance (higher rating, higher win %, lower rank)

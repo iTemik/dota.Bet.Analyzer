@@ -747,7 +747,7 @@ function App() {
                           </td>
                         </tr>
                         <tr>
-                          <td className="row-label">Lobby Matches (tournaments + scrims)</td>
+                          <td className="row-label">Lobby Matches<br />(tournaments + scrims)</td>
                           <td style={{ backgroundColor: getSummaryValueColors(team0Summary?.tournament_matches, team1Summary?.tournament_matches)[0] }}>
                             {String(team0Summary?.tournament_matches ?? '-')}
                           </td>
@@ -783,7 +783,7 @@ function App() {
                           </td>
                         </tr>
                         <tr>
-                          <td className="row-label">Bad Rank Players</td>
+                          <td className="row-label">Low Rank Players<br />(тысячники в команде)</td>
                           <td style={{ backgroundColor: getInverseSummaryValueColors(team0Summary?.bad_rank_players, team1Summary?.bad_rank_players)[0] }}>
                             {String(team0Summary?.bad_rank_players ?? '-')}
                           </td>

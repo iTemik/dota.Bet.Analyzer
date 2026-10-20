@@ -1001,7 +1001,7 @@ describe('App Component', () => {
             }, { timeout: 5000 })
         }, 10000)
 
-        it('should display bad rank players count in summary table', async () => {
+        it('should display low rank players count in summary table', async () => {
             const mockStats = {
                 teams: [
                     {
@@ -1117,7 +1117,7 @@ describe('App Component', () => {
 
             // Wait for summary data to be polled and the rows to be rendered
             await waitFor(() => {
-                expect(screen.getByText(/Bad Rank Players/i)).toBeInTheDocument()
+                expect(screen.getByText(/Low Rank Players \(тысячники в команде\)/i)).toBeInTheDocument()
             }, { timeout: 5000 })
         }, 10000)
     })
