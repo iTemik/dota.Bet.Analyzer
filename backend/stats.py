@@ -5,10 +5,9 @@ import time
 from typing import List, Optional
 
 import requests
-from flask import Response
 from pydantic import BaseModel, Field
 
-from backend.helpers import ErrorDefinition, Errors
+from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
 from backend.opendota import OPENDOTA_API, OpenDotaError, WaitCallback, get_json
 from backend.pro_players import Player, get_players_by_team
@@ -21,106 +20,6 @@ GAME_MODE_TOURNAMENT = [2]
 
 # Setup logger
 logger = setup_logging(__name__)
-
-
-class ApiError(BaseModel):
-    """API error information following REST API best practices.
-
-    Provides consistent error reporting across different response models.
-    Can be instantiated directly to represent API errors.
-
-    Attributes:
-        status: HTTP status code (e.g., 400, 404, 500)
-        code: Machine-readable error code (e.g., NETWORK_ERROR, HTTP_ERROR)
-        message: Human-readable error message
-        details: Additional error context as a dictionary (e.g., {"url": "..."})
-    """
-
-    status: Optional[int] = Field(default=None, description="HTTP status code")
-    code: Optional[str] = Field(default=None, description="Machine-readable error code")
-    message: Optional[str] = Field(default=None, description="Human-readable error message")
-    details: Optional[dict] = Field(default=None, description="Additional error context")
-
-    def set_error(self, status: int, code: str, message: str, details: Optional[dict] = None) -> None:
-        """Set error fields on this instance.
-
-        Args:
-            status: HTTP status code
-            code: Error code identifier
-            message: Error message
-            details: Optional additional error context
-        """
-        self.status = status
-        self.code = code
-        self.message = message
-        self.details = details
-
-    @staticmethod
-    def create_response(
-        status: int,
-        *,
-        error: Optional[ErrorDefinition] = None,
-        code: Optional[str] = None,
-        message: Optional[str] = None,
-        details: Optional[dict] = None,
-    ) -> tuple[Response, int]:
-        """Create a jsonified error response (Flask Response, status_code tuple).
-
-        Args:
-            status: HTTP status code
-            error: ErrorDefinition from helpers (mutually exclusive with code)
-            code: Machine-readable error code string (mutually exclusive with error)
-            message: Human-readable error message (required with code, optional with error)
-            details: Optional additional error context
-
-        Returns:
-            Tuple of (Flask Response with JSON, status code)
-
-        Raises:
-            ValueError: If both error and code are provided, or neither is provided
-
-        Examples:
-            # Using ErrorDefinition from helpers
-            return ApiError.create_response(400, error=Errors.MISSING_TEAMS, details={"url": request.path})
-
-            # Using ErrorDefinition with custom message override:
-            return ApiError.create_response(400, error=Errors.INVALID_TEAM_NAME, message="Custom message")
-
-            # Using string code and message:
-            return ApiError.create_response(400, code="CUSTOM_ERROR", message="Something went wrong")
-        """
-        from flask import jsonify
-
-        # Validate mutually exclusive parameters
-        if error is not None and code is not None:
-            raise ValueError("Cannot specify both 'error' and 'code' parameters")
-
-        if error is None and code is None:
-            raise ValueError("Must specify either 'error' or 'code' parameter")
-
-        # Extract code and message based on parameter type
-        if error is not None:
-            error_code: str = error.code
-            error_message: str = message if message is not None else error.message
-        else:
-            if message is None:
-                raise ValueError("'message' is required when using 'code' parameter")
-            if code is None:
-                raise ValueError("Must specify either 'error' or 'code' parameter")
-            error_code = code
-            error_message = message
-
-        return (
-            jsonify(
-                {
-                    "status": status,
-                    "code": error_code,
-                    "message": error_message,
-                    "details": details or {},
-                }
-            ),
-            status,
-        )
 
 
 class TeamStats(BaseModel):
@@ -254,6 +153,20 @@ def _safe_get_json(
         return None, ApiError(status=exc.status, code=exc.code, message=exc.message)
 
 
+def _team_error(team_str: Optional[str], team_id: Optional[int], error: ApiError) -> TeamStats:
+    """TeamStats for a team that could not be fetched.
+
+    Args:
+        team_str: Requested team name
+        team_id: Requested team ID
+        error: What went wrong
+
+    Returns:
+        TeamStats with only the request and the error set
+    """
+    return TeamStats(team=team_str, team_id=team_id, error=error)
+
+
 def _fetch_team_from_explorer_api(
     team_str: str | None = None,
     team_id: int | None = None,
@@ -275,34 +188,18 @@ def _fetch_team_from_explorer_api(
 
     # Validate input parameters
     if team_str is not None and (not isinstance(team_str, str) or not team_str.strip()):
-        return TeamStats(
-            team=team_str,
-            error=ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_NAME.code,
-                message=Errors.INVALID_TEAM_NAME.message,
-                details={"team": team_str},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.INVALID_TEAM_NAME, 400, team=team_str))
 
     if team_id is not None and (not isinstance(team_id, int) or team_id < 0):
-        return TeamStats(
-            team_id=team_id,
-            error=ApiError(
-                status=400,
-                code=Errors.INVALID_TEAM_ID.code,
-                message=Errors.INVALID_TEAM_ID.message,
-                details={"team_id": team_id},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.INVALID_TEAM_ID, 400, team_id=team_id))
 
     try:
         sql = build_explorer_query(team=team_str, team_id=team_id)
     except ValueError as e:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
+        return _team_error(
+            team_str,
+            team_id,
+            ApiError(
                 status=400,
                 code="INVALID_PARAMETER",
                 message=str(e),
@@ -316,21 +213,17 @@ def _fetch_team_from_explorer_api(
     payload, error = _safe_get_json(explore_team_url)
     if error:
         error.details = {"url": explore_team_url}
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=error,
-        )
+        return _team_error(team_str, team_id, error)
 
     assert payload is not None
 
     try:
         team_id_result, team_name, tag, rating, delta = get_team_id_from_explore_response(payload)
     except ValueError as exc:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
+        return _team_error(
+            team_str,
+            team_id,
+            ApiError(
                 status=502,
                 code="RESPONSE_PARSE_ERROR",
                 message=f"Malformed response: {exc}",
@@ -381,25 +274,6 @@ def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
         return None, error
 
     return data, None
-
-
-def _fetch_team_stats(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
-    """Fetch team logo URL from OpenDota teams API.
-
-    Args:
-        team_id: Team ID to fetch logo for
-
-    Returns:
-        Tuple of (stats_data, error) where:
-        - stats_data is json with team stats (None if error)
-        - error is an ApiError instance (None if success)
-    """
-    stats_data, error = _fetch_team_info(team_id)
-
-    if error or stats_data is None:
-        return None, error
-
-    return stats_data, None
 
 
 def _resolve_roster_safe(team_id: Optional[int], days: int) -> TeamRoster:
@@ -504,16 +378,7 @@ def _process_single_team(
         )
 
     except Exception as exc:
-        return TeamStats(
-            team=team_str,
-            team_id=team_id,
-            error=ApiError(
-                status=500,
-                code=Errors.UNEXPECTED_ERROR.code,
-                message=Errors.UNEXPECTED_ERROR.message,
-                details={"exception": str(exc)},
-            ),
-        )
+        return _team_error(team_str, team_id, ApiError.of(Errors.UNEXPECTED_ERROR, 500, exception=str(exc)))
 
 
 # Implement compute_statistics here for testability and reuse
