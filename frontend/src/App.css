@@ -319,7 +319,8 @@ pre {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  /* Pull the tabs up close to the tagline (offsets the container gap) */
+  margin-bottom: -1.25rem;
   gap: 1rem;
 }
 
