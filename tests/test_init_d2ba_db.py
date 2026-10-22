@@ -126,3 +126,76 @@ def test_init_d2ba_db_idempotent(temp_db):
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pro_players'")
     assert cursor.fetchone() is not None
     conn.close()
+
+
+def _tables(db_path):
+    """Names of the tables in a database file."""
+    conn = sqlite3.connect(db_path)
+    try:
+        return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    finally:
+        conn.close()
+
+
+def test_init_predictions_db_creates_team_snapshots_only(temp_db):
+    """predictions.sqlite gets its own migrations and none of the d2ba cache tables."""
+    from scripts.init_d2ba_db import init_predictions_db
+
+    assert init_predictions_db(temp_db) is True
+
+    tables = _tables(temp_db)
+    assert "team_snapshots" in tables
+    assert "pro_players" not in tables
+    assert "teams" not in tables
+
+
+def test_init_d2ba_db_does_not_create_predictions_tables(temp_db):
+    """The d2ba runner does not pick up migrations from the predictions folder."""
+    from scripts.init_d2ba_db import init_d2ba_db
+
+    init_d2ba_db(temp_db)
+
+    assert "team_snapshots" not in _tables(temp_db)
+
+
+def test_init_predictions_db_is_idempotent(temp_db):
+    """Running the predictions migrations twice keeps the data and succeeds."""
+    from scripts.init_d2ba_db import init_predictions_db
+
+    init_predictions_db(temp_db)
+    conn = sqlite3.connect(temp_db)
+    conn.execute(
+        "INSERT INTO team_snapshots (team_id, snapshot_date, days, taken_at, app_version, data) "
+        "VALUES (1, '2026-10-22', 20, 0, 'test', '{}')"
+    )
+    conn.commit()
+    conn.close()
+
+    assert init_predictions_db(temp_db) is True
+    conn = sqlite3.connect(temp_db)
+    assert conn.execute("SELECT COUNT(*) FROM team_snapshots").fetchone()[0] == 1
+    conn.close()
+
+
+def test_team_snapshots_key_is_unique(temp_db):
+    """Two snapshots with the same team, day, window and latest match are rejected by the database."""
+    from scripts.init_d2ba_db import init_predictions_db
+
+    init_predictions_db(temp_db)
+    conn = sqlite3.connect(temp_db)
+    insert = (
+        "INSERT INTO team_snapshots (team_id, snapshot_date, days, last_match_time, taken_at, app_version, data) "
+        "VALUES (1, '2026-10-22', 20, 5, 0, 'test', '{}')"
+    )
+    conn.execute(insert)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(insert)
+    conn.close()
+
+
+def test_migration_runner_rejects_unknown_database(temp_db):
+    """Only databases listed in DATABASES can be migrated."""
+    from scripts.migrate import MigrationRunner
+
+    with pytest.raises(ValueError):
+        MigrationRunner(db_path=temp_db, database="unknown")

@@ -70,7 +70,7 @@ Redis must be running. **`npm run dev` will check automatically.**
 Black (format 120), isort (imports), Ruff (lint E,F,W,I,B,C,RUF), type hints, trailing whitespace, YAML/JSON validation
 
 ## DB
-Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql), Session: [backend/db.py](backend/db.py)
+Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql) (cache), [backend/predictions_schema.sql](backend/predictions_schema.sql) (user data, separate DB), Session: [backend/db.py](backend/db.py)
 
 ## Error Handling
 Always catch exceptions, return JSON `{error_code, message, details}` with proper HTTP status code

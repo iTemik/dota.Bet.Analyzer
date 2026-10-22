@@ -18,22 +18,29 @@ _STATEMENT_PREVIEW_LEN = 80  # characters of a statement shown in log messages
 
 logger = logging.getLogger(__name__)
 
+# Each database is instance/<name>.sqlite with migrations in backend/migrations/<folder>
+# d2ba: OpenDota cache (can be rebuilt); predictions: the user's own snapshots and predictions (back it up)
+DATABASES = {"d2ba": "", "predictions": "predictions"}
+
 
 class MigrationRunner:
     """Runs database migrations with tracking support."""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None, database: str = "d2ba"):
         """Initialize migration runner.
 
         Args:
-            db_path: Path to database file. If None, uses instance/d2ba.sqlite
+            db_path: Path to database file. If None, uses instance/<database>.sqlite
+            database: Name from DATABASES; picks the migrations folder
         """
+        if database not in DATABASES:
+            raise ValueError(f"Unknown database: {database}")
         if db_path is None:
             script_dir = Path(__file__).parent
             project_root = script_dir.parent
             instance_dir = project_root / "instance"
             instance_dir.mkdir(exist_ok=True)
-            self.db_path = str(instance_dir / "d2ba.sqlite")
+            self.db_path = str(instance_dir / f"{database}.sqlite")
         else:
             self.db_path = db_path
             # Ensure parent directory exists for custom db_path
@@ -42,7 +49,7 @@ class MigrationRunner:
 
         script_dir = Path(__file__).parent
         project_root = script_dir.parent
-        self.migrations_dir = project_root / "backend" / "migrations"
+        self.migrations_dir = project_root / "backend" / "migrations" / DATABASES[database]
 
         if not self.migrations_dir.exists():
             raise FileNotFoundError(f"Migrations directory not found: {self.migrations_dir}")
@@ -237,13 +244,19 @@ def main():
     parser.add_argument(
         "--db",
         default=None,
-        help="Path to database file (default: instance/d2ba.sqlite)",
+        help="Path to database file (default: instance/<database>.sqlite)",
+    )
+    parser.add_argument(
+        "--database",
+        default="d2ba",
+        choices=sorted(DATABASES),
+        help="Which database to migrate (default: d2ba)",
     )
 
     args = parser.parse_args()
 
     try:
-        runner = MigrationRunner(db_path=args.db)
+        runner = MigrationRunner(db_path=args.db, database=args.database)
 
         if args.command == "run":
             success = runner.run_all_pending()

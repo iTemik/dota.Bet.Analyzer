@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import backend
 from backend import create_app
-from scripts.init_d2ba_db import init_d2ba_db
+from scripts.init_d2ba_db import init_d2ba_db, init_predictions_db
 
 
 @pytest.fixture(autouse=True)
@@ -84,6 +84,7 @@ def app():
     # Initialize d2ba database in custom instance path
     d2ba_path = os.path.join(custom_instance, "d2ba.sqlite")
     init_d2ba_db(d2ba_path)
+    init_predictions_db(os.path.join(custom_instance, "predictions.sqlite"))
 
     patcher.stop()
 

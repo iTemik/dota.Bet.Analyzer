@@ -29,6 +29,8 @@ class Errors:
         "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
     )
     FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
+    FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
+    FAILED_TO_STORE_SNAPSHOT = ErrorDefinition("FAILED_TO_STORE_SNAPSHOT", "Failed to store snapshot to database")
     INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
     INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
     INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
@@ -38,6 +40,8 @@ class Errors:
     NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
     RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
+    SNAPSHOT_NOT_FOUND = ErrorDefinition("SNAPSHOT_NOT_FOUND", "Snapshot not found")
+    TEAM_ID_MISMATCH = ErrorDefinition("TEAM_ID_MISMATCH", "team_id does not match team.team_id")
     TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
     UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")

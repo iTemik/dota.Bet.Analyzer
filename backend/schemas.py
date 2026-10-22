@@ -373,6 +373,77 @@ class StatisticsResultSchema(Schema):
     )
 
 
+class SnapshotPlayerSchema(Schema):
+    """A player's numbers in a snapshot, from /api/results results[] (Team Insights reads the rank)."""
+
+    account_id = fields.Int(required=True, metadata={"description": "Player account ID"})
+    rank = fields.Int(allow_none=True, load_default=None, metadata={"description": "Leaderboard rank, null if none"})
+    match_count = fields.Int(
+        allow_none=True, load_default=None, metadata={"description": "Matches fetched for the player"}
+    )
+
+
+class SnapshotCreateSchema(Schema):
+    """Body of POST /api/snapshots: what the Compare page shows for one team."""
+
+    team_id = fields.Int(required=True, validate=validate.Range(min=1), metadata={"description": "Team ID"})
+    days = fields.Int(
+        required=True,
+        validate=validate.Range(min=1, max=365),
+        metadata={"description": "Statistics window the data was computed with"},
+    )
+    team = fields.Dict(
+        required=True,
+        metadata={"description": "The team entry of GET /api/statistics teams[] as shown (task_id is dropped)"},
+    )
+    summary = fields.Dict(
+        allow_none=True,
+        load_default=None,
+        metadata={"description": "summary of GET /api/results/{task_id}, null when it was not available"},
+    )
+    players = fields.List(
+        fields.Nested(SnapshotPlayerSchema),
+        load_default=list,
+        metadata={"description": "Per player rank and match count from GET /api/results/{task_id} results[]"},
+    )
+
+
+class SnapshotListQuerySchema(Schema):
+    """Query parameters of GET /api/snapshots."""
+
+    team_id = fields.Int(metadata={"description": "Only this team's snapshots"})
+    date_from = fields.Date(data_key="from", metadata={"description": "Only snapshots from this UTC day (YYYY-MM-DD)"})
+    date_to = fields.Date(data_key="to", metadata={"description": "Only snapshots up to this UTC day (inclusive)"})
+
+
+class SnapshotSchema(Schema):
+    """A saved team snapshot, without its data."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot ID"})
+    team_id = fields.Int(required=True, metadata={"description": "Team ID"})
+    team_name = fields.Str(allow_none=True, metadata={"description": "Team name at the time of the snapshot"})
+    snapshot_date = fields.Str(required=True, metadata={"description": "UTC day of the snapshot (YYYY-MM-DD)"})
+    days = fields.Int(required=True, metadata={"description": "Statistics window the data was computed with"})
+    last_match_time = fields.Int(
+        required=True, metadata={"description": "Team's latest league match in the window (unix seconds), 0 if none"}
+    )
+    taken_at = fields.Int(required=True, metadata={"description": "When the data was saved or last refreshed (unix)"})
+    app_version = fields.Str(required=True, metadata={"description": "Backend version that saved the data"})
+
+
+class SnapshotDetailSchema(SnapshotSchema):
+    """A saved team snapshot with its data."""
+
+    data = fields.Dict(
+        required=True, metadata={"description": "Saved data: `team`, `summary` and `players` as sent when saving"}
+    )
+
+
 # Auto-generated schemas from Pydantic models
 # These are generated at module import time to ensure they stay in sync with Pydantic models
 # If you modify the Pydantic models (Player, TeamStats, StatsResponse), these schemas
