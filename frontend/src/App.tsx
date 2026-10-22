@@ -35,6 +35,36 @@ const predictionIdFromHash = (hash: string): number | null => {
  *    - This is a background task (players_statistics_task).
  *    - It's needed to follow progress /api/stream-progress/{task_id} and get results at /api/results/{task_id}
  */
+/** Faint line-art troll face shown next to the header tagline. */
+function TrollFace() {
+  return (
+    <svg
+      className="app-tagline-troll"
+      data-testid="troll-face"
+      viewBox="0 0 64 56"
+      width="22"
+      height="19"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 24 C4 9 20 2 34 3 C51 4 61 15 59 29 C58 43 47 54 31 54 C17 54 7 45 6 35 C5 31 5 27 6 24 Z" />
+      <path d="M14 15 C18 10 25 10 29 15" />
+      <path d="M35 13 C40 8 48 9 52 14" />
+      <path d="M16 20 C20 17 25 18 28 21 C24 22 19 22 16 20 Z" />
+      <path d="M37 19 C41 16 46 16 50 19 C46 21 41 21 37 19 Z" />
+      <circle cx="25" cy="20" r="1" fill="currentColor" />
+      <circle cx="47" cy="18.5" r="1" fill="currentColor" />
+      <path d="M9 27 C16 48 48 50 58 24 C46 34 22 36 9 27 Z" />
+      <path d="M18 32 L20 40 M26 34 L27 44 M34 34 L34 45 M42 33 L41 44 M50 30 L48 39" />
+      <path d="M7 25 C8 22 10 21 12 22 M56 21 C58 20 60 22 60 24" />
+    </svg>
+  )
+}
+
 function App() {
   const team1 = useTeamInput()
   const team2 = useTeamInput()
@@ -250,6 +280,10 @@ function App() {
 
   return (
     <div className="container">
+      <div className="app-tagline">
+        <span>stealing from bookmakers since 2022</span>
+        <TrollFace />
+      </div>
       <div className="app-header">
         <h1>Dota 2 Bet Analyzer</h1>
         <div className="app-versions">
