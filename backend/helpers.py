@@ -29,15 +29,21 @@ class Errors:
         "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
     )
     FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
+    FAILED_TO_READ_PREDICTIONS = ErrorDefinition(
+        "FAILED_TO_READ_PREDICTIONS", "Failed to read predictions from database"
+    )
     FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
+    FAILED_TO_STORE_PREDICTION = ErrorDefinition("FAILED_TO_STORE_PREDICTION", "Failed to store prediction to database")
     FAILED_TO_STORE_SNAPSHOT = ErrorDefinition("FAILED_TO_STORE_SNAPSHOT", "Failed to store snapshot to database")
     INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
+    INVALID_RESULT = ErrorDefinition("INVALID_RESULT", "Map score is not a finished series of this format")
     INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
     INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
     INVALID_TEAM_ID = ErrorDefinition("INVALID_TEAM_ID", "Team ID must be a non-negative integer")
     MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
     MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
     NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
+    PREDICTION_NOT_FOUND = ErrorDefinition("PREDICTION_NOT_FOUND", "Prediction not found")
     RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
     SNAPSHOT_NOT_FOUND = ErrorDefinition("SNAPSHOT_NOT_FOUND", "Snapshot not found")

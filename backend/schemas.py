@@ -7,7 +7,7 @@ Any changes to the Pydantic models will automatically reflect in the API documen
 
 from typing import Any
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate, validates_schema
 from pydantic import BaseModel
 
 # Import Pydantic models for auto-generation (imported here to avoid circular imports later)
@@ -442,6 +442,118 @@ class SnapshotDetailSchema(SnapshotSchema):
     data = fields.Dict(
         required=True, metadata={"description": "Saved data: `team`, `summary` and `players` as sent when saving"}
     )
+
+
+class PredictionCreateSchema(Schema):
+    """Body of POST /api/predictions: a series-win prediction made from two saved team snapshots."""
+
+    team1_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 1 (POST /api/snapshots)"})
+    team2_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 2 (POST /api/snapshots)"})
+    team1_odds = fields.Float(
+        required=True,
+        validate=validate.Range(min=1, min_inclusive=False),
+        metadata={"description": "Bookmaker decimal coefficient for team 1, above 1"},
+    )
+    team2_odds = fields.Float(
+        required=True,
+        validate=validate.Range(min=1, min_inclusive=False),
+        metadata={"description": "Bookmaker decimal coefficient for team 2, above 1"},
+    )
+    best_of = fields.Int(
+        allow_none=True,
+        load_default=None,
+        validate=validate.OneOf([1, 2, 3, 5]),
+        metadata={"description": "Series format: 1, 2, 3 or 5, null when unknown (n/a)"},
+    )
+    bet_team = fields.Int(
+        allow_none=True,
+        load_default=None,
+        validate=validate.OneOf([1, 2]),
+        metadata={"description": "Team bet on to win the series (1 or 2), null for a prediction without a bet"},
+    )
+    stake = fields.Float(
+        allow_none=True,
+        load_default=None,
+        validate=validate.Range(min=0, min_inclusive=False),
+        metadata={"description": "Amount bet, only with bet_team"},
+    )
+    comment = fields.Str(load_default="", metadata={"description": "Reasoning, locked after saving"})
+
+    @validates_schema
+    def validate_bet(self, data: dict, **kwargs) -> None:
+        """Reject a stake without a bet and one snapshot used for both teams."""
+        if data.get("stake") is not None and data.get("bet_team") is None:
+            raise ValidationError("stake needs bet_team", field_name="stake")
+        if data["team1_snapshot_id"] == data["team2_snapshot_id"]:
+            raise ValidationError("team1 and team2 need different snapshots", field_name="team2_snapshot_id")
+
+
+class PredictionListQuerySchema(Schema):
+    """Query parameters of GET /api/predictions."""
+
+    status = fields.Str(
+        validate=validate.OneOf(["pending", "settled"]),
+        metadata={"description": "pending: no result yet, settled: result entered. All when omitted"},
+    )
+
+
+class PredictionReviewSchema(Schema):
+    """Body of PATCH /api/predictions/{id}: the review. Odds, bet and comment can't be changed."""
+
+    team1_maps_won = fields.Int(required=True, metadata={"description": "Maps won by team 1"})
+    team2_maps_won = fields.Int(required=True, metadata={"description": "Maps won by team 2"})
+    review_note = fields.Str(
+        allow_none=True, load_default=None, metadata={"description": "Thoughts after the match, omitted keeps it"}
+    )
+
+
+class PredictionTeamSchema(Schema):
+    """A team of a prediction as saved in its snapshot."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot the prediction was made from"})
+    team_id = fields.Int(required=True, metadata={"description": "Team ID"})
+    name = fields.Str(allow_none=True, metadata={"description": "Team name at the time of the snapshot"})
+    tag = fields.Str(allow_none=True, metadata={"description": "Team tag at the time of the snapshot"})
+    logo_url = fields.Str(allow_none=True, metadata={"description": "Team logo at the time of the snapshot"})
+
+
+class PredictionSchema(Schema):
+    """A saved prediction with its computed bet outcome."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    prediction_id = fields.Int(required=True, metadata={"description": "Prediction ID"})
+    created_at = fields.Int(required=True, metadata={"description": "When it was saved (unix seconds)"})
+    team1 = fields.Nested(PredictionTeamSchema, required=True)
+    team2 = fields.Nested(PredictionTeamSchema, required=True)
+    team1_odds = fields.Float(required=True, metadata={"description": "Bookmaker coefficient for team 1"})
+    team2_odds = fields.Float(required=True, metadata={"description": "Bookmaker coefficient for team 2"})
+    best_of = fields.Int(allow_none=True, metadata={"description": "Series format: 1, 2, 3 or 5, null when unknown"})
+    bet_team = fields.Int(allow_none=True, metadata={"description": "Team bet on (1 or 2), null without a bet"})
+    stake = fields.Float(allow_none=True, metadata={"description": "Amount bet, null if not given"})
+    comment = fields.Str(required=True, metadata={"description": "Reasoning written before the match"})
+    team1_maps_won = fields.Int(allow_none=True, metadata={"description": "Maps won by team 1, null until reviewed"})
+    team2_maps_won = fields.Int(allow_none=True, metadata={"description": "Maps won by team 2, null until reviewed"})
+    review_note = fields.Str(allow_none=True, metadata={"description": "Thoughts after the match"})
+    bet_won = fields.Bool(
+        allow_none=True,
+        metadata={"description": "Whether the bet team won the series (a bo2 draw loses), null if pending or no bet"},
+    )
+
+
+class PredictionDetailSchema(PredictionSchema):
+    """A saved prediction with both snapshots and their data."""
+
+    team1_snapshot = fields.Nested(SnapshotDetailSchema, required=True)
+    team2_snapshot = fields.Nested(SnapshotDetailSchema, required=True)
 
 
 # Auto-generated schemas from Pydantic models

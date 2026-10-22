@@ -137,14 +137,14 @@ def _tables(db_path):
         conn.close()
 
 
-def test_init_predictions_db_creates_team_snapshots_only(temp_db):
+def test_init_predictions_db_creates_its_tables_only(temp_db):
     """predictions.sqlite gets its own migrations and none of the d2ba cache tables."""
     from scripts.init_d2ba_db import init_predictions_db
 
     assert init_predictions_db(temp_db) is True
 
     tables = _tables(temp_db)
-    assert "team_snapshots" in tables
+    assert {"team_snapshots", "predictions"} <= tables
     assert "pro_players" not in tables
     assert "teams" not in tables
 
@@ -155,7 +155,7 @@ def test_init_d2ba_db_does_not_create_predictions_tables(temp_db):
 
     init_d2ba_db(temp_db)
 
-    assert "team_snapshots" not in _tables(temp_db)
+    assert not {"team_snapshots", "predictions"} & _tables(temp_db)
 
 
 def test_init_predictions_db_is_idempotent(temp_db):

@@ -2,7 +2,8 @@
 
 A snapshot is identified by team + UTC day + days window + the team's latest league match. The data only changes
 when the team plays, the window changes or the day changes, so saving the same key again refreshes the stored row
-(pub matches and ranks still move during the day) instead of adding a new one.
+(pub matches and ranks still move during the day) instead of adding a new one. Once a prediction uses a snapshot it
+is locked: saving its key again returns it unchanged.
 """
 
 import json
@@ -38,6 +39,8 @@ def save_snapshot(
 ) -> tuple[dict[str, Any], bool]:
     """Save a team snapshot, or refresh the one with the same team, day, window and latest league match.
 
+    A snapshot already used by a prediction is not refreshed and is returned as it is.
+
     Args:
         team_id: Team the snapshot belongs to
         days: Statistics window the data was computed with
@@ -64,10 +67,11 @@ def save_snapshot(
     ).fetchone()
     if existing:
         snapshot_id = existing["snapshot_id"]
-        db.execute(
-            "UPDATE team_snapshots SET taken_at = ?, app_version = ?, data = ? WHERE snapshot_id = ?",
-            (now, app_version, data, snapshot_id),
-        )
+        if not is_snapshot_used(snapshot_id):
+            db.execute(
+                "UPDATE team_snapshots SET taken_at = ?, app_version = ?, data = ? WHERE snapshot_id = ?",
+                (now, app_version, data, snapshot_id),
+            )
     else:
         cursor = db.execute(
             "INSERT INTO team_snapshots (team_id, snapshot_date, days, last_match_time, taken_at, app_version, data) "
@@ -79,6 +83,26 @@ def save_snapshot(
 
     row = db.execute(f"SELECT {_SUMMARY_COLUMNS} FROM team_snapshots WHERE snapshot_id = ?", (snapshot_id,)).fetchone()
     return _row_to_dict(row), existing is None
+
+
+def is_snapshot_used(snapshot_id: int) -> bool:
+    """Check whether a prediction points at the snapshot (then its data is locked).
+
+    Args:
+        snapshot_id: Snapshot to check
+
+    Returns:
+        True when at least one prediction uses the snapshot
+    """
+    row = (
+        get_predictions_db()
+        .execute(
+            "SELECT 1 FROM predictions WHERE team1_snapshot_id = ? OR team2_snapshot_id = ? LIMIT 1",
+            (snapshot_id, snapshot_id),
+        )
+        .fetchone()
+    )
+    return row is not None
 
 
 def list_snapshots(

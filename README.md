@@ -168,7 +168,7 @@ dota.Bet.Analyzer/
 ├── instance/               # Runtime data (git ignored)
 │   ├── opendota.sqlite     # Main database
 │   ├── d2ba.sqlite         # Pro players/teams database (OpenDota cache)
-│   └── predictions.sqlite  # Your snapshots (back it up)
+│   └── predictions.sqlite  # Your snapshots and predictions (back it up)
 ├── package.json            # npm scripts & dependencies
 ├── requirements.txt        # Python dependencies
 └── README.md              # You are here!
@@ -383,7 +383,7 @@ This project uses SQLite for local development with **three separate databases**
 
 1. **opendota.sqlite** - Main OpenDota schema database
 2. **d2ba.sqlite** - Statistics database (OpenDota cache, can be rebuilt)
-3. **predictions.sqlite** - Your own data: team snapshots. Back it up; it can't be fetched again
+3. **predictions.sqlite** - Your own data: team snapshots and predictions. Back it up; it can't be fetched again
 
 ### Main Database (opendota.sqlite)
 
@@ -423,7 +423,7 @@ It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `m
 ### Predictions Database (predictions.sqlite)
 
 The same script creates `instance/predictions.sqlite` from the migrations in `backend/migrations/predictions/`
-(schema: `backend/predictions_schema.sql`). It holds `team_snapshots`.
+(schema: `backend/predictions_schema.sql`). It holds `team_snapshots` and `predictions`.
 
 **Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
 `/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
@@ -630,6 +630,13 @@ Async task for comprehensive player analysis:
 - `GET /snapshots?team_id=&from=&to=` lists them by team and day, `GET /snapshots/<id>` returns one with its data
 - Stored in `predictions.sqlite`, no OpenDota requests
 
+#### Prediction Log (`/predictions`)
+- `POST /predictions` saves a series-win prediction from two snapshots: odds per team, `best_of` (1, 2, 3, 5 or null when unknown), bet team, optional `stake`, comment
+- Odds, bet and comment are locked; a snapshot used by a prediction is no longer refreshed
+- `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of` when known) and a review note
+- `GET /predictions?status=pending|settled` lists them with computed `bet_won`, `GET /predictions/<id>` includes both snapshots
+- `DELETE /predictions/<id>` removes one, its snapshots stay
+
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
 - Stores player data in SQLite database for reference
@@ -737,7 +744,7 @@ Stored/updated 1523 teams in 0.234s (6505.1 records/sec)
 - Cleanup guaranteed even if tests fail
 
 **Database files used:**
-- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams), `instance/predictions.sqlite` (snapshots)
+- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams), `instance/predictions.sqlite` (snapshots, predictions)
 - **Testing**: Temporary directories created per test, cleaned up automatically
 
 This isolation ensures:

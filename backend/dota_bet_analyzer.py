@@ -10,6 +10,14 @@ from backend import __version__
 from backend.config import Config
 from backend.helpers import Errors, api_error
 from backend.logging_config import setup_logging
+from backend.predictions import (
+    SnapshotMissingError,
+    create_prediction,
+    delete_prediction,
+    get_prediction,
+    list_predictions,
+    save_review,
+)
 from backend.pro_players import (
     fetch_pro_players_from_api,
     fetch_teams_from_api,
@@ -19,6 +27,11 @@ from backend.pro_players import (
 from backend.schemas import (
     ErrorSchema,
     PlayerStatisticsQuerySchema,
+    PredictionCreateSchema,
+    PredictionDetailSchema,
+    PredictionListQuerySchema,
+    PredictionReviewSchema,
+    PredictionSchema,
     SnapshotCreateSchema,
     SnapshotDetailSchema,
     SnapshotListQuerySchema,
@@ -927,6 +940,108 @@ def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
     if snapshot is None:
         return api_error(404, Errors.SNAPSHOT_NOT_FOUND, snapshot_id=snapshot_id)
     return jsonify(snapshot), 200
+
+
+@bp.route("/predictions", methods=["POST"])
+@bp.arguments(PredictionCreateSchema)
+@bp.response(201, PredictionSchema, description="Prediction saved")
+@bp.alt_response(404, schema=ErrorSchema, description="Snapshot not found")
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid body")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def post_prediction(args) -> tuple[Response, int]:
+    """Save a series-win prediction made from two saved team snapshots.
+
+    Odds, `best_of`, bet and comment are locked from then on, and so are both snapshots (saving their key again no
+    longer refreshes them). No OpenDota requests.
+    """
+    try:
+        prediction = create_prediction(**args)
+    except SnapshotMissingError as e:
+        return api_error(404, Errors.SNAPSHOT_NOT_FOUND, snapshot_id=e.snapshot_id)
+    except Exception as e:
+        logger.error(f"Error storing prediction: {e}")
+        return api_error(500, Errors.FAILED_TO_STORE_PREDICTION, e)
+    return jsonify(prediction), 201
+
+
+@bp.route("/predictions", methods=["GET"])
+@bp.arguments(PredictionListQuerySchema, location="query")
+@bp.response(200, PredictionSchema(many=True))
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid query parameters")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def get_predictions(args) -> tuple[Response, int]:
+    """List predictions, newest first, with team names and logos from their snapshots and computed `bet_won`.
+
+    `status=pending` lists those without a result, `status=settled` those with one.
+    """
+    try:
+        return jsonify(list_predictions(args.get("status"))), 200
+    except Exception as e:
+        logger.error(f"Error listing predictions: {e}")
+        return api_error(500, Errors.FAILED_TO_READ_PREDICTIONS, e)
+
+
+@bp.route("/predictions/<int:prediction_id>", methods=["GET"])
+@bp.response(200, PredictionDetailSchema)
+@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
+    """Get one prediction with both snapshots and their data, for the review page."""
+    try:
+        prediction = get_prediction(prediction_id)
+    except Exception as e:
+        logger.error(f"Error reading prediction {prediction_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_READ_PREDICTIONS, e)
+    if prediction is None:
+        return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
+    return jsonify(prediction), 200
+
+
+@bp.route("/predictions/<int:prediction_id>", methods=["PATCH"])
+@bp.arguments(PredictionReviewSchema)
+@bp.response(200, PredictionSchema, description="Review saved")
+@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or the score does not fit best_of")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
+    """Save the review: the actual result as maps won by each team, and a review note.
+
+    The score must be a finished series of the prediction's format (bo3: 2-0, 2-1, 1-2, 0-2, bo2: 2-0, 1-1, 0-2).
+    With an unknown format any score with at least one map is accepted.
+    Other fields (odds, bet, comment) are rejected.
+    """
+    try:
+        prediction = save_review(prediction_id, args["team1_maps_won"], args["team2_maps_won"], args.get("review_note"))
+    except ValueError as e:
+        return api_error(
+            422,
+            Errors.INVALID_RESULT,
+            team1_maps_won=args["team1_maps_won"],
+            team2_maps_won=args["team2_maps_won"],
+            reason=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error saving review of prediction {prediction_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_STORE_PREDICTION, e)
+    if prediction is None:
+        return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
+    return jsonify(prediction), 200
+
+
+@bp.route("/predictions/<int:prediction_id>", methods=["DELETE"])
+@bp.response(204, description="Prediction deleted, its snapshots stay")
+@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def remove_prediction(prediction_id: int) -> tuple[Response, int] | tuple[str, int]:
+    """Delete a prediction made by mistake. Its snapshots stay (and stay locked if another prediction uses them)."""
+    try:
+        deleted = delete_prediction(prediction_id)
+    except Exception as e:
+        logger.error(f"Error deleting prediction {prediction_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_STORE_PREDICTION, e)
+    if not deleted:
+        return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
+    return "", 204
 
 
 if __name__ == "__main__":
