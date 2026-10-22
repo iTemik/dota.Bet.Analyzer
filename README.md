@@ -418,7 +418,7 @@ python scripts/init_d2ba_db.py
 ```
 
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
-It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
+It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`) and `heroes`; `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
 
 ### Predictions Database (predictions.sqlite)
 
@@ -454,6 +454,7 @@ curl -X POST http://localhost:5000/api/teams/sync
 Or use your API client to send POST requests to:
 - `http://localhost:5000/api/pro-players/sync` - Sync professional players
 - `http://localhost:5000/api/teams/sync` - Sync all teams (handles pagination automatically)
+- `http://localhost:5000/api/heroes/sync` - Refresh the hero list (also filled at startup when empty)
 
 See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
 
@@ -636,6 +637,10 @@ Async task for comprehensive player analysis:
 - `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of` when known) and a review note
 - `GET /predictions?status=pending|settled` lists them with computed `bet_won`, `GET /predictions/<id>` includes both snapshots
 - `DELETE /predictions/<id>` removes one, its snapshots stay
+
+#### Heroes (`/heroes`)
+- `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
+- Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API

@@ -60,3 +60,11 @@ CREATE TABLE IF NOT EXISTS match_players (
     account_id INTEGER,
     PRIMARY KEY (match_id, player_slot)
 );
+
+-- Heroes from /constants/heroes (new heroes are rare, so no TTL)
+CREATE TABLE IF NOT EXISTS heroes (
+    hero_id INTEGER PRIMARY KEY,   -- OpenDota id
+    name TEXT NOT NULL,            -- internal name, e.g. npc_dota_hero_antimage
+    localized_name TEXT NOT NULL,  -- e.g. Anti-Mage
+    icon TEXT NOT NULL             -- full icon URL
+);

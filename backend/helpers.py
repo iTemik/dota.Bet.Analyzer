@@ -21,6 +21,7 @@ class Errors:
     COMPUTATION_ERROR = ErrorDefinition(
         "COMPUTATION_ERROR", "An unexpected error occurred during statistics computation"
     )
+    FAILED_TO_FETCH_HEROES = ErrorDefinition("FAILED_TO_FETCH_HEROES", "Failed to fetch heroes from API")
     FAILED_TO_FETCH_PRO_PLAYERS = ErrorDefinition("FAILED_TO_FETCH_PRO_PLAYERS", "Failed to fetch pro players from API")
     FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
     FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
@@ -29,10 +30,12 @@ class Errors:
         "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
     )
     FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
+    FAILED_TO_READ_HEROES = ErrorDefinition("FAILED_TO_READ_HEROES", "Failed to read heroes from database")
     FAILED_TO_READ_PREDICTIONS = ErrorDefinition(
         "FAILED_TO_READ_PREDICTIONS", "Failed to read predictions from database"
     )
     FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
+    FAILED_TO_STORE_HEROES = ErrorDefinition("FAILED_TO_STORE_HEROES", "Failed to store heroes to database")
     FAILED_TO_STORE_PREDICTION = ErrorDefinition("FAILED_TO_STORE_PREDICTION", "Failed to store prediction to database")
     FAILED_TO_STORE_SNAPSHOT = ErrorDefinition("FAILED_TO_STORE_SNAPSHOT", "Failed to store snapshot to database")
     INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")

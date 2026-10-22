@@ -321,6 +321,15 @@ class SyncResponseSchema(Schema):
     message = fields.Str(required=True, metadata={"description": "Operation result message"})
 
 
+class HeroSchema(Schema):
+    """Hero from the OpenDota hero list."""
+
+    hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
+    name = fields.Str(required=True, metadata={"description": "Internal name, e.g. npc_dota_hero_antimage"})
+    localized_name = fields.Str(required=True, metadata={"description": "Display name, e.g. Anti-Mage"})
+    icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
+
+
 class PlayerResultSchema(Schema):
     """Schema for individual player result entry."""
 
