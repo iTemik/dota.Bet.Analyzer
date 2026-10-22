@@ -309,6 +309,7 @@ pre {
   position: absolute;
   left: calc(100% + 0.75rem);
   top: 0;
+  width: 66px;
   opacity: 0.35;
   pointer-events: none;
 }
