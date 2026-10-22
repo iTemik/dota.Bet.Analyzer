@@ -17,3 +17,24 @@ CREATE TABLE IF NOT EXISTS team_snapshots (
     data TEXT NOT NULL,
     UNIQUE (team_id, snapshot_date, days, last_match_time)
 );
+
+-- Prediction: a series-win bet (or a prediction without a bet, bet_team NULL) made from two team snapshots.
+-- Odds, best_of, bet_team, stake and comment are locked after saving, a snapshot used here is no longer refreshed.
+-- team1_maps_won / team2_maps_won: the actual result (bo3 2-1 = 2 and 1), NULL until reviewed.
+-- Winner, bet outcome and profit are computed from these, not stored.
+CREATE TABLE IF NOT EXISTS predictions (
+    prediction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at INTEGER NOT NULL,
+    team1_snapshot_id INTEGER NOT NULL REFERENCES team_snapshots(snapshot_id),
+    team2_snapshot_id INTEGER NOT NULL REFERENCES team_snapshots(snapshot_id),
+    team1_odds REAL NOT NULL,
+    team2_odds REAL NOT NULL,
+    best_of INTEGER NOT NULL CHECK (best_of IN (1, 2, 3, 5)),
+    bet_team INTEGER CHECK (bet_team IN (1, 2)),
+    stake REAL,
+    comment TEXT NOT NULL DEFAULT '',
+    team1_maps_won INTEGER,
+    team2_maps_won INTEGER,
+    review_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_predictions_created ON predictions(created_at);
