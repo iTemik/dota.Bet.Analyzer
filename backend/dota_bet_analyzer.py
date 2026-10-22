@@ -9,6 +9,7 @@ from flask_smorest import Blueprint
 from backend import __version__
 from backend.config import Config
 from backend.helpers import Errors, api_error
+from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
 from backend.logging_config import setup_logging
 from backend.predictions import (
     SnapshotMissingError,
@@ -26,6 +27,7 @@ from backend.pro_players import (
 )
 from backend.schemas import (
     ErrorSchema,
+    HeroSchema,
     PlayerStatisticsQuerySchema,
     PredictionCreateSchema,
     PredictionDetailSchema,
@@ -812,6 +814,44 @@ def sync_teams() -> tuple[Response, int]:
         return jsonify({"synced_count": count, "message": f"Stored {count} teams"}), 200
     except Exception as e:
         return api_error(500, Errors.FAILED_TO_STORE_TEAMS, e)
+
+
+@bp.route("/heroes", methods=["GET"])
+@bp.response(200, HeroSchema(many=True))
+@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
+def get_heroes() -> tuple[Response, int]:
+    """List the cached heroes (id, names, icon URL) ordered by display name.
+
+    Reads d2ba.sqlite only, no OpenDota request. The list is filled at startup when empty, or by POST /heroes/sync.
+    """
+    try:
+        return jsonify(list_heroes()), 200
+    except Exception as e:
+        return api_error(500, Errors.FAILED_TO_READ_HEROES, e)
+
+
+@bp.route("/heroes/sync", methods=["POST"])
+@bp.response(200, SyncResponseSchema)
+@bp.alt_response(503, schema=ErrorSchema, description="API connection failed")
+@bp.alt_response(502, schema=ErrorSchema, description="Invalid API response")
+@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
+def sync_heroes() -> tuple[Response, int]:
+    """Refresh the hero list from OpenDota /constants/heroes (one request).
+
+    Returns the number of heroes stored.
+    """
+    try:
+        heroes = fetch_heroes_from_api()
+    except ConnectionError as e:
+        return api_error(503, Errors.FAILED_TO_FETCH_HEROES, e)
+    except ValueError as e:
+        return api_error(502, Errors.FAILED_TO_FETCH_HEROES, e)
+
+    try:
+        count = store_heroes(heroes)
+        return jsonify({"synced_count": count, "message": f"Stored {count} heroes"}), 200
+    except Exception as e:
+        return api_error(500, Errors.FAILED_TO_STORE_HEROES, e)
 
 
 @bp.route("/teams/search", methods=["GET"])

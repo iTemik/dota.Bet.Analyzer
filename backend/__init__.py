@@ -221,3 +221,7 @@ def _init_extensions(app):
     # Sync pro players on app startup (only in production, not in test mode)
     if app.config.get("TESTING") is not True:
         sync_pro_players_on_startup(app)
+
+        from .heroes import sync_heroes_on_startup
+
+        sync_heroes_on_startup(app)
