@@ -698,6 +698,16 @@ npm test          # Run tests
   - Average player rank (lower is better - inverted color logic)
   - Low rank players count (players outside of top 200 in the leaderboards. Lower rank = better)
 
+#### Tabs
+- **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
+- The Predictions list itself comes in a later update
+
+#### Log Prediction
+- Framed panel under Team Comparison and Team Insights, enabled once the player statistics of both teams have loaded
+- **From bookmaker** box: coefficient per team (above 1, "1,85" also accepted) and series (bo1, bo2, bo3, bo5 or n/a)
+- **My decision**: bet on team 1, team 2 or no bet, stake (required with a bet) and a comment
+- **Save prediction** saves both team snapshots, then the prediction, and links to it; **Save snapshots only** skips the prediction
+
 #### Color Highlighting
 - **Green (Positive)**: Better performance (higher rating, higher win %, lower rank)
 - **Red (Negative)**: Worse performance (lower rating, lower win %, higher rank)

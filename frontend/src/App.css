@@ -335,3 +335,176 @@ pre {
   width: 100px;
   object-fit: contain;
 }
+
+/* Tab bar under the header: Compare | Predictions */
+.tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-self: flex-start;
+}
+
+.tab {
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tab.active {
+  background: white;
+  color: #667eea;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+/* Log prediction panel under the comparison tables */
+.prediction-panel {
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  text-align: left;
+}
+
+.results-section .prediction-panel h2 {
+  margin-bottom: 1rem;
+}
+
+.prediction-hint {
+  opacity: 0.8;
+  margin-top: 0;
+}
+
+.prediction-fieldset,
+.decision-box {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.prediction-fieldset:disabled {
+  opacity: 0.6;
+}
+
+.decision-box legend {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* Values copied from the bookmaker: own box with a different background */
+.bookmaker-box {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.bookmaker-box legend {
+  font-weight: 600;
+  padding: 0 0.5rem;
+}
+
+.prediction-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  align-items: flex-start;
+}
+
+.prediction-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 1rem;
+}
+
+.prediction-field > span {
+  font-weight: 600;
+}
+
+.prediction-field input[type='text'] {
+  width: 9rem;
+}
+
+.prediction-field select {
+  padding: 0.7rem;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.prediction-field textarea {
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.bet-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 0.6rem;
+  font-weight: normal;
+}
+
+.bet-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: normal;
+  font-size: 1rem;
+}
+
+.field-error {
+  color: #ffd0d0;
+  font-size: 0.85rem;
+}
+
+.prediction-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+
+.secondary-btn {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.prediction-saved a {
+  color: white;
+  font-weight: 600;
+}
+
+.prediction-panel .error-message {
+  margin-top: 1rem;
+  max-width: none;
+}
