@@ -1,7 +1,7 @@
 """Prediction log: series-win bets made from two team snapshots, saved in predictions.sqlite.
 
 Odds, series format, bet, stake and comment are locked once saved. Only the review (maps won by each team and a
-review note) can be changed later. Bet outcome and profit are computed from the stored values, not stored.
+review note) can be changed later. Whether the bet won is computed from the stored values, not stored.
 """
 
 import json
@@ -37,13 +37,14 @@ class SnapshotMissingError(LookupError):
         self.snapshot_id = snapshot_id
 
 
-def is_valid_result(best_of: int, team1_maps_won: int, team2_maps_won: int) -> bool:
+def is_valid_result(best_of: Optional[int], team1_maps_won: int, team2_maps_won: int) -> bool:
     """Check that a map score is a finished series of the given format.
 
     bo1/bo3/bo5: one team won (best_of + 1) / 2 maps and the other fewer. bo2: both maps were played (2-0, 1-1, 0-2).
+    Unknown format: any score with at least one map played.
 
     Args:
-        best_of: Series format (1, 2, 3 or 5)
+        best_of: Series format (1, 2, 3 or 5), None when unknown
         team1_maps_won: Maps won by team 1
         team2_maps_won: Maps won by team 2
 
@@ -52,6 +53,8 @@ def is_valid_result(best_of: int, team1_maps_won: int, team2_maps_won: int) -> b
     """
     if team1_maps_won < 0 or team2_maps_won < 0:
         return False
+    if best_of is None:
+        return team1_maps_won + team2_maps_won > 0
     if best_of == 2:
         return team1_maps_won + team2_maps_won == 2
     to_win = (best_of + 1) // 2
@@ -65,26 +68,19 @@ def series_winner(team1_maps_won: Optional[int], team2_maps_won: Optional[int]) 
     return 1 if team1_maps_won > team2_maps_won else 2
 
 
-def bet_outcome(prediction: dict[str, Any]) -> tuple[Optional[bool], Optional[float]]:
-    """Compute whether the bet won and its profit.
-
-    A bo2 draw loses a series-win bet.
+def bet_won(prediction: dict[str, Any]) -> Optional[bool]:
+    """Compute whether the bet team won the series. A draw (bo2 1-1) loses a series-win bet.
 
     Args:
-        prediction: Row with bet_team, stake, odds and maps won
+        prediction: Row with bet_team and maps won
 
     Returns:
-        (bet_won, profit): both None while pending or without a bet, profit None without a stake
+        True or False, None while pending or without a bet
     """
     bet_team = prediction["bet_team"]
     if bet_team is None or prediction["team1_maps_won"] is None:
-        return None, None
-    bet_won = series_winner(prediction["team1_maps_won"], prediction["team2_maps_won"]) == bet_team
-    stake = prediction["stake"]
-    if stake is None:
-        return bet_won, None
-    odds = prediction["team1_odds"] if bet_team == 1 else prediction["team2_odds"]
-    return bet_won, round(stake * (odds - 1), 2) if bet_won else -stake
+        return None
+    return bool(series_winner(prediction["team1_maps_won"], prediction["team2_maps_won"]) == bet_team)
 
 
 def _team_info(snapshot_id: int, team_id: int, data: str) -> dict[str, Any]:
@@ -100,7 +96,7 @@ def _team_info(snapshot_id: int, team_id: int, data: str) -> dict[str, Any]:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    """Convert a joined prediction row to a response dict with computed bet_won and profit."""
+    """Convert a joined prediction row to a response dict with computed bet_won."""
     raw = dict(row)
     prediction = {
         "prediction_id": raw["prediction_id"],
@@ -117,7 +113,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "team2_maps_won": raw["team2_maps_won"],
         "review_note": raw["review_note"],
     }
-    prediction["bet_won"], prediction["profit"] = bet_outcome(prediction)
+    prediction["bet_won"] = bet_won(prediction)
     return prediction
 
 
@@ -132,7 +128,7 @@ def create_prediction(
     team2_snapshot_id: int,
     team1_odds: float,
     team2_odds: float,
-    best_of: int,
+    best_of: Optional[int],
     bet_team: Optional[int],
     stake: Optional[float],
     comment: str,
@@ -144,7 +140,7 @@ def create_prediction(
         team2_snapshot_id: Snapshot of team 2
         team1_odds: Bookmaker decimal coefficient for team 1
         team2_odds: Bookmaker decimal coefficient for team 2
-        best_of: Series format (1, 2, 3 or 5)
+        best_of: Series format (1, 2, 3 or 5), None when unknown
         bet_team: Team bet on to win the series (1 or 2), None for a prediction without a bet
         stake: Amount bet, None if not given
         comment: Reasoning
@@ -232,7 +228,9 @@ def save_review(
     if prediction is None:
         return None
     if not is_valid_result(prediction["best_of"], team1_maps_won, team2_maps_won):
-        raise ValueError(f"{team1_maps_won}-{team2_maps_won} is not a result of a bo{prediction['best_of']} series")
+        raise ValueError(
+            f"{team1_maps_won}-{team2_maps_won} is not a result of a bo{prediction['best_of'] or '?'} series"
+        )
     db = get_predictions_db()
     db.execute(
         "UPDATE predictions SET team1_maps_won = ?, team2_maps_won = ?, review_note = COALESCE(?, review_note) "

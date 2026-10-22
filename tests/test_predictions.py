@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.predictions import bet_outcome, is_valid_result
+from backend.predictions import bet_won, is_valid_result
 from tests.test_snapshots import DAY1, post_snapshot, snapshot_body
 
 
@@ -61,7 +61,8 @@ class TestCreatePrediction:
         assert (data["bet_team"], data["stake"]) == (1, 100)
         assert data["comment"] == "Stable core, stand-ins on the other side"
         assert data["team1_maps_won"] is None and data["team2_maps_won"] is None
-        assert data["bet_won"] is None and data["profit"] is None
+        assert data["bet_won"] is None
+        assert "profit" not in data
 
     def test_prediction_without_bet(self, client, snapshots):
         body = prediction_body(snapshots, bet_team=None, stake=None)
@@ -101,7 +102,18 @@ class TestCreatePrediction:
 
         assert post_prediction(client, body).status_code == 422
 
-    @pytest.mark.parametrize("missing", ["team1_snapshot_id", "team2_snapshot_id", "team1_odds", "best_of"])
+    @pytest.mark.parametrize("best_of", [None, "missing"])
+    def test_unknown_series_format(self, client, snapshots, best_of):
+        body = prediction_body(snapshots, best_of=best_of)
+        if best_of == "missing":
+            del body["best_of"]
+
+        response = post_prediction(client, body)
+
+        assert response.status_code == 201
+        assert response.get_json()["best_of"] is None
+
+    @pytest.mark.parametrize("missing", ["team1_snapshot_id", "team2_snapshot_id", "team1_odds"])
     def test_missing_field_returns_422(self, client, snapshots, missing):
         body = prediction_body(snapshots)
         del body[missing]
@@ -216,7 +228,10 @@ class TestReview:
         """Save a prediction and return its id."""
         return post_prediction(client, prediction_body(snapshots, **changes)).get_json()["prediction_id"]
 
-    @pytest.mark.parametrize(("best_of", "score"), [(1, (1, 0)), (2, (1, 1)), (3, (2, 1)), (3, (0, 2)), (5, (3, 2))])
+    @pytest.mark.parametrize(
+        ("best_of", "score"),
+        [(1, (1, 0)), (2, (1, 1)), (3, (2, 1)), (3, (0, 2)), (5, (3, 2)), (None, (4, 1)), (None, (1, 1))],
+    )
     def test_valid_result_is_saved(self, client, snapshots, best_of, score):
         prediction_id = self.create(client, snapshots, best_of=best_of)
 
@@ -232,7 +247,7 @@ class TestReview:
 
     @pytest.mark.parametrize(
         ("best_of", "score"),
-        [(3, (3, 0)), (3, (2, 2)), (3, (1, 1)), (1, (1, 1)), (2, (2, 1)), (5, (2, 1)), (3, (-1, 2))],
+        [(3, (3, 0)), (3, (2, 2)), (3, (1, 1)), (1, (1, 1)), (2, (2, 1)), (5, (2, 1)), (3, (-1, 2)), (None, (0, 0))],
     )
     def test_invalid_result_returns_422(self, client, snapshots, best_of, score):
         prediction_id = self.create(client, snapshots, best_of=best_of)
@@ -278,27 +293,25 @@ class TestReview:
         assert data["review_note"] == "n"
 
     @pytest.mark.parametrize(
-        ("changes", "score", "bet_won", "profit"),
+        ("changes", "score", "expected"),
         [
-            ({}, (2, 1), True, 85.0),  # bet on team 1 at 1.85, won
-            ({}, (0, 2), False, -100.0),  # lost the stake
-            ({"bet_team": 2}, (1, 2), True, 105.0),  # team 2 at 2.05
-            ({"bet_team": None, "stake": None}, (2, 0), None, None),  # no bet
-            ({"stake": None}, (2, 0), True, None),  # bet without a stake
-            ({"best_of": 2}, (1, 1), False, -100.0),  # a bo2 draw loses a series-win bet
+            ({}, (2, 1), True),  # bet on team 1, won
+            ({}, (0, 2), False),
+            ({"bet_team": 2}, (1, 2), True),
+            ({"bet_team": None, "stake": None}, (2, 0), None),  # no bet
+            ({"stake": None}, (2, 0), True),  # bet without a stake
+            ({"best_of": 2}, (1, 1), False),  # a bo2 draw loses a series-win bet
         ],
     )
-    def test_bet_outcome(self, client, snapshots, changes, score, bet_won, profit):
+    def test_bet_won(self, client, snapshots, changes, score, expected):
         prediction_id = self.create(client, snapshots, **changes)
 
         data = client.patch(
             f"/api/predictions/{prediction_id}", json={"team1_maps_won": score[0], "team2_maps_won": score[1]}
         ).get_json()
 
-        assert data["bet_won"] is bet_won
-        assert data["profit"] == profit
-        listed = client.get("/api/predictions").get_json()[0]
-        assert (listed["bet_won"], listed["profit"]) == (bet_won, profit)
+        assert data["bet_won"] is expected
+        assert client.get("/api/predictions").get_json()[0]["bet_won"] is expected
 
     def test_unknown_id_returns_404(self, client):
         response = client.patch("/api/predictions/12345", json={"team1_maps_won": 2, "team2_maps_won": 0})
@@ -329,6 +342,7 @@ class TestHelpers:
             (2, [(2, 0), (1, 1), (0, 2)], [(1, 0), (2, 1), (0, 0)]),
             (3, [(2, 0), (2, 1), (1, 2), (0, 2)], [(3, 0), (2, 2), (1, 0), (1, 1)]),
             (5, [(3, 0), (3, 1), (3, 2), (2, 3)], [(3, 3), (4, 1), (2, 2), (2, 0)]),
+            (None, [(1, 0), (2, 1), (1, 1), (0, 3)], [(0, 0), (-1, 2)]),
         ],
     )
     def test_is_valid_result(self, best_of, valid, invalid):
@@ -336,16 +350,7 @@ class TestHelpers:
         assert not any(is_valid_result(best_of, *score) for score in invalid)
 
     def test_pending_has_no_outcome(self):
-        prediction = {
-            "bet_team": 1,
-            "stake": 10,
-            "team1_odds": 2.0,
-            "team2_odds": 2.0,
-            "team1_maps_won": None,
-            "team2_maps_won": None,
-        }
-
-        assert bet_outcome(prediction) == (None, None)
+        assert bet_won({"bet_team": 1, "team1_maps_won": None, "team2_maps_won": None}) is None
 
 
 def test_predictions_table_is_in_predictions_db_only(app, client, snapshots):

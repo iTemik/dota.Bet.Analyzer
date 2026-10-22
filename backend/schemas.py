@@ -460,7 +460,10 @@ class PredictionCreateSchema(Schema):
         metadata={"description": "Bookmaker decimal coefficient for team 2, above 1"},
     )
     best_of = fields.Int(
-        required=True, validate=validate.OneOf([1, 2, 3, 5]), metadata={"description": "Series format: 1, 2, 3 or 5"}
+        allow_none=True,
+        load_default=None,
+        validate=validate.OneOf([1, 2, 3, 5]),
+        metadata={"description": "Series format: 1, 2, 3 or 5, null when unknown (n/a)"},
     )
     bet_team = fields.Int(
         allow_none=True,
@@ -533,7 +536,7 @@ class PredictionSchema(Schema):
     team2 = fields.Nested(PredictionTeamSchema, required=True)
     team1_odds = fields.Float(required=True, metadata={"description": "Bookmaker coefficient for team 1"})
     team2_odds = fields.Float(required=True, metadata={"description": "Bookmaker coefficient for team 2"})
-    best_of = fields.Int(required=True, metadata={"description": "Series format: 1, 2, 3 or 5"})
+    best_of = fields.Int(allow_none=True, metadata={"description": "Series format: 1, 2, 3 or 5, null when unknown"})
     bet_team = fields.Int(allow_none=True, metadata={"description": "Team bet on (1 or 2), null without a bet"})
     stake = fields.Float(allow_none=True, metadata={"description": "Amount bet, null if not given"})
     comment = fields.Str(required=True, metadata={"description": "Reasoning written before the match"})
@@ -543,10 +546,6 @@ class PredictionSchema(Schema):
     bet_won = fields.Bool(
         allow_none=True,
         metadata={"description": "Whether the bet team won the series (a bo2 draw loses), null if pending or no bet"},
-    )
-    profit = fields.Float(
-        allow_none=True,
-        metadata={"description": "stake * (odds - 1) when won, -stake when lost, null if pending, no bet or no stake"},
     )
 
 

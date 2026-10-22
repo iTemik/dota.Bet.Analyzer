@@ -945,7 +945,7 @@ def post_prediction(args) -> tuple[Response, int]:
 @bp.alt_response(422, schema=ErrorSchema, description="Invalid query parameters")
 @bp.alt_response(500, schema=ErrorSchema, description="Database error")
 def get_predictions(args) -> tuple[Response, int]:
-    """List predictions, newest first, with team names and logos from their snapshots and computed `bet_won`, `profit`.
+    """List predictions, newest first, with team names and logos from their snapshots and computed `bet_won`.
 
     `status=pending` lists those without a result, `status=settled` those with one.
     """
@@ -982,6 +982,7 @@ def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
     """Save the review: the actual result as maps won by each team, and a review note.
 
     The score must be a finished series of the prediction's format (bo3: 2-0, 2-1, 1-2, 0-2, bo2: 2-0, 1-1, 0-2).
+    With an unknown format any score with at least one map is accepted.
     Other fields (odds, bet, comment) are rejected.
     """
     try:

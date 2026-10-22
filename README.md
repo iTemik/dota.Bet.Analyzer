@@ -631,10 +631,10 @@ Async task for comprehensive player analysis:
 - Stored in `predictions.sqlite`, no OpenDota requests
 
 #### Prediction Log (`/predictions`)
-- `POST /predictions` saves a series-win prediction from two snapshots: odds per team, `best_of` (1, 2, 3, 5), bet team, optional stake, comment
+- `POST /predictions` saves a series-win prediction from two snapshots: odds per team, `best_of` (1, 2, 3, 5 or null when unknown), bet team, optional `stake`, comment
 - Odds, bet and comment are locked; a snapshot used by a prediction is no longer refreshed
-- `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of`) and a review note
-- `GET /predictions?status=pending|settled` lists them with computed `bet_won` and `profit`, `GET /predictions/<id>` includes both snapshots
+- `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of` when known) and a review note
+- `GET /predictions?status=pending|settled` lists them with computed `bet_won`, `GET /predictions/<id>` includes both snapshots
 - `DELETE /predictions/<id>` removes one, its snapshots stay
 
 #### Pro Players Database (`/ProPlayers`)
