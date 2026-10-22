@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
 import InsightsTable, { type PlayerRanks } from './components/InsightsTable'
+import PredictionDetail from './components/PredictionDetail'
+import PredictionList from './components/PredictionList'
 import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
@@ -19,6 +21,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'predictions', label: 'Predictions' },
 ]
 const tabFromHash = (hash: string): Tab => (hash.startsWith('#predictions') ? 'predictions' : 'compare')
+// Prediction opened on the Predictions tab ("#predictions/12"), null for the list
+const predictionIdFromHash = (hash: string): number | null => {
+  const id = /^#predictions\/(\d+)$/.exec(hash)?.[1]
+  return id ? Number(id) : null
+}
 
 /**
  * Team roster (account lists) is collected indirectly:
@@ -39,7 +46,9 @@ function App() {
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const [showRawStats, setShowRawStats] = useState(false)
   const [showSummaryData, setShowSummaryData] = useState(false)
-  const [tab, setTab] = useState<Tab>(() => tabFromHash(window.location.hash))
+  const [hash, setHash] = useState(() => window.location.hash)
+  const tab = tabFromHash(hash)
+  const predictionId = predictionIdFromHash(hash)
   const pollAbortRef = useRef<AbortController | null>(null)
   const currentSearchIdRef = useRef<number>(0)
 
@@ -79,7 +88,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const onHashChange = () => setTab(tabFromHash(window.location.hash))
+    const onHashChange = () => setHash(window.location.hash)
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
@@ -262,9 +271,12 @@ function App() {
         ))}
       </nav>
 
-      <div className="tab-panel" hidden={tab !== 'predictions'}>
-        <p>The prediction list is coming soon.</p>
-      </div>
+      {/* Mounted only while open, so the list is loaded again after logging a new prediction */}
+      {tab === 'predictions' && (
+        <div className="tab-panel">
+          {predictionId ? <PredictionDetail key={predictionId} predictionId={predictionId} /> : <PredictionList />}
+        </div>
+      )}
 
       {/* Hidden rather than unmounted, so the loaded teams and the prediction form survive a tab switch */}
       <div className="tab-panel" hidden={tab !== 'compare'}>

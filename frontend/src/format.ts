@@ -17,3 +17,8 @@ export const formatFixed = (value: number | null | undefined, digits: number): s
 
 // Team name for a table header, or "Team #n" while it is unknown
 export const teamName = (team: { team?: string } | undefined, index: number): string => team?.team || `Team #${index + 1}`
+
+export const formatDateTime = (unixTime: number | null | undefined): string => {
+  if (!unixTime) return '-'
+  return new Date(unixTime * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+}
