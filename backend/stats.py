@@ -396,13 +396,15 @@ def _create_team_stats(
     task_id = None
     if team_stats.players:
         account_ids = [player.id for player in team_stats.players]
+        # Stand-ins (played in the window, outside the core) get only their rank
+        standin_ids = [player.id for player in team_stats.other_players if player.games]
         task_id = f"task_{team_stats.team_id}_{int(time.time())}"
         # Imported here: task_store imports this module
         from backend.task_store import update_progress
 
         # Queue before the task starts, so a finished task's progress is never overwritten
         update_progress(task_id, 0, "Queued", 0)
-        players_statistics_task.delay(task_id=task_id, accounts=account_ids, days=days)
+        players_statistics_task.delay(task_id=task_id, accounts=account_ids, days=days, rank_accounts=standin_ids)
 
     team_stats.task_id = task_id
 

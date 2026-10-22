@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.rosters import TeamRoster
 from backend.stats import ApiError, Player, StatsResponse, TeamStats, compute_statistics
 
 
@@ -318,6 +319,28 @@ class TestComputeStatisticsTaskInitiation:
         mock_delay.assert_called_once()
         call_kwargs = mock_delay.call_args[1]
         assert set(call_kwargs["accounts"]) == {100, 200}
+
+    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats.get_players_by_team")
+    def test_compute_sends_stand_in_ids_for_rank_only(self, mock_get_players, mock_fetch_info, monkeypatch):
+        """Stand-ins from the recent roster are sent as rank accounts, not as match accounts."""
+        mock_fetch_info.return_value = TeamStats(team_id=39, team="Team Spirit", tag="TS", rating=2500.0, delta=25.0)
+        mock_get_players.return_value = ([], [])
+        roster = TeamRoster(
+            players=[Player(name="P1", id=100, games=10, is_core=True)],
+            other_players=[Player(name="Backup", id=300, games=2, is_core=False)],
+            roster_state="standins",
+        )
+        monkeypatch.setattr("backend.stats.resolve_roster", lambda *args, **kwargs: roster)
+
+        mock_task = MagicMock()
+        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+
+        compute_statistics(teams=["Spirit"])
+
+        call_kwargs = mock_task.delay.call_args[1]
+        assert call_kwargs["accounts"] == [100]
+        assert call_kwargs["rank_accounts"] == [300]
 
     @patch("backend.stats._fetch_team_from_explorer_api")
     @patch("backend.stats.get_players_by_team")

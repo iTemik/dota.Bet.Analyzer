@@ -679,7 +679,7 @@ npm test          # Run tests
 - **Roster Changes**: Stable, Stand-ins or New team, league record and last match
 - **Team Insights**: Team #1 vs Team #2 notes next to the comparison: core players, stand-ins, other players and the
   last tournament match; unnamed accounts show as "ID 123…"; each player shows "games: N" and, once the player
-  statistics task finishes, "rank: R" (leaderboard rank, "-" when not on it; stand-ins outside the main 5 have no rank)
+  statistics task finishes, "rank: R" (leaderboard rank, "-" when not on it)
 - **Rating Delta**: Last match rating change with color coding
 - **Match Analysis**:
   - Win percentage across all matches
