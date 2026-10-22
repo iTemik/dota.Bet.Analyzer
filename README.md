@@ -644,7 +644,7 @@ Async task for comprehensive player analysis:
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
 #### Teams List (`/teams/sync`)
-- "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota and shows the result
+- "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota (shows an error if it fails)
 - Synced at startup in the background when the last sync is 30+ days old (or never happened); one sync runs at a time
 - `GET /api/teams/sync` returns the last sync time and whether a sync is running
 

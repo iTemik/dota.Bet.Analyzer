@@ -38,7 +38,7 @@ describe('TeamsSync', () => {
     expect(await screen.findByText('Never updated')).toBeInTheDocument()
   })
 
-  it('runs the sync and shows the result', async () => {
+  it('runs the sync and shows the new date only', async () => {
     let resolvePost: (value: unknown) => void = () => {}
     const post = new Promise((resolve) => (resolvePost = resolve))
     const fetchMock = mockApi([{ synced_at: null, running: false }], post as ReturnType<typeof jsonResponse>)
@@ -52,7 +52,7 @@ describe('TeamsSync', () => {
     await act(async () =>
       resolvePost(await jsonResponse({ synced_count: 21654, message: 'Stored 21654 teams', synced_at: SYNCED_AT })),
     )
-    expect(screen.getByRole('status')).toHaveTextContent('Stored 21654 teams')
+    expect(screen.queryByText('Stored 21654 teams')).not.toBeInTheDocument()
     expect(screen.getByText(`Updated ${formatDate(SYNCED_AT)}`)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Update teams data' })).toBeEnabled()
   })
@@ -65,8 +65,8 @@ describe('TeamsSync', () => {
     render(<TeamsSync />)
     await screen.findByText('Never updated')
     await userEvent.click(screen.getByRole('button', { name: 'Update teams data' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Failed to fetch teams from API')
-    expect(screen.getByRole('status')).toHaveClass('teams-sync-error')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to fetch teams from API')
+    expect(screen.getByRole('alert')).toHaveClass('teams-sync-error')
   })
 
   it('waits for a running startup sync before enabling the button', async () => {
