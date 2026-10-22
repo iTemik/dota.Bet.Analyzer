@@ -79,3 +79,56 @@ export interface StatisticsResult {
   total?: number
   summary?: MatchesSummary
 }
+
+// GET /api/predictions: [].team1 and [].team2 (name, tag and logo as saved in the snapshot)
+export interface PredictionTeam {
+  snapshot_id: number
+  team_id: number
+  name: string | null
+  tag: string | null
+  logo_url: string | null
+}
+
+// GET /api/predictions: one entry; bet_won is null while pending or without a bet
+export interface Prediction {
+  prediction_id: number
+  created_at: number
+  team1: PredictionTeam
+  team2: PredictionTeam
+  team1_odds: number
+  team2_odds: number
+  best_of: number | null
+  bet_team: number | null
+  stake: number | null
+  comment: string
+  team1_maps_won: number | null
+  team2_maps_won: number | null
+  review_note: string | null
+  bet_won: boolean | null
+}
+
+// GET /api/snapshots/{id}: data, as the Compare page sent it (old snapshots may lack newer fields)
+export interface SnapshotData {
+  team: Partial<TeamData>
+  summary: MatchesSummary | null
+  players: { account_id: number; rank: number | null; match_count: number | null }[]
+}
+
+// GET /api/predictions/{id}: team1_snapshot and team2_snapshot
+export interface Snapshot {
+  snapshot_id: number
+  team_id: number
+  team_name: string | null
+  snapshot_date: string
+  days: number
+  last_match_time: number
+  taken_at: number
+  app_version: string
+  data: SnapshotData
+}
+
+// GET /api/predictions/{id}
+export interface PredictionDetail extends Prediction {
+  team1_snapshot: Snapshot
+  team2_snapshot: Snapshot
+}

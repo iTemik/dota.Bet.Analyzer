@@ -32,6 +32,12 @@ describe('App Component', () => {
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
+                if (url === '/api/predictions') {
+                    return Promise.resolve(createMockResponse([]))
+                }
+                if (url.startsWith('/api/predictions/')) {
+                    return Promise.resolve(createMockResponse({ message: 'Prediction not found' }, false, 404))
+                }
                 // Default response for other endpoints
                 return Promise.resolve(createMockResponse({ teams: [] }))
             })
@@ -1138,7 +1144,7 @@ describe('App Component', () => {
 
             await waitFor(() => expect(screen.getByRole('link', { name: 'Predictions' })).toHaveAttribute('aria-current', 'page'))
             expect(window.location.hash).toBe('#predictions')
-            expect(screen.getByText(/prediction list is coming soon/i)).toBeVisible()
+            expect(await screen.findByText(/No predictions yet/i)).toBeVisible()
             expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
         })
 
@@ -1146,6 +1152,8 @@ describe('App Component', () => {
             window.location.hash = '#predictions/3'
             render(<App />)
             expect(screen.getByRole('link', { name: 'Predictions' })).toHaveAttribute('aria-current', 'page')
+            await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith('/api/predictions/3', undefined))
+            expect(screen.getByRole('link', { name: '← All predictions' })).toHaveAttribute('href', '#predictions')
         })
 
         it('keeps the typed teams when switching tabs and back', async () => {

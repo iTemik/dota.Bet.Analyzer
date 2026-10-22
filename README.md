@@ -700,7 +700,13 @@ npm test          # Run tests
 
 #### Tabs
 - **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
-- The Predictions list itself comes in a later update
+
+#### Predictions
+- List of saved predictions, newest first: date, teams with logos, odds, series, bet and stake, result (maps won or "pending") and outcome (won, lost, no bet)
+- Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
+- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, the locked bookmaker values and decision, and a disabled **Played heroes** placeholder
+- **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
+- **Delete** removes a prediction made by mistake (its snapshots stay)
 
 #### Log Prediction
 - Framed panel under Team Comparison and Team Insights, enabled once the player statistics of both teams have loaded
