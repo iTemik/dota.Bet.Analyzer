@@ -10,7 +10,12 @@ from backend.stats import BAD_RANK_THRESHOLD, MatchesSummary, RankTally
 from backend.task_store import ProgressReporter
 
 
-def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[int] | None = None):
+def _run_task(
+    accounts: list[int],
+    ranks: dict[int, int | None],
+    failing: set[int] | None = None,
+    rank_accounts: list[int] | None = None,
+):
     """Run the task with mocked data sources and return (progress calls, stored results)."""
     failing = failing or set()
 
@@ -31,7 +36,7 @@ def _run_task(accounts: list[int], ranks: dict[int, int | None], failing: set[in
         patch.object(dota_bet_analyzer, "get_team_matches_summary", return_value=MatchesSummary()),
         patch.object(dota_bet_analyzer.time, "sleep"),
     ):
-        players_statistics_task.run("t1", accounts, 20)
+        players_statistics_task.run("t1", accounts, 20, rank_accounts=rank_accounts)
     return [c.args for c in progress.call_args_list], store.call_args.args[1]
 
 
@@ -86,6 +91,20 @@ def test_task_account_error_is_reported_and_skipped():
     assert results["successful"] == 1
     assert results["summary"]["avg_rank"] == 0.0
     assert results["summary"]["bad_rank_players"] == 0
+
+
+def test_stand_in_ranks_are_kept_out_of_summary_and_counts():
+    """Rank accounts get only their rank: no matches, and they do not change the summary or the counts."""
+    calls, results = _run_task([1], {1: 100, 2: 700}, rank_accounts=[2])
+    assert results["results"] == [
+        {"account_id": 1, "match_count": 0, "rank": 100},
+        {"account_id": 2, "rank": 700},
+    ]
+    assert results["successful"] == 1
+    assert results["total"] == 1
+    assert results["summary"]["avg_rank"] == 100.0
+    assert results["summary"]["bad_rank_players"] == 0
+    assert calls[-1][3] == 100.0
 
 
 def test_task_error_reports_failure():

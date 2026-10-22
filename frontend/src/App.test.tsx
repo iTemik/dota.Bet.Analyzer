@@ -1574,11 +1574,14 @@ describe('App Component', () => {
                         { id: 12, name: 'Ghost', games: 10, is_core: true },
                         { id: 13, name: 'Failed', games: 9, is_core: true },
                     ],
-                    other_players: [{ id: 14, name: 'NewGuy', games: 3, is_core: false }],
+                    other_players: [
+                        { id: 14, name: 'NewGuy', games: 3, is_core: false },
+                        { id: 15, name: 'Backup', games: 2, is_core: false },
+                    ],
                     roster_source: 'recent_matches',
                     roster_games: 10,
                     roster_state: 'standins',
-                    standins_count: 1,
+                    standins_count: 2,
                 },
                 { ...baseTeam, team: 'Team B', team_id: 2, players: [], roster_source: 'pro_players', standins_count: 0 },
             ]
@@ -1588,6 +1591,7 @@ describe('App Component', () => {
                     { account_id: 11, match_count: 40, rank: 245 },
                     { account_id: 12, match_count: 12, rank: null },
                     { account_id: 13, error: 'boom' },
+                    { account_id: 14, rank: 310 },
                 ],
                 successful: 2,
                 total: 3,
@@ -1621,8 +1625,8 @@ describe('App Component', () => {
                     'Failed · games: 9 of 10',
                 ]),
             )
-            // Stand-ins outside the main 5 are not in the task, so they have no rank
-            expect(playerLines(cells('Stand-ins')[1])).toEqual(['NewGuy · games: 3 of 10'])
+            // Stand-ins get their rank from the task too; the task has no rank for Backup, so only games are shown
+            expect(playerLines(cells('Stand-ins')[1])).toEqual(['NewGuy · games: 3 of 10 · rank: 310', 'Backup · games: 2 of 10'])
         })
 
         it('shows a stable roster without stand-ins', async () => {
