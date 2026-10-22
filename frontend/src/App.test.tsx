@@ -1124,6 +1124,40 @@ describe('App Component', () => {
         }, 10000)
     })
 
+    describe('Tabs', () => {
+        beforeEach(() => {
+            window.location.hash = ''
+        })
+
+        it('starts on Compare and switches to Predictions through the URL hash', async () => {
+            render(<App />)
+            expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('aria-current', 'page')
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).toBeVisible()
+
+            await userEvent.click(screen.getByRole('link', { name: 'Predictions' }))
+
+            await waitFor(() => expect(screen.getByRole('link', { name: 'Predictions' })).toHaveAttribute('aria-current', 'page'))
+            expect(window.location.hash).toBe('#predictions')
+            expect(screen.getByText(/prediction list is coming soon/i)).toBeVisible()
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
+        })
+
+        it('opens the Predictions tab from a prediction link in the hash', async () => {
+            window.location.hash = '#predictions/3'
+            render(<App />)
+            expect(screen.getByRole('link', { name: 'Predictions' })).toHaveAttribute('aria-current', 'page')
+        })
+
+        it('keeps the typed teams when switching tabs and back', async () => {
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.click(screen.getByRole('link', { name: 'Predictions' }))
+            await userEvent.click(screen.getByRole('link', { name: 'Compare' }))
+            await waitFor(() => expect(screen.getByPlaceholderText(/Enter first team name/i)).toBeVisible())
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Team A')
+        })
+    })
+
     describe('Backend Version', () => {
         it('retries the version request while the backend is starting', async () => {
             let versionCalls = 0
@@ -1627,6 +1661,47 @@ describe('App Component', () => {
             )
             // Stand-ins get their rank from the task too; the task has no rank for Backup, so only games are shown
             expect(playerLines(cells('Stand-ins')[1])).toEqual(['NewGuy · games: 3 of 10 · rank: 310', 'Backup · games: 2 of 10'])
+        })
+
+        it('shows the Log prediction panel under the tables, enabled once both summaries arrive', async () => {
+            const teams = [
+                { ...baseTeam, team: 'Team A', team_id: 1, task_id: 'task_panel_1', players: [] },
+                { ...baseTeam, team: 'Team B', team_id: 2, task_id: 'task_panel_2', players: [] },
+            ]
+            const result = { results: [], successful: 0, total: 0, summary: { avg_rank: 100, bad_rank_players: 0 } }
+            globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/version') return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                if (url.includes('/api/stream-progress/')) {
+                    return Promise.resolve({
+                        ok: true,
+                        text: () =>
+                            Promise.resolve(
+                                JSON.stringify({ step: 1, message: 'Complete', progress: 100, data: { successful: 0, total: 0 } }),
+                            ),
+                    })
+                }
+                if (url.includes('/api/results/')) return Promise.resolve(createMockResponse(result))
+                return Promise.resolve(createMockResponse({ teams }))
+            }) as unknown as typeof fetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            expect(await screen.findByRole('heading', { name: 'Log prediction' })).toBeInTheDocument()
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Save prediction' })).toBeEnabled())
+            expect(screen.getByText('Coefficient Team A')).toBeInTheDocument()
+            expect(screen.queryByText(/Available once the player statistics/)).not.toBeInTheDocument()
+        })
+
+        it('keeps the Log prediction panel disabled without player statistics', async () => {
+            await renderComparison([
+                { ...baseTeam, team: 'Team A', team_id: 1, players: [] },
+                { ...baseTeam, team: 'Team B', team_id: 2, players: [] },
+            ])
+            expect(screen.getByText(/Available once the player statistics/)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: 'Save prediction' })).toBeDisabled()
         })
 
         it('shows a stable roster without stand-ins', async () => {
