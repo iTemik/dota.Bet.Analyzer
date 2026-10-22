@@ -225,3 +225,7 @@ def _init_extensions(app):
         from .heroes import sync_heroes_on_startup
 
         sync_heroes_on_startup(app)
+
+        from .teams_sync import sync_teams_on_startup
+
+        sync_teams_on_startup(app)

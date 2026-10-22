@@ -19,12 +19,7 @@ from backend.predictions import (
     list_predictions,
     save_review,
 )
-from backend.pro_players import (
-    fetch_pro_players_from_api,
-    fetch_teams_from_api,
-    store_pro_players,
-    store_teams,
-)
+from backend.pro_players import fetch_pro_players_from_api, store_pro_players
 from backend.schemas import (
     ErrorSchema,
     HeroSchema,
@@ -44,6 +39,8 @@ from backend.schemas import (
     TaskResponseSchema,
     TeamSchema,
     TeamSearchQuerySchema,
+    TeamsSyncResponseSchema,
+    TeamsSyncStatusSchema,
     TeamStatisticsQuerySchema,
     VersionSchema,
 )
@@ -65,6 +62,12 @@ from backend.task_store import (
     subscribe_progress,
     update_progress,
     wait_for_progress,
+)
+from backend.teams_sync import (
+    TeamsSyncRunningError,
+    get_teams_synced_at,
+    is_teams_sync_running,
+    run_teams_sync,
 )
 
 # Setup logger
@@ -754,8 +757,31 @@ def sync_pro_players() -> tuple[Response, int]:
         return api_error(500, Errors.FAILED_TO_STORE_PRO_PLAYERS, e)
 
 
+@bp.route("/teams/sync", methods=["GET"])
+@bp.response(200, TeamsSyncStatusSchema)
+@bp.alt_response(500, schema=ErrorSchema, description="Database read failed")
+def get_teams_sync_status() -> tuple[Response, int]:
+    """When the teams list was last synced, and whether a sync is running now (no OpenDota request)."""
+    try:
+        synced_at = get_teams_synced_at()
+    except Exception as e:
+        return api_error(500, Errors.FAILED_TO_READ_SYNC_STATE, e)
+    return jsonify({"synced_at": synced_at, "running": is_teams_sync_running()}), 200
+
+
 @bp.route("/teams/sync", methods=["POST"])
-@bp.response(200, SyncResponseSchema)
+@bp.response(200, TeamsSyncResponseSchema)
+@bp.alt_response(
+    409,
+    schema=ErrorSchema,
+    description="A teams sync is already running (started from the UI or at startup)",
+    example={
+        "status": 409,
+        "code": "TEAMS_SYNC_RUNNING",
+        "message": "Teams sync is already running",
+        "details": {"url": "/api/teams/sync"},
+    },
+)
 @bp.alt_response(
     503,
     schema=ErrorSchema,
@@ -792,28 +818,24 @@ def sync_pro_players() -> tuple[Response, int]:
 def sync_teams() -> tuple[Response, int]:
     """Sync teams from OpenDota API to local database.
 
-    Fetches fresh team data from OpenDota API (paginated, 1000 entries per page)
-    and updates the d2ba database. Intended to run infrequently (e.g., once daily).
+    Fetches fresh team data from OpenDota API (paginated, 1000 entries per page) and updates the d2ba database.
+    Also runs at startup when the last sync is 30+ days old. Only one sync runs at a time.
 
-    Returns the number of teams successfully synced.
+    Returns the number of teams successfully synced and the time of the last successful sync.
     """
-    # Fetch data from OpenDota API (handles pagination internally)
     try:
-        teams_data = fetch_teams_from_api()
+        count = run_teams_sync()
+    except TeamsSyncRunningError:
+        return api_error(409, Errors.TEAMS_SYNC_RUNNING)
     except ConnectionError as e:
         return api_error(503, Errors.FAILED_TO_FETCH_TEAMS, e)
     except ValueError as e:
         return api_error(502, Errors.FAILED_TO_FETCH_TEAMS, e)
-
-    if not teams_data:
-        return jsonify({"synced_count": 0, "message": "No teams data available"}), 200
-
-    # Store to database
-    try:
-        count = store_teams(teams_data)
-        return jsonify({"synced_count": count, "message": f"Stored {count} teams"}), 200
     except Exception as e:
         return api_error(500, Errors.FAILED_TO_STORE_TEAMS, e)
+
+    message = f"Stored {count} teams" if count else "No teams data available"
+    return jsonify({"synced_count": count, "message": message, "synced_at": get_teams_synced_at()}), 200
 
 
 @bp.route("/heroes", methods=["GET"])

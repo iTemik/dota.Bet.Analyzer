@@ -278,6 +278,44 @@ pre {
   white-space: nowrap;
 }
 
+/* Teams list update line under the team form */
+.teams-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.teams-sync-time {
+  opacity: 0.85;
+}
+
+.teams-sync-btn {
+  padding: 0.35rem 0.9rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.teams-sync-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.teams-sync-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.teams-sync-error {
+  color: #ffd0d0;
+  font-weight: 500;
+}
+
 /* Narrow screens: stack the form and the two tables */
 @media (max-width: 1100px) {
   .form-section {

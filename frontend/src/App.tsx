@@ -6,6 +6,7 @@ import PredictionDetail from './components/PredictionDetail'
 import PredictionList from './components/PredictionList'
 import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
+import TeamsSync from './components/TeamsSync'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
 import type { MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
@@ -308,6 +309,8 @@ function App() {
             {loading ? 'Loading...' : 'Check Statistics'}
           </button>
         </div>
+
+        <TeamsSync />
 
         {error && <div className="error-message">{error}</div>}
 

@@ -321,6 +321,25 @@ class SyncResponseSchema(Schema):
     message = fields.Str(required=True, metadata={"description": "Operation result message"})
 
 
+class TeamsSyncResponseSchema(SyncResponseSchema):
+    """Teams sync response: the sync result and when it finished."""
+
+    synced_at = fields.Int(
+        required=True, allow_none=True, metadata={"description": "Unix time of the last successful teams sync"}
+    )
+
+
+class TeamsSyncStatusSchema(Schema):
+    """When the teams list was last synced and whether a sync is running now."""
+
+    synced_at = fields.Int(
+        required=True,
+        allow_none=True,
+        metadata={"description": "Unix time of the last successful teams sync, null when never synced"},
+    )
+    running = fields.Bool(required=True, metadata={"description": "A teams sync is running (button or startup)"})
+
+
 class HeroSchema(Schema):
     """Hero from the OpenDota hero list."""
 

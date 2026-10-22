@@ -527,7 +527,7 @@ def sample_teams_data():
 
 def test_teams_endpoint_sync_success(client, sample_teams_data):
     """Test /teams/sync endpoint with successful API response."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = sample_teams_data
 
         response = client.post("/api/teams/sync")
@@ -540,7 +540,7 @@ def test_teams_endpoint_sync_success(client, sample_teams_data):
 
 def test_teams_endpoint_stores_data(client, sample_teams_data, app):
     """Test that /teams/sync actually stores data in database."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = sample_teams_data
 
         response = client.post("/api/teams/sync")
@@ -573,7 +573,7 @@ def test_teams_endpoint_stores_data(client, sample_teams_data, app):
 
 def test_teams_endpoint_api_failure(client):
     """Test /teams/sync endpoint when OpenDota API fails."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
 
         response = client.post("/api/teams/sync")
@@ -585,7 +585,7 @@ def test_teams_endpoint_api_failure(client):
 
 def test_teams_endpoint_invalid_response(client):
     """Test /teams/sync endpoint when API returns invalid response."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
 
         response = client.post("/api/teams/sync")
@@ -597,7 +597,7 @@ def test_teams_endpoint_invalid_response(client):
 
 def test_teams_endpoint_empty_response(client):
     """Test /teams/sync endpoint with empty array from API."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = []
 
         response = client.post("/api/teams/sync")
@@ -610,7 +610,7 @@ def test_teams_endpoint_empty_response(client):
 
 def test_teams_upsert(client, sample_teams_data, app):
     """Test that updating existing teams works (upsert behavior)."""
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = sample_teams_data
 
         # First insert
@@ -726,7 +726,7 @@ def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
             }
         )
 
-    with patch("backend.dota_bet_analyzer.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
         mock_fetch.return_value = large_dataset
 
         response = client.post("/api/teams/sync")
