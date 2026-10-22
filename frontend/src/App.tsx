@@ -1,59 +1,15 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import ComparisonTable from './components/ComparisonTable'
+import InsightsTable, { type PlayerRanks } from './components/InsightsTable'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
-import { ROSTER_STATES, getCorePlayers, getStandins, hasCore, renderName } from './roster'
-import type { LeagueForm, MatchesSummary, Player, Statistics, StatisticsResult, TeamData } from './types'
+import type { MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
 import { VERSION } from './version'
 
-// Color constants - defined in App.css as CSS variables
-const COLOR_POSITIVE = '#6b9d7a'
-const COLOR_NEGATIVE = '#9d6b6b'
 // Roster and match history window, sent to /api/statistics as `days` (same default as the backend)
 const STATS_DAYS = 20
-
-type Summary = MatchesSummary | null
-
-// Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
-interface CompareRowConfig {
-  label: ReactNode
-  title?: string
-  summary?: boolean // shown only once the match summary has arrived
-  compare?: (team: TeamData | undefined, summary: Summary) => number | null
-  better?: 'higher' | 'lower'
-  threshold?: number // differences up to this are not coloured
-  color?: (team: TeamData | undefined) => string // per-team colour, for rows that don't compare
-  render: (team: TeamData | undefined, summary: Summary) => ReactNode
-}
-
-// Colours for team 1 and team 2: the better value is positive, the other negative
-const compareColors = (a: number | null, b: number | null, better: 'higher' | 'lower', threshold = 0): [string, string] => {
-  if (a === null || b === null || Math.abs(a - b) <= threshold) return ['transparent', 'transparent']
-  const firstWins = better === 'higher' ? a > b : a < b
-  return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
-}
-
-const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
-  let colors: string[] | null = null
-  if (row.compare && row.better) {
-    colors = compareColors(row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1]), row.better, row.threshold)
-  } else if (row.color) {
-    colors = teams.map(row.color)
-  }
-  return (
-    <tr>
-      <td className="row-label" title={row.title}>
-        {row.label}
-      </td>
-      {teams.map((team, i) => (
-        <td key={i} style={colors ? { backgroundColor: colors[i] } : undefined}>
-          {row.render(team, summaries[i])}
-        </td>
-      ))}
-    </tr>
-  )
-}
 
 /**
  * Team roster (account lists) is collected indirectly:
@@ -254,211 +210,17 @@ function App() {
     }
   }
 
-  const getDeltaBackgroundColor = (delta: number | undefined): string => {
-    if (!delta) return 'transparent'
-    if (delta < -15) return COLOR_NEGATIVE
-    if (delta > 15) return COLOR_POSITIVE
-    return 'transparent'
-  }
-
-  const formatDate = (unixTime: number | null | undefined): string => {
-    if (!unixTime) return '-'
-    return new Date(unixTime * 1000).toLocaleDateString()
-  }
-
-  const getRosterRank = (team: TeamData | undefined): number | null =>
-    team?.roster_source === 'recent_matches' && team.roster_state ? (ROSTER_STATES[team.roster_state]?.rank ?? null) : null
-
-  const renderRosterState = (team: TeamData | undefined) => {
-    const state = team?.roster_source === 'recent_matches' && team.roster_state ? ROSTER_STATES[team.roster_state] : null
-    if (!team || !state) return '-'
-    const standins = getStandins(team).length
-    const suffix = standins ? ` (${standins} stand-in${standins === 1 ? '' : 's'})` : ''
-    return <span title={state.hint}>{`${state.label}${suffix}`}</span>
-  }
-
   // Leaderboard rank per account, from the team's task results (only the players the task fetched)
-  const getPlayerRanks = (team: TeamData): Map<number, number | null> => {
-    const results = (team.task_id && summaryData?.[team.task_id]?.results) || []
+  const getPlayerRanks = (team: TeamData | undefined): PlayerRanks => {
+    const results = (team?.task_id && summaryData?.[team.task_id]?.results) || []
     return new Map(results.filter((r) => 'rank' in r).map((r) => [r.account_id, r.rank ?? null]))
   }
 
-  // " · games: N · rank: R" after a player's name; "N of total" when the player missed some of the team's
-  // tournament games in the window; rank only for players whose rank was fetched ("-" when not on the leaderboard)
-  const formatPlayerStats = (player: Player, team: TeamData, ranks: Map<number, number | null>): string => {
-    const total = team.roster_games
-    let text = ''
-    if (player.games) text += ` · games: ${player.games}${total && player.games < total ? ` of ${total}` : ''}`
-    if (ranks.has(player.id)) text += ` · rank: ${ranks.get(player.id) ?? '-'}`
-    return text
-  }
-
-  const renderPlayers = (players: Player[], team: TeamData) => {
-    const ranks = getPlayerRanks(team)
-    return players.map((p) => (
-      <div key={p.id}>
-        {renderName(p)}
-        {formatPlayerStats(p, team, ranks)}
-      </div>
-    ))
-  }
-
-  const renderCorePlayers = (team: TeamData | undefined) => {
-    if (!team || !team.players?.length) return '-'
-    const clearCore = team.roster_source === 'recent_matches' && hasCore(team)
-    return (
-      <div className="roster">
-        {renderPlayers(getCorePlayers(team), team)}
-        {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
-        {team.roster_source === 'recent_matches' && !clearCore && <div className="roster-source">no clear core: players rotate</div>}
-      </div>
-    )
-  }
-
-  const renderPlayedList = (players: Player[], team: TeamData) => {
-    if (!players.length) return 'None'
-    return <div className="roster">{renderPlayers(players, team)}</div>
-  }
-
-  const renderStandinPlayers = (team: TeamData | undefined) =>
-    team?.roster_source === 'recent_matches' ? renderPlayedList(getStandins(team), team) : '-'
-
-  // Other players: listed on the team by OpenDota but without league games in the window
-  const renderOtherPlayers = (team: TeamData | undefined) => {
-    if (!team) return '-'
-    const others = team.other_players ?? []
-    return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team)
-  }
-
-  // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
-  const insightRows: { label: string; render: (team: TeamData | undefined) => ReactNode }[] = [
-    { label: 'Core Players', render: renderCorePlayers },
-    { label: 'Stand-ins', render: renderStandinPlayers },
-    { label: 'Other Players', render: renderOtherPlayers },
-    {
-      label: 'Last Tournament Match',
-      render: (team) => {
-        if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
-        // Mention players outside the core only when there were any
-        const outside = team.latest_match_standins ?? 0
-        const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
-        return `${formatDate(team.latest_match_time)}${suffix}`
-      },
-    },
-  ]
-
-  const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
-    if (!form || !form.matches) return '-'
-    return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
-  }
-
-  const getSummaryForTeam = (taskId: string | null | undefined): Summary =>
+  const getSummaryForTeam = (taskId: string | null | undefined): MatchesSummary | null =>
     (taskId && summaryData?.[taskId]?.summary) || null
-
-  const formatPercent = (value: number | null | undefined): string => (typeof value === 'number' ? value.toFixed(1) + '%' : '-')
-  const formatFixed = (value: number | null | undefined, digits: number): string => (value ? value.toFixed(digits) : '-')
 
   const teams = [statistics?.teams?.[0], statistics?.teams?.[1]]
   const summaries = teams.map((team) => getSummaryForTeam(team?.task_id))
-
-  // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list
-  const compareRows: CompareRowConfig[] = [
-    { label: 'Team Tag', render: (team) => (team?.tag ? team.tag : '-') },
-    { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
-    {
-      label: 'Rating',
-      compare: (team) => team?.rating || null,
-      better: 'higher',
-      threshold: 100,
-      render: (team) => (team?.rating ? team.rating : '-'),
-    },
-    {
-      label: 'Last match rating',
-      color: (team) => getDeltaBackgroundColor(team?.delta),
-      render: (team) => (team?.delta ? team.delta.toFixed(1) : '-'),
-    },
-    { label: 'Roster Changes', compare: getRosterRank, better: 'lower', render: renderRosterState },
-    {
-      label: `Tournaments Record (${teams[0]?.league_form?.days ?? STATS_DAYS}d)`,
-      compare: (team) => team?.league_form?.win_percentage ?? null,
-      better: 'higher',
-      render: (team) => formatLeagueRecord(team?.league_form),
-    },
-    {
-      label: 'Last Match',
-      title: 'Latest tournament game played by at least 3 of the 5 players',
-      render: (team) => formatDate(team?.roster_last_match_time ?? team?.league_form?.last_match_time),
-    },
-    {
-      label: 'Rating Matches',
-      summary: true,
-      compare: (_, s) => s?.rating_matches ?? null,
-      better: 'higher',
-      render: (_, s) => String(s?.rating_matches ?? '-'),
-    },
-    {
-      label: (
-        <>
-          Lobby Matches
-          <br />
-          (tournaments + scrims)
-        </>
-      ),
-      summary: true,
-      compare: (_, s) => s?.tournament_matches ?? null,
-      better: 'higher',
-      render: (_, s) => String(s?.tournament_matches ?? '-'),
-    },
-    {
-      label: 'Pub Win %',
-      summary: true,
-      compare: (_, s) => s?.rating_win_percentage ?? null,
-      better: 'higher',
-      render: (_, s) => formatPercent(s?.rating_win_percentage),
-    },
-    {
-      label: 'Lobby Win %',
-      summary: true,
-      compare: (_, s) => s?.tournament_win_percentage ?? null,
-      better: 'higher',
-      render: (_, s) => formatPercent(s?.tournament_win_percentage),
-    },
-    {
-      label: 'Average Player Rank',
-      summary: true,
-      compare: (_, s) => s?.avg_rank ?? null,
-      better: 'lower',
-      render: (_, s) => formatFixed(s?.avg_rank, 0),
-    },
-    {
-      label: (
-        <>
-          Low Rank Players
-          <br />
-          (тысячники в команде)
-        </>
-      ),
-      summary: true,
-      compare: (_, s) => s?.bad_rank_players ?? null,
-      better: 'lower',
-      render: (_, s) => String(s?.bad_rank_players ?? '-'),
-    },
-    { label: 'Other Matches', summary: true, render: (_, s) => String(s?.other_matches ?? '-') },
-    {
-      label: 'Average Matches Per Player',
-      summary: true,
-      compare: (_, s) => s?.matches_avg ?? null,
-      better: 'higher',
-      render: (_, s) => formatFixed(s?.matches_avg, 2),
-    },
-    {
-      label: 'Median Matches Per Player',
-      summary: true,
-      compare: (_, s) => s?.matches_median ?? null,
-      better: 'higher',
-      render: (_, s) => formatFixed(s?.matches_median, 2),
-    },
-  ]
 
   return (
     <div className="container">
@@ -524,58 +286,12 @@ function App() {
           <div className="results-columns">
             <div className="results-column">
               <h2>Team Comparison</h2>
-              <table className="stats-table comparison-table">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>
-                      <div className="team-header">
-                        <span>{teams[0]?.team ? teams[0].team : 'Team #1'}</span>
-                        {teams[0]?.logo_url && (
-                          <img src={teams[0].logo_url} alt="Team 1 Logo" className="team-logo" />
-                        )}
-                      </div>
-                    </th>
-                    <th>
-                      <div className="team-header">
-                        <span>{teams[1]?.team ? teams[1].team : 'Team #2'}</span>
-                        {teams[1]?.logo_url && (
-                          <img src={teams[1].logo_url} alt="Team 2 Logo" className="team-logo" />
-                        )}
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compareRows
-                    .filter((row) => !row.summary || summaryData)
-                    .map((row, i) => (
-                      <CompareRow key={i} row={row} teams={teams} summaries={summaries} />
-                    ))}
-                </tbody>
-              </table>
+              <ComparisonTable teams={teams} summaries={summaries} showSummaryRows={Boolean(summaryData)} days={STATS_DAYS} />
             </div>
 
             <div className="results-column">
               <h2>Team Insights</h2>
-              <table className="stats-table insights-table">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>{teams[0]?.team ? teams[0].team : 'Team #1'}</th>
-                    <th>{teams[1]?.team ? teams[1].team : 'Team #2'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {insightRows.map((row) => (
-                    <tr key={row.label}>
-                      <td className="row-label">{row.label}</td>
-                      <td>{row.render(teams[0])}</td>
-                      <td>{row.render(teams[1])}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <InsightsTable teams={teams} ranks={teams.map(getPlayerRanks)} />
             </div>
           </div>
 

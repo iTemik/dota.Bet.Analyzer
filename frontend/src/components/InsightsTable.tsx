@@ -1,0 +1,98 @@
+import type { ReactNode } from 'react'
+import { formatDate, teamName } from '../format'
+import { getCorePlayers, getStandins, hasCore, renderName } from '../roster'
+import type { Player, TeamData } from '../types'
+
+// Leaderboard rank per account id (null: not on the leaderboard); only players whose rank was fetched are in it
+export type PlayerRanks = Map<number, number | null>
+
+interface InsightsTableProps {
+  teams: (TeamData | undefined)[] // team 1 and team 2
+  ranks: PlayerRanks[] // player ranks per team
+}
+
+// " · games: N · rank: R" after a player's name; "N of total" when the player missed some of the team's
+// tournament games in the window; rank only for players whose rank was fetched ("-" when not on the leaderboard)
+const formatPlayerStats = (player: Player, team: TeamData, ranks: PlayerRanks): string => {
+  const total = team.roster_games
+  let text = ''
+  if (player.games) text += ` · games: ${player.games}${total && player.games < total ? ` of ${total}` : ''}`
+  if (ranks.has(player.id)) text += ` · rank: ${ranks.get(player.id) ?? '-'}`
+  return text
+}
+
+const renderPlayers = (players: Player[], team: TeamData, ranks: PlayerRanks) =>
+  players.map((p) => (
+    <div key={p.id}>
+      {renderName(p)}
+      {formatPlayerStats(p, team, ranks)}
+    </div>
+  ))
+
+const renderCorePlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
+  if (!team || !team.players?.length) return '-'
+  const clearCore = team.roster_source === 'recent_matches' && hasCore(team)
+  return (
+    <div className="roster">
+      {renderPlayers(getCorePlayers(team), team, ranks)}
+      {team.roster_source !== 'recent_matches' && <div className="roster-source">unconfirmed: no recent tournament match</div>}
+      {team.roster_source === 'recent_matches' && !clearCore && <div className="roster-source">no clear core: players rotate</div>}
+    </div>
+  )
+}
+
+const renderPlayedList = (players: Player[], team: TeamData, ranks: PlayerRanks) => {
+  if (!players.length) return 'None'
+  return <div className="roster">{renderPlayers(players, team, ranks)}</div>
+}
+
+const renderStandinPlayers = (team: TeamData | undefined, ranks: PlayerRanks) =>
+  team?.roster_source === 'recent_matches' ? renderPlayedList(getStandins(team), team, ranks) : '-'
+
+// Other players: listed on the team by OpenDota but without league games in the window
+const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
+  if (!team) return '-'
+  const others = team.other_players ?? []
+  return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team, ranks)
+}
+
+// Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
+const insightRows: { label: string; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+  { label: 'Core Players', render: renderCorePlayers },
+  { label: 'Stand-ins', render: renderStandinPlayers },
+  { label: 'Other Players', render: renderOtherPlayers },
+  {
+    label: 'Last Tournament Match',
+    render: (team) => {
+      if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
+      // Mention players outside the core only when there were any
+      const outside = team.latest_match_standins ?? 0
+      const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
+      return `${formatDate(team.latest_match_time)}${suffix}`
+    },
+  },
+]
+
+/** Team Insights table for two teams; renders live statistics and saved snapshots alike. */
+const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
+  <table className="stats-table insights-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>{teamName(teams[0], 0)}</th>
+        <th>{teamName(teams[1], 1)}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {insightRows.map((row) => (
+        <tr key={row.label}>
+          <td className="row-label">{row.label}</td>
+          <td>{row.render(teams[0], ranks[0] ?? new Map())}</td>
+          <td>{row.render(teams[1], ranks[1] ?? new Map())}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+)
+
+export default InsightsTable
