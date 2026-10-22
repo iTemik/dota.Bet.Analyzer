@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { formatDateTime } from '../format'
+import { formatDate } from '../format'
 import { requestJson } from '../predictions'
 
 interface TeamsSyncStatus {
@@ -16,7 +16,7 @@ interface TeamsSyncResult {
 // How often to re-check while a sync started elsewhere (startup) is running
 export const STATUS_POLL_MS = 5000
 
-/** Button that refreshes the team search list from OpenDota, with the last sync time and the result. */
+/** Button right of the tabs that refreshes the team search list from OpenDota, with the last sync date and result. */
 function TeamsSync() {
   const [syncedAt, setSyncedAt] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
@@ -63,17 +63,17 @@ function TeamsSync() {
   const busy = syncing || running
   return (
     <div className="teams-sync">
-      <span className="teams-sync-time">
-        Teams list: {syncedAt ? `updated ${formatDateTime(syncedAt)}` : 'never updated'}
-      </span>
-      <button type="button" onClick={handleSync} disabled={busy} className="teams-sync-btn">
-        {busy ? 'Updating teams…' : 'Update teams list'}
-      </button>
       {result && (
         <span role="status" className={result.ok ? 'teams-sync-ok' : 'teams-sync-error'}>
           {result.text}
         </span>
       )}
+      <span className="teams-sync-time">
+        {syncedAt ? `Updated ${formatDate(syncedAt)}` : 'Never updated'}
+      </span>
+      <button type="button" onClick={handleSync} disabled={busy} className="teams-sync-btn">
+        {busy ? 'Updating teams…' : 'Update teams data'}
+      </button>
     </div>
   )
 }

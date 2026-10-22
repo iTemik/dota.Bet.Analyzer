@@ -445,7 +445,7 @@ curl -X POST http://localhost:5000/api/pro-players/sync
 
 **Sync Teams Data:**
 
-Use the "Update teams list" button on the Compare tab, or (paginated, ~1000 teams per page; also runs at startup when
+Use the "Update teams data" button right of the tabs, or (paginated, ~1000 teams per page; also runs at startup when
 the last sync is 30+ days old):
 
 ```bash
@@ -644,7 +644,7 @@ Async task for comprehensive player analysis:
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
 #### Teams List (`/teams/sync`)
-- "Update teams list" button on the Compare tab refreshes the team search list from OpenDota and shows the result
+- "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota and shows the result
 - Synced at startup in the background when the last sync is 30+ days old (or never happened); one sync runs at a time
 - `GET /api/teams/sync` returns the last sync time and whether a sync is running
 
