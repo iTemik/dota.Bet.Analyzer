@@ -295,19 +295,22 @@ pre {
   }
 }
 
-/* Trolling tagline above the page header */
+/* Trolling tagline under the title; the troll face floats beside it like a background */
 .app-tagline {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #999;
+  position: relative;
+  display: inline-block;
+  color: #bbb;
   font-size: 0.8rem;
   font-style: italic;
-  margin-bottom: 0.25rem;
+  margin-top: 0.25rem;
 }
 
 .app-tagline-troll {
-  opacity: 0.15;
+  position: absolute;
+  left: calc(100% + 0.75rem);
+  top: 0;
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 /* Page header: title on the left, versions on the right */

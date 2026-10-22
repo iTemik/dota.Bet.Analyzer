@@ -42,8 +42,8 @@ function TrollFace() {
       className="app-tagline-troll"
       data-testid="troll-face"
       viewBox="0 0 64 56"
-      width="22"
-      height="19"
+      width="66"
+      height="58"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
@@ -280,12 +280,14 @@ function App() {
 
   return (
     <div className="container">
-      <div className="app-tagline">
-        <span>stealing from bookmakers since 2022</span>
-        <TrollFace />
-      </div>
       <div className="app-header">
-        <h1>Dota 2 Bet Analyzer</h1>
+        <div className="app-title">
+          <h1>Dota 2 Bet Analyzer</h1>
+          <div className="app-tagline">
+            stealing from bookmakers since 2022
+            <TrollFace />
+          </div>
+        </div>
         <div className="app-versions">
           <span className="app-version-frontend">Frontend: v{VERSION}</span>
           <span className="app-version-backend">Backend: v {backendVersion || 'loading...'}</span>
