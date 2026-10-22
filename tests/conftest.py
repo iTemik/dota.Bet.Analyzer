@@ -43,6 +43,16 @@ def no_roster_requests(request):
 
 
 @pytest.fixture(autouse=True)
+def no_startup_teams_sync(request):
+    """Keep app startup offline: the background teams sync never starts (tested in test_teams_sync itself)."""
+    if request.module.__name__.endswith("test_teams_sync"):
+        yield None
+        return
+    with patch("backend.teams_sync.sync_teams_on_startup") as mock_sync:
+        yield mock_sync
+
+
+@pytest.fixture(autouse=True)
 def no_opendota_retry_wait():
     """Skip the real waits between repeated OpenDota requests (429, timeouts) in tests."""
     with patch("backend.opendota.time.sleep") as mock_sleep:

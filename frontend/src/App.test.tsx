@@ -1386,6 +1386,9 @@ describe('App Component', () => {
                         json: () => Promise.resolve({ backend: '0.4.DEV' }),
                     })
                 }
+                if (url === '/api/teams/sync') {
+                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ synced_at: null, running: false }) })
+                }
 
                 callCount++
                 // First call returns Team A vs B, second call returns Team C vs D

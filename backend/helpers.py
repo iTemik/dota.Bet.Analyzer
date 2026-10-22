@@ -34,6 +34,7 @@ class Errors:
     FAILED_TO_READ_PREDICTIONS = ErrorDefinition(
         "FAILED_TO_READ_PREDICTIONS", "Failed to read predictions from database"
     )
+    FAILED_TO_READ_SYNC_STATE = ErrorDefinition("FAILED_TO_READ_SYNC_STATE", "Failed to read sync state from database")
     FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
     FAILED_TO_STORE_HEROES = ErrorDefinition("FAILED_TO_STORE_HEROES", "Failed to store heroes to database")
     FAILED_TO_STORE_PREDICTION = ErrorDefinition("FAILED_TO_STORE_PREDICTION", "Failed to store prediction to database")
@@ -50,6 +51,7 @@ class Errors:
     RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
     SNAPSHOT_NOT_FOUND = ErrorDefinition("SNAPSHOT_NOT_FOUND", "Snapshot not found")
+    TEAMS_SYNC_RUNNING = ErrorDefinition("TEAMS_SYNC_RUNNING", "Teams sync is already running")
     TEAM_ID_MISMATCH = ErrorDefinition("TEAM_ID_MISMATCH", "team_id does not match team.team_id")
     TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")

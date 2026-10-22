@@ -68,3 +68,9 @@ CREATE TABLE IF NOT EXISTS heroes (
     localized_name TEXT NOT NULL,  -- e.g. Anti-Mage
     icon TEXT NOT NULL             -- full icon URL
 );
+
+-- Last successful sync of an OpenDota list (the teams list is re-synced at startup after 30 days)
+CREATE TABLE IF NOT EXISTS sync_state (
+    name TEXT PRIMARY KEY,         -- e.g. teams
+    synced_at INTEGER NOT NULL     -- unix seconds
+);
