@@ -266,18 +266,22 @@ function App() {
         </div>
       </div>
 
-      <nav className="tab-bar">
-        {TABS.map((t) => (
-          <a
-            key={t.id}
-            href={`#${t.id}`}
-            className={`tab ${tab === t.id ? 'active' : ''}`}
-            aria-current={tab === t.id ? 'page' : undefined}
-          >
-            {t.label}
-          </a>
-        ))}
-      </nav>
+      {/* Tabs on the left, page-wide actions on the right */}
+      <div className="tab-row">
+        <nav className="tab-bar">
+          {TABS.map((t) => (
+            <a
+              key={t.id}
+              href={`#${t.id}`}
+              className={`tab ${tab === t.id ? 'active' : ''}`}
+              aria-current={tab === t.id ? 'page' : undefined}
+            >
+              {t.label}
+            </a>
+          ))}
+        </nav>
+        <TeamsSync />
+      </div>
 
       {/* Mounted only while open, so the list is loaded again after logging a new prediction */}
       {tab === 'predictions' && (
@@ -316,8 +320,6 @@ function App() {
             {loading ? 'Loading...' : 'Check Statistics'}
           </button>
         </div>
-
-        <TeamsSync />
 
         {error && <div className="error-message">{error}</div>}
 

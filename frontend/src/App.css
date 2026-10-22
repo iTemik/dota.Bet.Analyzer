@@ -278,12 +278,12 @@ pre {
   white-space: nowrap;
 }
 
-/* Teams list update line under the team form */
+/* Teams data update, right of the tabs */
 .teams-sync {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 0.75rem;
   font-size: 0.9rem;
 }
@@ -395,10 +395,18 @@ pre {
 }
 
 /* Tab bar under the header: Compare | Predictions */
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
 .tab-bar {
   display: flex;
   gap: 0.5rem;
-  align-self: flex-start;
 }
 
 .tab {
