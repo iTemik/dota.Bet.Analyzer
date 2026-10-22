@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.heroes import fetch_heroes_from_api, list_heroes, sync_heroes_if_empty, sync_heroes_on_startup
+from backend.heroes import (
+    fetch_heroes_from_api,
+    list_heroes,
+    sync_heroes_if_empty,
+    sync_heroes_on_startup,
+)
 from backend.opendota import OpenDotaError
 
 CONSTANTS_HEROES = {
