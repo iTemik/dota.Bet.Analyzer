@@ -2,6 +2,14 @@
 
 This directory contains SQL migrations for the d2ba database, following best practices.
 
+## Databases
+
+- `backend/migrations/*.sql` → `instance/d2ba.sqlite` (OpenDota cache)
+- `backend/migrations/predictions/*.sql` → `instance/predictions.sqlite` (snapshots; the user's own data)
+
+`scripts/init_d2ba_db.py` migrates both; `python scripts/migrate.py run --database predictions` migrates one.
+Statements are split on `;`, so don't put a semicolon in a comment.
+
 ## Structure
 
 - Each migration is a `.sql` file named with timestamp: `YYYYMMDD_HHMMSS_description.sql`

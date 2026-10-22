@@ -19,6 +19,10 @@ from backend.pro_players import (
 from backend.schemas import (
     ErrorSchema,
     PlayerStatisticsQuerySchema,
+    SnapshotCreateSchema,
+    SnapshotDetailSchema,
+    SnapshotListQuerySchema,
+    SnapshotSchema,
     StatisticsResultSchema,
     StatsResponseSchema,
     SyncResponseSchema,
@@ -28,6 +32,7 @@ from backend.schemas import (
     TeamStatisticsQuerySchema,
     VersionSchema,
 )
+from backend.snapshots import get_snapshot, list_snapshots, save_snapshot
 from backend.stats import (
     BAD_RANK_THRESHOLD,
     RankTally,
@@ -193,19 +198,25 @@ def get_version() -> tuple[Response, int]:
 
     This endpoint always succeeds and returns 200 OK.
     """
-    backend_version = __version__
-    build_number = os.environ.get("BUILD_NUMBER", "DEV")
-    full_backend_version = f"{backend_version}.{build_number}"
-
     return (
         jsonify(
             {
-                "backend": full_backend_version,
-                "build": build_number,
+                "backend": _full_version(),
+                "build": _build_number(),
             }
         ),
         200,
     )
+
+
+def _build_number() -> str:
+    """Build number of the running backend (DEV when not set)."""
+    return os.environ.get("BUILD_NUMBER", "DEV")
+
+
+def _full_version() -> str:
+    """Backend version with build number, as shown by /api/version."""
+    return f"{__version__}.{_build_number()}"
 
 
 @bp.route("/statistics", methods=["GET"])
@@ -832,6 +843,65 @@ def search_teams(args):
     except Exception as e:
         logger.error(f"Error searching teams: {e!s}")
         return api_error(503, Errors.SEARCH_ERROR, e)
+
+
+@bp.route("/snapshots", methods=["POST"])
+@bp.arguments(SnapshotCreateSchema)
+@bp.response(201, SnapshotSchema, description="New snapshot saved")
+@bp.alt_response(200, schema=SnapshotSchema, description="Snapshot with the same key refreshed")
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or team_id differs from team.team_id")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def create_snapshot(args) -> tuple[Response, int]:
+    """Save what the Compare page shows for one team.
+
+    A snapshot is identified by team + UTC day + `days` + the team's latest league match (`team.latest_match_time`).
+    Saving the same key again refreshes the stored data and returns 200; a new key returns 201. No OpenDota requests.
+    """
+    team_id = args["team_id"]
+    if args["team"].get("team_id") not in (None, team_id):
+        return api_error(422, Errors.TEAM_ID_MISMATCH, team_id=team_id, team_team_id=args["team"].get("team_id"))
+    try:
+        snapshot, created = save_snapshot(
+            team_id, args["days"], args["team"], args["summary"], args["players"], _full_version()
+        )
+        return jsonify(snapshot), 201 if created else 200
+    except Exception as e:
+        logger.error(f"Error storing snapshot for team {team_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_STORE_SNAPSHOT, e)
+
+
+@bp.route("/snapshots", methods=["GET"])
+@bp.arguments(SnapshotListQuerySchema, location="query")
+@bp.response(200, SnapshotSchema(many=True))
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid query parameters")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def get_snapshots(args) -> tuple[Response, int]:
+    """List saved team snapshots without their data, newest first.
+
+    Filter by `team_id` and by UTC day with `from` and `to` (YYYY-MM-DD, inclusive).
+    """
+    try:
+        snapshots = list_snapshots(args.get("team_id"), args.get("date_from"), args.get("date_to"))
+        return jsonify(snapshots), 200
+    except Exception as e:
+        logger.error(f"Error listing snapshots: {e}")
+        return api_error(500, Errors.FAILED_TO_READ_SNAPSHOTS, e)
+
+
+@bp.route("/snapshots/<int:snapshot_id>", methods=["GET"])
+@bp.response(200, SnapshotDetailSchema)
+@bp.alt_response(404, schema=ErrorSchema, description="Snapshot not found")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
+    """Get one saved team snapshot with its data (`team`, `summary`, `players`)."""
+    try:
+        snapshot = get_snapshot(snapshot_id)
+    except Exception as e:
+        logger.error(f"Error reading snapshot {snapshot_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_READ_SNAPSHOTS, e)
+    if snapshot is None:
+        return api_error(404, Errors.SNAPSHOT_NOT_FOUND, snapshot_id=snapshot_id)
+    return jsonify(snapshot), 200
 
 
 if __name__ == "__main__":

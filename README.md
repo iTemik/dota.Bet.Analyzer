@@ -161,13 +161,14 @@ dota.Bet.Analyzer/
 │   └── vite.config.ts      # Build configuration
 ├── scripts/                # Utility scripts
 │   ├── generate_schema.py  # Generate DB schema
-│   └── init_d2ba_db.py     # Initialize pro players DB
+│   └── init_d2ba_db.py     # Initialize d2ba and predictions DBs
 ├── tests/                  # Test suite
 │   ├── test_*.py           # Backend tests
 │   └── conftest.py         # Test configuration
 ├── instance/               # Runtime data (git ignored)
 │   ├── opendota.sqlite     # Main database
-│   └── d2ba.sqlite         # Pro players/teams database
+│   ├── d2ba.sqlite         # Pro players/teams database (OpenDota cache)
+│   └── predictions.sqlite  # Your snapshots (back it up)
 ├── package.json            # npm scripts & dependencies
 ├── requirements.txt        # Python dependencies
 └── README.md              # You are here!
@@ -378,10 +379,11 @@ npm test -- --run # Single run
 
 ## 🗂️ Database initialization
 
-This project uses SQLite for local development with **two separate databases**:
+This project uses SQLite for local development with **three separate databases**:
 
 1. **opendota.sqlite** - Main OpenDota schema database
-2. **d2ba.sqlite** - Statistics database
+2. **d2ba.sqlite** - Statistics database (OpenDota cache, can be rebuilt)
+3. **predictions.sqlite** - Your own data: team snapshots. Back it up; it can't be fetched again
 
 ### Main Database (opendota.sqlite)
 
@@ -417,6 +419,11 @@ python scripts/init_d2ba_db.py
 
 This creates `instance/d2ba.sqlite` with `pro_players` and `teams` tables for storing Dota 2 professional player and team data.
 It also creates the roster cache tables (`team_matches`, `team_matches_sync`, `match_players`); `npm run dev` runs it on every start, so new migrations are applied after a pull or branch switch (`npm run migrate` runs it alone).
+
+### Predictions Database (predictions.sqlite)
+
+The same script creates `instance/predictions.sqlite` from the migrations in `backend/migrations/predictions/`
+(schema: `backend/predictions_schema.sql`). It holds `team_snapshots`.
 
 **Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
 `/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
@@ -617,6 +624,12 @@ Async task for comprehensive player analysis:
 4. Task processes matches, fetches ranks, calculates statistics
 5. Results stored in Redis at `/results/<task_id>` when complete
 
+#### Team Snapshots (`/snapshots`)
+- `POST /snapshots` saves what the Compare page shows for one team (team data, player summary, player ranks)
+- One snapshot per team + UTC day + `days` + latest league match; saving the same key again refreshes it (200)
+- `GET /snapshots?team_id=&from=&to=` lists them by team and day, `GET /snapshots/<id>` returns one with its data
+- Stored in `predictions.sqlite`, no OpenDota requests
+
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
 - Stores player data in SQLite database for reference
@@ -724,7 +737,7 @@ Stored/updated 1523 teams in 0.234s (6505.1 records/sec)
 - Cleanup guaranteed even if tests fail
 
 **Database files used:**
-- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams)
+- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams), `instance/predictions.sqlite` (snapshots)
 - **Testing**: Temporary directories created per test, cleaned up automatically
 
 This isolation ensures:

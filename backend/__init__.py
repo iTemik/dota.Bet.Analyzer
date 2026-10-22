@@ -206,6 +206,11 @@ def _init_extensions(app):
 
     init_d2ba_app(app)
 
+    # Initialize predictions database (snapshots and predictions)
+    from .predictions_db import init_predictions_app
+
+    init_predictions_app(app)
+
     # Register blueprints
     from .dota_bet_analyzer import bp as dota_bp
     from .dota_bet_analyzer import celery as celery_app
