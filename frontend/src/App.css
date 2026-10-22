@@ -295,6 +295,21 @@ pre {
   }
 }
 
+/* Trolling tagline above the page header */
+.app-tagline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #999;
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+}
+
+.app-tagline-troll {
+  opacity: 0.15;
+}
+
 /* Page header: title on the left, versions on the right */
 .app-header {
   display: flex;

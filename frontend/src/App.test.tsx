@@ -51,6 +51,14 @@ describe('App Component', () => {
             expect(screen.getByRole('heading', { name: /Dota 2 Bet Analyzer/i })).toBeInTheDocument()
         })
 
+        it('should render the tagline with a troll face', async () => {
+            await act(async () => {
+                render(<App />)
+            })
+            expect(screen.getByText('stealing from bookmakers since 2022')).toBeInTheDocument()
+            expect(screen.getByTestId('troll-face')).toBeInTheDocument()
+        })
+
         it('should render version in header', async () => {
             await act(async () => {
                 render(<App />)
