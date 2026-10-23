@@ -1,7 +1,7 @@
 """Prediction log: series-win bets made from two team snapshots, saved in predictions.sqlite.
 
-Odds, series format, bet, stake and comment are locked once saved. Only the review (maps won by each team and a
-review note) can be changed later. Whether the bet won is computed from the stored values, not stored.
+Odds, series format, bet, stake and comment can be edited after saving, and so can the review (maps won by each team
+and a review note). The snapshots stay as saved. Whether the bet won is computed from the stored values, not stored.
 """
 
 import json
@@ -236,6 +236,48 @@ def save_review(
         "UPDATE predictions SET team1_maps_won = ?, team2_maps_won = ?, review_note = COALESCE(?, review_note) "
         "WHERE prediction_id = ?",
         (team1_maps_won, team2_maps_won, review_note, prediction_id),
+    )
+    db.commit()
+    return _fetch(prediction_id)
+
+
+def update_decision(
+    prediction_id: int,
+    team1_odds: float,
+    team2_odds: float,
+    best_of: Optional[int],
+    bet_team: Optional[int],
+    stake: Optional[float],
+    comment: str,
+) -> Optional[dict[str, Any]]:
+    """Replace the bookmaker values and the decision of a saved prediction. Its snapshots and review stay.
+
+    Args:
+        prediction_id: Prediction to edit
+        team1_odds: Bookmaker decimal coefficient for team 1
+        team2_odds: Bookmaker decimal coefficient for team 2
+        best_of: Series format (1, 2, 3 or 5), None when unknown
+        bet_team: Team bet on to win the series (1 or 2), None for a prediction without a bet
+        stake: Amount bet, None if not given
+        comment: Reasoning
+
+    Returns:
+        The updated prediction, or None when it does not exist
+
+    Raises:
+        ValueError: When the saved result is not a finished series of the new format
+    """
+    prediction = _fetch(prediction_id)
+    if prediction is None:
+        return None
+    score = (prediction["team1_maps_won"], prediction["team2_maps_won"])
+    if score[0] is not None and not is_valid_result(best_of, *score):
+        raise ValueError(f"Saved result {score[0]}-{score[1]} is not a result of a bo{best_of or '?'} series")
+    db = get_predictions_db()
+    db.execute(
+        "UPDATE predictions SET team1_odds = ?, team2_odds = ?, best_of = ?, bet_team = ?, stake = ?, comment = ? "
+        "WHERE prediction_id = ?",
+        (team1_odds, team2_odds, best_of, bet_team, stake, comment, prediction_id),
     )
     db.commit()
     return _fetch(prediction_id)

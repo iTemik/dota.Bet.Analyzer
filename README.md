@@ -634,7 +634,7 @@ Async task for comprehensive player analysis:
 
 #### Prediction Log (`/predictions`)
 - `POST /predictions` saves a series-win prediction from two snapshots: odds per team, `best_of` (1, 2, 3, 5 or null when unknown), bet team, optional `stake`, comment
-- Odds, bet and comment are locked; a snapshot used by a prediction is no longer refreshed
+- `PUT /predictions/<id>` edits odds, `best_of`, bet, stake and comment (a saved result must still fit `best_of`); a snapshot used by a prediction is no longer refreshed
 - `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of` when known) and a review note
 - `GET /predictions?status=pending|settled` lists them with computed `bet_won`, `GET /predictions/<id>` includes both snapshots
 - `DELETE /predictions/<id>` removes one, its snapshots stay
@@ -715,8 +715,9 @@ npm test          # Run tests
 #### Predictions
 - List of saved predictions, newest first: date, teams with logos, odds, series, bet and stake, result (maps won or "pending") and outcome (won, lost, no bet)
 - Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
-- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, the locked bookmaker values and decision, and a disabled **Played heroes** placeholder
+- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
+- **Edit** changes the odds, series, bet, stake and comment of a saved prediction; the saved tables stay as they were
 - **Delete** removes a prediction made by mistake (its snapshots stay)
 
 #### Log Prediction

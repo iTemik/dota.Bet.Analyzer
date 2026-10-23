@@ -18,6 +18,46 @@ export const outcome = (p: Prediction): Outcome => {
   return p.bet_won ? 'won' : 'lost'
 }
 
+// Series formats accepted by best_of; '' is n/a (unknown, sent as null)
+export const SERIES_OPTIONS = [
+  { value: '1', label: 'bo1' },
+  { value: '2', label: 'bo2' },
+  { value: '3', label: 'bo3' },
+  { value: '5', label: 'bo5' },
+  { value: '', label: 'n/a' },
+]
+
+export type BetChoice = '1' | '2' | 'none'
+
+// Decimal input that also accepts a comma ("1,85"); NaN when it is not a number
+export const parseDecimal = (value: string): number => (value.trim() ? Number(value.trim().replace(',', '.')) : NaN)
+
+// Field errors of the odds and stake inputs, null where the value is fine
+export const decisionErrors = (odds: string[], bet: BetChoice, stake: string) => {
+  const oddsErrors = odds.map((value) => {
+    if (!value.trim()) return 'Required'
+    const number = parseDecimal(value)
+    return Number.isFinite(number) && number > 1 ? null : 'Must be a number above 1'
+  })
+  const stakeError =
+    bet === 'none' ? null : !stake.trim() ? 'Required with a bet' : parseDecimal(stake) > 0 ? null : 'Must be above 0'
+  return {
+    oddsErrors,
+    stakeError,
+    invalid: oddsErrors.some(Boolean) || Boolean(stakeError),
+  }
+}
+
+// Body of POST and PUT /api/predictions: odds, series, bet, stake and comment as typed in the form
+export const decisionBody = (odds: string[], bestOf: string, bet: BetChoice, stake: string, comment: string) => ({
+  team1_odds: parseDecimal(odds[0]),
+  team2_odds: parseDecimal(odds[1]),
+  best_of: bestOf ? Number(bestOf) : null,
+  bet_team: bet === 'none' ? null : Number(bet),
+  stake: bet === 'none' ? null : parseDecimal(stake),
+  comment,
+})
+
 export const seriesLabel = (bestOf: number | null): string => (bestOf ? `bo${bestOf}` : 'n/a')
 
 // Map score "2-1", or "pending" before the review
