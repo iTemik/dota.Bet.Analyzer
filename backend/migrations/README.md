@@ -39,6 +39,7 @@ migrations are applied on every start. There are no down migrations: switching t
 which the older code ignores. To keep that safe:
 
 - Migrations only add things (tables, columns, indexes). Do not drop or rename in a migration other branches may not have.
+  Exception: a d2ba cache table with a wrong schema can be dropped and created again (see `20261023_000001_fix_heroes_schema.sql`), its data is refilled from OpenDota.
 - Never edit a migration after it has been applied; add a new one instead. An edited file is not re-run, and a table that
   already exists is skipped, so the schema would silently differ.
 

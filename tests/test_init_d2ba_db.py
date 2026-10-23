@@ -199,3 +199,78 @@ def test_migration_runner_rejects_unknown_database(temp_db):
 
     with pytest.raises(ValueError):
         MigrationRunner(db_path=temp_db, database="unknown")
+
+
+HERO_COLUMNS = ["hero_id", "name", "localized_name", "icon"]
+FIX_HEROES_MIGRATION = "20261023_000001_fix_heroes_schema.sql"
+
+
+def _columns(db_path, table):
+    """Column names of a table, in order."""
+    conn = sqlite3.connect(db_path)
+    try:
+        return [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
+    finally:
+        conn.close()
+
+
+def _insert_hero(db_path):
+    """Insert a hero the way backend/heroes.py store_heroes does."""
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO heroes (hero_id, name, localized_name, icon) VALUES (1, 'npc_dota_hero_antimage', 'Anti-Mage', '')"
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_init_d2ba_db_creates_heroes_table(temp_db):
+    """A new d2ba.sqlite gets the heroes table with the columns backend/heroes.py reads and writes."""
+    from scripts.init_d2ba_db import init_d2ba_db
+
+    assert init_d2ba_db(temp_db) is True
+
+    assert _columns(temp_db, "heroes") == HERO_COLUMNS
+    _insert_hero(temp_db)
+
+
+def test_init_d2ba_db_replaces_legacy_heroes_table(temp_db):
+    """An old d2ba.sqlite with the opendota_schema.sql heroes table (id, no hero_id) gets the right table.
+
+    It already has every earlier migration applied, so only the fix migration runs, as on an existing install
+    """
+    from scripts.init_d2ba_db import init_d2ba_db
+    from scripts.migrate import MigrationRunner
+
+    runner = MigrationRunner(db_path=temp_db, database="d2ba")
+    conn = sqlite3.connect(temp_db)
+    conn.execute(
+        'CREATE TABLE "heroes" ("id" INTEGER PRIMARY KEY, "name" TEXT, "localized_name" TEXT, '
+        '"primary_attr" TEXT, "attack_type" TEXT, "roles" JSON, "legs" INTEGER)'
+    )
+    conn.execute("INSERT INTO heroes (id, name, localized_name) VALUES (1, 'npc_dota_hero_antimage', 'Anti-Mage')")
+    conn.commit()
+    conn.close()
+    for path in sorted(runner.migrations_dir.glob("*.sql")):
+        if path.name < FIX_HEROES_MIGRATION:
+            assert runner.run_migration(path) is True
+    assert _columns(temp_db, "heroes")[0] == "id"
+
+    assert init_d2ba_db(temp_db) is True
+
+    assert _columns(temp_db, "heroes") == HERO_COLUMNS
+    _insert_hero(temp_db)
+
+
+def test_init_d2ba_db_rerun_keeps_heroes(temp_db):
+    """The fix migration drops the heroes table only once, a later start keeps the stored heroes."""
+    from scripts.init_d2ba_db import init_d2ba_db
+
+    init_d2ba_db(temp_db)
+    _insert_hero(temp_db)
+
+    assert init_d2ba_db(temp_db) is True
+
+    conn = sqlite3.connect(temp_db)
+    assert conn.execute("SELECT COUNT(*) FROM heroes").fetchone()[0] == 1
+    conn.close()
