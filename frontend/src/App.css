@@ -348,7 +348,7 @@ pre {
   left: calc(100% + 0.75rem);
   top: 0;
   width: 66px;
-  opacity: 0.35;
+  opacity: 0.10;
   pointer-events: none;
 }
 
@@ -504,7 +504,7 @@ pre {
   font-size: 1rem;
 }
 
-.prediction-field > span {
+.prediction-field>span {
   font-weight: 600;
 }
 
@@ -667,7 +667,7 @@ pre {
   text-decoration: none;
 }
 
-.prediction-detail > h2 {
+.prediction-detail>h2 {
   margin: 1rem 0 0.5rem;
 }
 
