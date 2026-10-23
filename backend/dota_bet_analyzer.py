@@ -18,6 +18,7 @@ from backend.predictions import (
     get_prediction,
     list_predictions,
     save_review,
+    update_decision,
 )
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
 from backend.schemas import (
@@ -25,6 +26,7 @@ from backend.schemas import (
     HeroSchema,
     PlayerStatisticsQuerySchema,
     PredictionCreateSchema,
+    PredictionDecisionSchema,
     PredictionDetailSchema,
     PredictionListQuerySchema,
     PredictionReviewSchema,
@@ -1013,8 +1015,8 @@ def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
 def post_prediction(args) -> tuple[Response, int]:
     """Save a series-win prediction made from two saved team snapshots.
 
-    Odds, `best_of`, bet and comment are locked from then on, and so are both snapshots (saving their key again no
-    longer refreshes them). No OpenDota requests.
+    Both snapshots are locked from then on (saving their key again no longer refreshes them). Odds, `best_of`, bet
+    and comment can be edited later with PUT. No OpenDota requests.
     """
     try:
         prediction = create_prediction(**args)
@@ -1070,7 +1072,7 @@ def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
 
     The score must be a finished series of the prediction's format (bo3: 2-0, 2-1, 1-2, 0-2, bo2: 2-0, 1-1, 0-2).
     With an unknown format any score with at least one map is accepted.
-    Other fields (odds, bet, comment) are rejected.
+    Other fields (odds, bet, comment) are rejected, they are edited with PUT.
     """
     try:
         prediction = save_review(prediction_id, args["team1_maps_won"], args["team2_maps_won"], args.get("review_note"))
@@ -1084,6 +1086,29 @@ def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
         )
     except Exception as e:
         logger.error(f"Error saving review of prediction {prediction_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_STORE_PREDICTION, e)
+    if prediction is None:
+        return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
+    return jsonify(prediction), 200
+
+
+@bp.route("/predictions/<int:prediction_id>", methods=["PUT"])
+@bp.arguments(PredictionDecisionSchema)
+@bp.response(200, PredictionSchema, description="Prediction updated")
+@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
+@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or the saved result does not fit the new best_of")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def put_prediction(args, prediction_id: int) -> tuple[Response, int]:
+    """Edit a saved prediction: odds, `best_of`, bet, stake and comment, all replaced together.
+
+    The snapshots and the review stay. When a result is saved, the new `best_of` must still fit it.
+    """
+    try:
+        prediction = update_decision(prediction_id, **args)
+    except ValueError as e:
+        return api_error(422, Errors.INVALID_RESULT, best_of=args["best_of"], reason=str(e))
+    except Exception as e:
+        logger.error(f"Error editing prediction {prediction_id}: {e}")
         return api_error(500, Errors.FAILED_TO_STORE_PREDICTION, e)
     if prediction is None:
         return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)

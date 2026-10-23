@@ -472,11 +472,9 @@ class SnapshotDetailSchema(SnapshotSchema):
     )
 
 
-class PredictionCreateSchema(Schema):
-    """Body of POST /api/predictions: a series-win prediction made from two saved team snapshots."""
+class PredictionDecisionSchema(Schema):
+    """Body of PUT /api/predictions/{id}: the bookmaker values and the decision, all replaced together."""
 
-    team1_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 1 (POST /api/snapshots)"})
-    team2_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 2 (POST /api/snapshots)"})
     team1_odds = fields.Float(
         required=True,
         validate=validate.Range(min=1, min_inclusive=False),
@@ -505,13 +503,24 @@ class PredictionCreateSchema(Schema):
         validate=validate.Range(min=0, min_inclusive=False),
         metadata={"description": "Amount bet, only with bet_team"},
     )
-    comment = fields.Str(load_default="", metadata={"description": "Reasoning, locked after saving"})
+    comment = fields.Str(load_default="", metadata={"description": "Reasoning written before the match"})
 
     @validates_schema
     def validate_bet(self, data: dict, **kwargs) -> None:
-        """Reject a stake without a bet and one snapshot used for both teams."""
+        """Reject a stake without a bet."""
         if data.get("stake") is not None and data.get("bet_team") is None:
             raise ValidationError("stake needs bet_team", field_name="stake")
+
+
+class PredictionCreateSchema(PredictionDecisionSchema):
+    """Body of POST /api/predictions: a series-win prediction made from two saved team snapshots."""
+
+    team1_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 1 (POST /api/snapshots)"})
+    team2_snapshot_id = fields.Int(required=True, metadata={"description": "Snapshot of team 2 (POST /api/snapshots)"})
+
+    @validates_schema
+    def validate_snapshots(self, data: dict, **kwargs) -> None:
+        """Reject one snapshot used for both teams."""
         if data["team1_snapshot_id"] == data["team2_snapshot_id"]:
             raise ValidationError("team1 and team2 need different snapshots", field_name="team2_snapshot_id")
 
@@ -526,7 +535,7 @@ class PredictionListQuerySchema(Schema):
 
 
 class PredictionReviewSchema(Schema):
-    """Body of PATCH /api/predictions/{id}: the review. Odds, bet and comment can't be changed."""
+    """Body of PATCH /api/predictions/{id}: the review. Odds, bet and comment are edited with PUT."""
 
     team1_maps_won = fields.Int(required=True, metadata={"description": "Maps won by team 1"})
     team2_maps_won = fields.Int(required=True, metadata={"description": "Maps won by team 2"})

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { teamName } from '../format'
+import { type BetChoice, SERIES_OPTIONS, decisionBody, decisionErrors } from '../predictions'
 import type { StatisticsResult, TeamData } from '../types'
 
 interface PredictionPanelProps {
@@ -8,21 +9,7 @@ interface PredictionPanelProps {
   days: number // statistics window the teams were loaded with
 }
 
-// Series formats accepted by POST /api/predictions best_of; '' is n/a (unknown, sent as null)
-const SERIES_OPTIONS = [
-  { value: '1', label: 'bo1' },
-  { value: '2', label: 'bo2' },
-  { value: '3', label: 'bo3' },
-  { value: '5', label: 'bo5' },
-  { value: '', label: 'n/a' },
-]
-
-type BetChoice = '1' | '2' | 'none'
-
 type SaveResult = { kind: 'prediction'; id: number } | { kind: 'snapshots'; ids: number[] }
-
-// Decimal input that also accepts a comma ("1,85"); NaN when it is not a number
-const parseDecimal = (value: string): number => (value.trim() ? Number(value.trim().replace(',', '.')) : NaN)
 
 // Body of POST /api/snapshots: the team as shown (task_id dropped), its summary and the players' ranks
 const snapshotBody = (team: TeamData, result: StatisticsResult | undefined, days: number) => {
@@ -75,15 +62,7 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
     setSaved(null)
   }
 
-  const oddsErrors = odds.map((value) => {
-    const number = parseDecimal(value)
-    if (!value.trim()) return 'Required'
-    return Number.isFinite(number) && number > 1 ? null : 'Must be a number above 1'
-  })
-  const stakeNumber = parseDecimal(stake)
-  const stakeError =
-    bet === 'none' ? null : !stake.trim() ? 'Required with a bet' : stakeNumber > 0 ? null : 'Must be above 0'
-  const invalid = oddsErrors.some(Boolean) || Boolean(stakeError)
+  const { oddsErrors, stakeError, invalid } = decisionErrors(odds, bet, stake)
 
   const saveSnapshots = async (): Promise<number[]> => {
     const snapshots = await Promise.all(
@@ -112,12 +91,7 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
       const prediction = await postJson('/api/predictions', {
         team1_snapshot_id: team1SnapshotId,
         team2_snapshot_id: team2SnapshotId,
-        team1_odds: parseDecimal(odds[0]),
-        team2_odds: parseDecimal(odds[1]),
-        best_of: bestOf ? Number(bestOf) : null,
-        bet_team: bet === 'none' ? null : Number(bet),
-        stake: bet === 'none' ? null : stakeNumber,
-        comment,
+        ...decisionBody(odds, bestOf, bet, stake, comment),
       })
       return { kind: 'prediction', id: prediction.prediction_id }
     })

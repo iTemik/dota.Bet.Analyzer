@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import { formatDateTime } from '../format'
-import { OUTCOME_LABELS, isSettled, outcome, requestJson, resultOptions, seriesLabel, teamLabel } from '../predictions'
+import {
+  type BetChoice,
+  OUTCOME_LABELS,
+  SERIES_OPTIONS,
+  decisionBody,
+  decisionErrors,
+  isSettled,
+  outcome,
+  requestJson,
+  resultOptions,
+  seriesLabel,
+  teamLabel,
+} from '../predictions'
 import type { Prediction, PredictionDetail as Detail, Snapshot, TeamData } from '../types'
 import ComparisonTable from './ComparisonTable'
 import InsightsTable, { type PlayerRanks } from './InsightsTable'
@@ -112,14 +124,135 @@ function ReviewForm({
   )
 }
 
+/** Edit form for the bookmaker values and the decision, filled with the saved values. Snapshots stay as saved. */
+function DecisionForm({
+  prediction,
+  onSaved,
+  onCancel,
+}: {
+  prediction: Prediction
+  onSaved: (updated: Prediction) => void
+  onCancel: () => void
+}) {
+  const names = [teamLabel(prediction.team1, 0), teamLabel(prediction.team2, 1)]
+  const [odds, setOdds] = useState([String(prediction.team1_odds), String(prediction.team2_odds)])
+  const [bestOf, setBestOf] = useState(prediction.best_of?.toString() ?? '')
+  const [bet, setBet] = useState<BetChoice>(prediction.bet_team ? (String(prediction.bet_team) as BetChoice) : 'none')
+  const [stake, setStake] = useState(prediction.stake?.toString() ?? '')
+  const [comment, setComment] = useState(prediction.comment)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { oddsErrors, stakeError, invalid } = decisionErrors(odds, bet, stake)
+  const fieldError = (message: string | null) => (message ? <span className="field-error">{message}</span> : null)
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await requestJson<Prediction>(`/api/predictions/${prediction.prediction_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(decisionBody(odds, bestOf, bet, stake, comment)),
+      })
+      onSaved(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <fieldset className="prediction-fieldset" disabled={saving}>
+      <fieldset className="bookmaker-box">
+        <legend>From bookmaker</legend>
+        <div className="prediction-row">
+          {names.map((name, i) => (
+            <label key={i} className="prediction-field">
+              <span>Coefficient {name}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={odds[i]}
+                onChange={(e) => setOdds(odds.map((v, j) => (j === i ? e.target.value : v)))}
+              />
+              {fieldError(oddsErrors[i])}
+            </label>
+          ))}
+          <label className="prediction-field">
+            <span>Series</span>
+            <select value={bestOf} onChange={(e) => setBestOf(e.target.value)}>
+              {SERIES_OPTIONS.map((o) => (
+                <option key={o.label} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset className="decision-box">
+        <legend>My decision</legend>
+        <div className="prediction-row">
+          <div className="prediction-field" role="radiogroup" aria-label="Bet on">
+            <span>Bet on</span>
+            <div className="bet-options">
+              {(['1', '2', 'none'] as const).map((choice) => (
+                <label key={choice}>
+                  <input
+                    type="radio"
+                    name="edit-bet-team"
+                    value={choice}
+                    checked={bet === choice}
+                    onChange={() => setBet(choice)}
+                  />
+                  {choice === 'none' ? 'No bet' : names[Number(choice) - 1]}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="prediction-field">
+            <span>Stake</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={stake}
+              disabled={bet === 'none'}
+              onChange={(e) => setStake(e.target.value)}
+            />
+            {fieldError(stakeError)}
+          </label>
+        </div>
+        <label className="prediction-field">
+          <span>Comment</span>
+          <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
+        </label>
+      </fieldset>
+
+      {error && <div className="error-message">{error}</div>}
+      <div className="prediction-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="check-btn" onClick={save} disabled={invalid}>
+          {saving ? 'Saving...' : 'Save changes'}
+        </button>
+      </div>
+    </fieldset>
+  )
+}
+
 /**
- * One prediction: the Team Comparison and Team Insights tables as saved in its snapshots, the locked decision,
- * the review (hidden until "Add review"), a delete button and the played heroes placeholder.
+ * One prediction: the Team Comparison and Team Insights tables as saved in its snapshots, the decision (editable
+ * with "Edit"), the review (hidden until "Add review"), a delete button and the played heroes placeholder.
  */
 function PredictionDetail({ predictionId }: PredictionDetailProps) {
   const [detail, setDetail] = useState<Detail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -194,45 +327,58 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
       <div className="prediction-panel">
         <h2>Prediction</h2>
         <div className="prediction-fieldset">
-          <fieldset className="bookmaker-box">
-            <legend>From bookmaker</legend>
-            <dl className="prediction-values">
-              <div>
-                <dt>Coefficient {names[0]}</dt>
-                <dd>{detail.team1_odds}</dd>
-              </div>
-              <div>
-                <dt>Coefficient {names[1]}</dt>
-                <dd>{detail.team2_odds}</dd>
-              </div>
-              <div>
-                <dt>Series</dt>
-                <dd>{seriesLabel(detail.best_of)}</dd>
-              </div>
-            </dl>
-          </fieldset>
+          {editing ? (
+            <DecisionForm
+              prediction={detail}
+              onCancel={() => setEditing(false)}
+              onSaved={(updated) => {
+                setDetail({ ...detail, ...updated })
+                setEditing(false)
+              }}
+            />
+          ) : (
+            <>
+              <fieldset className="bookmaker-box">
+                <legend>From bookmaker</legend>
+                <dl className="prediction-values">
+                  <div>
+                    <dt>Coefficient {names[0]}</dt>
+                    <dd>{detail.team1_odds}</dd>
+                  </div>
+                  <div>
+                    <dt>Coefficient {names[1]}</dt>
+                    <dd>{detail.team2_odds}</dd>
+                  </div>
+                  <div>
+                    <dt>Series</dt>
+                    <dd>{seriesLabel(detail.best_of)}</dd>
+                  </div>
+                </dl>
+              </fieldset>
 
-          <fieldset className="decision-box">
-            <legend>My decision</legend>
-            <dl className="prediction-values">
-              <div>
-                <dt>Bet on</dt>
-                <dd>{detail.bet_team ? names[detail.bet_team - 1] : 'No bet'}</dd>
-              </div>
-              {detail.bet_team !== null && (
-                <div>
-                  <dt>Stake</dt>
-                  <dd>{detail.stake ?? '-'}</dd>
-                </div>
-              )}
-            </dl>
-            <dl className="prediction-values">
-              <div>
-                <dt>Comment</dt>
-                <dd className="prediction-comment">{detail.comment || '-'}</dd>
-              </div>
-            </dl>
-          </fieldset>
+              <fieldset className="decision-box">
+                <legend>My decision</legend>
+                <dl className="prediction-values">
+                  <div>
+                    <dt>Bet on</dt>
+                    <dd>{detail.bet_team ? names[detail.bet_team - 1] : 'No bet'}</dd>
+                  </div>
+                  {detail.bet_team !== null && (
+                    <div>
+                      <dt>Stake</dt>
+                      <dd>{detail.stake ?? '-'}</dd>
+                    </div>
+                  )}
+                </dl>
+                <dl className="prediction-values">
+                  <div>
+                    <dt>Comment</dt>
+                    <dd className="prediction-comment">{detail.comment || '-'}</dd>
+                  </div>
+                </dl>
+              </fieldset>
+            </>
+          )}
 
           {settled && !reviewing && (
             <fieldset className="decision-box">
@@ -270,14 +416,19 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
               }}
             />
           ) : (
-            <div className="prediction-actions">
-              <button type="button" className="secondary-btn" onClick={handleDelete}>
-                Delete
-              </button>
-              <button type="button" className="check-btn" onClick={() => setReviewing(true)}>
-                {settled ? 'Edit review' : 'Add review'}
-              </button>
-            </div>
+            !editing && (
+              <div className="prediction-actions">
+                <button type="button" className="secondary-btn" onClick={handleDelete}>
+                  Delete
+                </button>
+                <button type="button" className="secondary-btn" onClick={() => setEditing(true)}>
+                  Edit
+                </button>
+                <button type="button" className="check-btn" onClick={() => setReviewing(true)}>
+                  {settled ? 'Edit review' : 'Add review'}
+                </button>
+              </div>
+            )
           )}
           {deleteError && <div className="error-message">{deleteError}</div>}
 

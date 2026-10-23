@@ -8,17 +8,19 @@ import PredictionDetail from './PredictionDetail'
 const jsonResponse = (data: unknown, ok = true, status = ok ? 200 : 422) =>
   Promise.resolve({ ok, status, json: () => Promise.resolve(data) })
 
-// Fetch mock: GET returns the detail, PATCH and DELETE return the given responses
+// Fetch mock: GET returns the detail, PATCH, PUT and DELETE return the given responses (PATCH and PUT echo the body)
 const mockBackend = (
   detail: Detail = predictionDetail(),
   patchResponse?: ReturnType<typeof jsonResponse>,
   deleteResponse = Promise.resolve({ ok: true, status: 204, json: () => Promise.reject(new Error('no body')) }),
+  putResponse?: ReturnType<typeof jsonResponse>,
 ) => {
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     if (init?.method === 'PATCH') {
       const body = JSON.parse(init.body as string)
       return patchResponse ?? jsonResponse(prediction({ ...body, bet_won: body.team1_maps_won > body.team2_maps_won }))
     }
+    if (init?.method === 'PUT') return putResponse ?? jsonResponse(prediction(JSON.parse(init.body as string)))
     if (init?.method === 'DELETE') return deleteResponse
     if (url === `/api/predictions/${detail.prediction_id}`) return jsonResponse(detail)
     return jsonResponse({ message: 'Prediction not found' }, false, 404)
@@ -55,7 +57,7 @@ describe('PredictionDetail', () => {
     expect(within(insights).getByText(/Core One/).closest('div')).toHaveTextContent('Core One · games: 10 · rank: 45')
   })
 
-  it('shows the locked decision with the bookmaker values in their own box', async () => {
+  it('shows the saved decision with the bookmaker values in their own box', async () => {
     mockBackend()
     await renderDetail()
     const bookmaker = screen.getByRole('group', { name: 'From bookmaker' })
@@ -140,6 +142,93 @@ describe('PredictionDetail', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save review' }))
     expect(await screen.findByText('2-0 is not accepted')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save review' })).toBeInTheDocument()
+  })
+
+  it('opens Edit with the saved values and hides the other actions', async () => {
+    mockBackend()
+    await renderDetail()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: 'Coefficient Team A' })).toHaveValue('1.85')
+    expect(screen.getByRole('textbox', { name: 'Coefficient Team B' })).toHaveValue('2.05')
+    expect(screen.getByRole('combobox', { name: 'Series' })).toHaveValue('3')
+    expect(screen.getByRole('radio', { name: 'Team A' })).toBeChecked()
+    expect(screen.getByRole('textbox', { name: 'Stake' })).toHaveValue('100')
+    expect(screen.getByRole('textbox', { name: 'Comment' })).toHaveValue('Team A looks stronger')
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add review' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('group', { name: 'My decision' })).toHaveTextContent('Bet onTeam A')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('sends the edited prediction and shows the new values', async () => {
+    const fetchMock = mockBackend()
+    await renderDetail()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const team1Odds = screen.getByRole('textbox', { name: 'Coefficient Team A' })
+    await userEvent.clear(team1Odds)
+    await userEvent.type(team1Odds, '1,9')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Series' }), 'n/a')
+    await userEvent.click(screen.getByRole('radio', { name: 'Team B' }))
+    const comment = screen.getByRole('textbox', { name: 'Comment' })
+    await userEvent.clear(comment)
+    await userEvent.type(comment, 'Changed my mind')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await screen.findByRole('button', { name: 'Edit' })
+    const [[url, init]] = callsWith(fetchMock, 'PUT')
+    expect(url).toBe('/api/predictions/1')
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      team1_odds: 1.9,
+      team2_odds: 2.05,
+      best_of: null,
+      bet_team: 2,
+      stake: 100,
+      comment: 'Changed my mind',
+    })
+    expect(screen.getByRole('group', { name: 'From bookmaker' })).toHaveTextContent('Coefficient Team A1.9')
+    expect(screen.getByRole('group', { name: 'From bookmaker' })).toHaveTextContent('Seriesn/a')
+    const decision = screen.getByRole('group', { name: 'My decision' })
+    expect(decision).toHaveTextContent('Bet onTeam B')
+    expect(decision).toHaveTextContent('CommentChanged my mind')
+    // The saved snapshots stay on the page
+    expect(screen.getByRole('heading', { name: 'Team Comparison' })).toBeInTheDocument()
+  })
+
+  it('sends no stake when the bet is removed', async () => {
+    const fetchMock = mockBackend()
+    await renderDetail()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'No bet' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByRole('button', { name: 'Edit' })
+    expect(JSON.parse((callsWith(fetchMock, 'PUT')[0][1] as RequestInit).body as string)).toMatchObject({
+      bet_team: null,
+      stake: null,
+    })
+  })
+
+  it('blocks saving invalid odds and shows the backend error', async () => {
+    const fetchMock = mockBackend(
+      predictionDetail(),
+      undefined,
+      undefined,
+      jsonResponse({ message: 'Saved result does not fit bo5' }, false),
+    )
+    await renderDetail()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const team1Odds = screen.getByRole('textbox', { name: 'Coefficient Team A' })
+    await userEvent.clear(team1Odds)
+    await userEvent.type(team1Odds, '1')
+    expect(screen.getByText('Must be a number above 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await userEvent.type(team1Odds, '.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Saved result does not fit bo5')).toBeInTheDocument()
+    expect(callsWith(fetchMock, 'PUT')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
   })
 
   it('deletes the prediction after confirmation and goes back to the list', async () => {

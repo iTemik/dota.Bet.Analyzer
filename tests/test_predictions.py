@@ -261,7 +261,7 @@ class TestReview:
         assert client.get(f"/api/predictions/{prediction_id}").get_json()["team1_maps_won"] is None
 
     @pytest.mark.parametrize("field", [{"team1_odds": 3.0}, {"comment": "changed"}, {"bet_team": 2}, {"stake": 1}])
-    def test_locked_fields_are_rejected(self, client, snapshots, field):
+    def test_decision_fields_are_rejected(self, client, snapshots, field):
         prediction_id = self.create(client, snapshots)
 
         response = client.patch(
@@ -318,6 +318,101 @@ class TestReview:
 
         assert response.status_code == 404
         assert response.get_json()["code"] == "PREDICTION_NOT_FOUND"
+
+
+def decision_body(**changes) -> dict:
+    """Build a PUT /api/predictions/{id} body: the edited decision."""
+    return {
+        "team1_odds": 1.9,
+        "team2_odds": 1.95,
+        "best_of": 5,
+        "bet_team": 2,
+        "stake": 50,
+        "comment": "Changed my mind",
+        **changes,
+    }
+
+
+class TestEditPrediction:
+    """PUT /api/predictions/{id}."""
+
+    def create(self, client, snapshots, **changes):
+        """Save a prediction and return its id."""
+        return post_prediction(client, prediction_body(snapshots, **changes)).get_json()["prediction_id"]
+
+    def test_replaces_decision_and_keeps_snapshots(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+
+        response = client.put(f"/api/predictions/{prediction_id}", json=decision_body())
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert {k: data[k] for k in decision_body()} == decision_body()
+        assert data["created_at"] == DAY1 + 600
+        assert (data["team1"]["snapshot_id"], data["team2"]["snapshot_id"]) == snapshots
+        assert client.get(f"/api/predictions/{prediction_id}").get_json()["comment"] == "Changed my mind"
+
+    def test_omitted_optional_fields_are_cleared(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+
+        data = client.put(f"/api/predictions/{prediction_id}", json={"team1_odds": 1.5, "team2_odds": 2.5}).get_json()
+
+        assert (data["best_of"], data["bet_team"], data["stake"], data["comment"]) == (None, None, None, "")
+
+    def test_keeps_review_and_recomputes_bet_won(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+        client.patch(
+            f"/api/predictions/{prediction_id}", json={"team1_maps_won": 2, "team2_maps_won": 1, "review_note": "n"}
+        )
+
+        data = client.put(f"/api/predictions/{prediction_id}", json=decision_body(best_of=3)).get_json()
+
+        assert (data["team1_maps_won"], data["team2_maps_won"], data["review_note"]) == (2, 1, "n")
+        assert data["bet_won"] is False  # now bet on team 2
+
+    def test_series_format_must_fit_saved_result(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+        client.patch(f"/api/predictions/{prediction_id}", json={"team1_maps_won": 2, "team2_maps_won": 1})
+
+        response = client.put(f"/api/predictions/{prediction_id}", json=decision_body(best_of=5))
+
+        assert response.status_code == 422
+        assert response.get_json()["code"] == "INVALID_RESULT"
+        assert client.get(f"/api/predictions/{prediction_id}").get_json()["best_of"] == 3
+
+    @pytest.mark.parametrize(
+        "changes",
+        [{"team1_odds": 1.0}, {"best_of": 4}, {"bet_team": 3}, {"stake": 0}, {"bet_team": None, "stake": 10}],
+    )
+    def test_invalid_body_returns_422(self, client, snapshots, changes):
+        prediction_id = self.create(client, snapshots)
+
+        response = client.put(f"/api/predictions/{prediction_id}", json=decision_body(**changes))
+
+        assert response.status_code == 422
+        assert client.get(f"/api/predictions/{prediction_id}").get_json()["team1_odds"] == 1.85
+
+    def test_snapshots_can_not_be_changed(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+
+        response = client.put(f"/api/predictions/{prediction_id}", json=decision_body(team1_snapshot_id=snapshots[1]))
+
+        assert response.status_code == 422
+
+    def test_unknown_id_returns_404(self, client):
+        response = client.put("/api/predictions/12345", json=decision_body())
+
+        assert response.status_code == 404
+        assert response.get_json()["code"] == "PREDICTION_NOT_FOUND"
+
+    def test_database_error_returns_500(self, client, snapshots):
+        prediction_id = self.create(client, snapshots)
+
+        with patch("backend.dota_bet_analyzer.update_decision", side_effect=sqlite3.OperationalError("locked")):
+            response = client.put(f"/api/predictions/{prediction_id}", json=decision_body())
+
+        assert response.status_code == 500
+        assert response.get_json()["code"] == "FAILED_TO_STORE_PREDICTION"
 
 
 class TestDeletePrediction:
