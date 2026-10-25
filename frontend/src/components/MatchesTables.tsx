@@ -8,6 +8,9 @@ interface MatchesTablesProps {
   onSelect: (match: Match) => void
 }
 
+// A series with a team still to be decided can't be checked
+const isCheckable = (match: Match): boolean => match.team1.name !== 'TBD' && match.team2.name !== 'TBD'
+
 const bestOf = (match: Match): string => (match.best_of ? `Bo${match.best_of}` : '-')
 
 const score = (match: Match): string =>
@@ -37,20 +40,23 @@ function MatchesTable({ matches, finished, onSelect }: { matches: Match[]; finis
         </tr>
       </thead>
       <tbody>
-        {matches.map((m) => (
-          <tr
-            key={`${m.start_time}-${m.team1.name}-${m.team2.name}`}
-            className={onSelect ? 'match-row-clickable' : undefined}
-            onClick={onSelect && (() => onSelect(m))}
-            title={onSelect ? 'Check statistics of these teams' : undefined}
-          >
-            <td>{formatDateTime(m.start_time)}</td>
-            <td>{bestOf(m)}</td>
-            <TeamCells team={m.team1} />
-            <TeamCells team={m.team2} />
-            {finished && <td>{score(m)}</td>}
-          </tr>
-        ))}
+        {matches.map((m, i) => {
+          const select = onSelect && isCheckable(m) ? () => onSelect(m) : undefined
+          return (
+            <tr
+              key={`${i}-${m.start_time}-${m.team1.name}-${m.team2.name}`}
+              className={select ? 'match-row-clickable' : undefined}
+              onClick={select}
+              title={select ? 'Check statistics of these teams' : undefined}
+            >
+              <td>{formatDateTime(m.start_time)}</td>
+              <td>{bestOf(m)}</td>
+              <TeamCells team={m.team1} />
+              <TeamCells team={m.team2} />
+              {finished && <td>{score(m)}</td>}
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )

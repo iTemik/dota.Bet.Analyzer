@@ -12,9 +12,13 @@ const mockFetch = (data: unknown, ok = true, status = 200) => {
 
 const alpha = { name: 'Team Alpha', team_id: 11, logo_url: 'https://logo/alpha.png' }
 const beta = { name: 'Beta Squad', team_id: null, logo_url: null }
+const tbd = { name: 'TBD', team_id: null, logo_url: null }
 
 const matches: Matches = {
-  upcoming: [{ start_time: 1_800_003_600, best_of: 3, team1: alpha, team2: beta }],
+  upcoming: [
+    { start_time: 1_800_003_600, best_of: 3, team1: alpha, team2: beta },
+    { start_time: 1_800_009_000, best_of: null, team1: tbd, team2: tbd },
+  ],
   finished: [
     { start_time: 1_799_990_000, best_of: 3, team1: beta, team2: alpha, score1: 2, score2: 1 },
     { start_time: 1_799_980_000, best_of: null, team1: alpha, team2: beta, score1: 0, score2: 2 },
@@ -34,7 +38,7 @@ describe('MatchesTables', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/matches', undefined)
 
     const upcoming = within(table('Upcoming Matches')).getAllByRole('row').slice(1)
-    expect(upcoming).toHaveLength(1)
+    expect(upcoming).toHaveLength(2)
     const cells = within(upcoming[0]).getAllByRole('cell').map((c) => c.textContent)
     expect(cells.slice(1)).toEqual(['Bo3', 'Team Alpha', '', 'Beta Squad', ''])
     expect(within(upcoming[0]).getByRole('img', { name: 'Team Alpha logo' })).toHaveAttribute('src', alpha.logo_url)
@@ -45,7 +49,7 @@ describe('MatchesTables', () => {
     expect(within(finished[1]).getAllByRole('cell')[1]).toHaveTextContent('-')
   })
 
-  it('calls onSelect with a clicked upcoming series, finished rows are not clickable', async () => {
+  it('calls onSelect with a clicked upcoming series, finished and TBD rows are not clickable', async () => {
     mockFetch(matches)
     const onSelect = vi.fn()
     render(<MatchesTables onSelect={onSelect} />)
@@ -54,7 +58,9 @@ describe('MatchesTables', () => {
     expect(onSelect).toHaveBeenCalledWith(matches.upcoming[0])
 
     await userEvent.click(within(table('Finished Matches')).getByText('2:1'))
+    await userEvent.click(within(table('Upcoming Matches')).getAllByText('TBD')[0])
     expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(within(table('Upcoming Matches')).getAllByRole('row')[2]).not.toHaveClass('match-row-clickable')
   })
 
   it('says when there are no matches', async () => {
