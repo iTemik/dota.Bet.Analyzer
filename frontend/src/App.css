@@ -565,11 +565,6 @@ pre {
   margin-top: 0.5rem;
 }
 
-.prediction-saved a {
-  color: white;
-  font-weight: 600;
-}
-
 .prediction-panel .error-message {
   margin-top: 1rem;
   max-width: none;
@@ -661,12 +656,6 @@ pre {
 }
 
 /* Predictions tab: one prediction */
-.back-link {
-  color: white;
-  font-weight: 600;
-  text-decoration: none;
-}
-
 .prediction-detail>h2 {
   margin: 1rem 0 0.5rem;
 }
@@ -701,16 +690,6 @@ pre {
 
 .head-to-head-table td {
   text-align: center;
-}
-
-.head-to-head-table a {
-  color: white;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.head-to-head-table a:hover {
-  text-decoration: underline;
 }
 
 .head-to-head-table tr.before-prediction {
