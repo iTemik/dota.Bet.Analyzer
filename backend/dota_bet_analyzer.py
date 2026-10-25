@@ -8,6 +8,7 @@ from flask_smorest import Blueprint
 
 from backend import __version__
 from backend.config import Config
+from backend.head_to_head import get_head_to_head
 from backend.helpers import Errors, api_error
 from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
 from backend.logging_config import setup_logging
@@ -23,6 +24,7 @@ from backend.predictions import (
 from backend.pro_players import fetch_pro_players_from_api, store_pro_players
 from backend.schemas import (
     ErrorSchema,
+    HeadToHeadSchema,
     HeroSchema,
     PlayerStatisticsQuerySchema,
     PredictionCreateSchema,
@@ -1059,6 +1061,25 @@ def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
     if prediction is None:
         return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
     return jsonify(prediction), 200
+
+
+@bp.route("/predictions/<int:prediction_id>/head-to-head", methods=["GET"])
+@bp.response(200, HeadToHeadSchema)
+@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
+@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+def get_prediction_head_to_head(prediction_id: int) -> tuple[Response, int]:
+    """League matches between the prediction's two teams, from `days` before the prediction up to now.
+
+    Read from team 1's cached team matches: no OpenDota request while the cache is fresh, otherwise one.
+    """
+    try:
+        head_to_head = get_head_to_head(prediction_id)
+    except Exception as e:
+        logger.error(f"Error reading head-to-head of prediction {prediction_id}: {e}")
+        return api_error(500, Errors.FAILED_TO_READ_PREDICTIONS, e)
+    if head_to_head is None:
+        return api_error(404, Errors.PREDICTION_NOT_FOUND, prediction_id=prediction_id)
+    return jsonify(head_to_head), 200
 
 
 @bp.route("/predictions/<int:prediction_id>", methods=["PATCH"])
