@@ -593,6 +593,32 @@ class PredictionDetailSchema(PredictionSchema):
     team2_snapshot = fields.Nested(SnapshotDetailSchema, required=True)
 
 
+class HeadToHeadMatchSchema(Schema):
+    """One league match between the two teams of a prediction."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    match_id = fields.Int(required=True, metadata={"description": "OpenDota match ID"})
+    start_time = fields.Int(required=True, metadata={"description": "Match start (unix seconds)"})
+    team1_won = fields.Bool(allow_none=True, metadata={"description": "Whether team 1 won, null if unknown"})
+    before_prediction = fields.Bool(required=True, metadata={"description": "Played before the prediction was saved"})
+
+
+class HeadToHeadSchema(Schema):
+    """League matches between the two teams of a prediction, newest first."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    since = fields.Int(required=True, metadata={"description": "Window start: `days` before the prediction"})
+    matches = fields.List(fields.Nested(HeadToHeadMatchSchema), required=True)
+
+
 # Auto-generated schemas from Pydantic models
 # These are generated at module import time to ensure they stay in sync with Pydantic models
 # If you modify the Pydantic models (Player, TeamStats, StatsResponse), these schemas

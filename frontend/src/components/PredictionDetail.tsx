@@ -15,6 +15,7 @@ import {
 } from '../predictions'
 import type { Prediction, PredictionDetail as Detail, Snapshot, TeamData } from '../types'
 import ComparisonTable from './ComparisonTable'
+import HeadToHeadTable from './HeadToHeadTable'
 import InsightsTable, { type PlayerRanks } from './InsightsTable'
 
 interface PredictionDetailProps {
@@ -245,8 +246,9 @@ function DecisionForm({
 }
 
 /**
- * One prediction: the Team Comparison and Team Insights tables as saved in its snapshots, the decision (editable
- * with "Edit"), the review (hidden until "Add review"), a delete button and the played heroes placeholder.
+ * One prediction: the Team Comparison and Team Insights tables as saved in its snapshots, the head-to-head matches,
+ * the decision (editable with "Edit"), the review (hidden until "Add review"), a delete button and the played heroes
+ * placeholder.
  */
 function PredictionDetail({ predictionId }: PredictionDetailProps) {
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -323,6 +325,9 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
           <InsightsTable teams={teams} ranks={snapshots.map(snapshotRanks)} />
         </div>
       </div>
+
+      <h2>Head-to-head</h2>
+      <HeadToHeadTable predictionId={detail.prediction_id} teamNames={names} />
 
       <div className="prediction-panel">
         <h2>Prediction</h2>

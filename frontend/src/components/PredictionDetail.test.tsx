@@ -23,6 +23,8 @@ const mockBackend = (
     if (init?.method === 'PUT') return putResponse ?? jsonResponse(prediction(JSON.parse(init.body as string)))
     if (init?.method === 'DELETE') return deleteResponse
     if (url === `/api/predictions/${detail.prediction_id}`) return jsonResponse(detail)
+    if (url === `/api/predictions/${detail.prediction_id}/head-to-head`)
+      return jsonResponse({ since: 0, matches: [] })
     return jsonResponse({ message: 'Prediction not found' }, false, 404)
   })
   globalThis.fetch = fetchMock as unknown as typeof fetch

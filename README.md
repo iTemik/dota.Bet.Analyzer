@@ -640,6 +640,7 @@ Async task for comprehensive player analysis:
 - `PATCH /predictions/<id>` saves the review: maps won by each team (must fit `best_of` when known) and a review note
 - `GET /predictions?status=pending|settled` lists them with computed `bet_won`, `GET /predictions/<id>` includes both snapshots
 - `DELETE /predictions/<id>` removes one, its snapshots stay
+- `GET /predictions/<id>/head-to-head` lists league matches between the two teams from `days` before the prediction up to now, read from team 1's cached team matches (no OpenDota request while cached, otherwise one)
 
 #### Heroes (`/heroes`)
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
@@ -717,7 +718,7 @@ npm test          # Run tests
 #### Predictions
 - List of saved predictions, newest first: date, teams with logos, odds, series, bet and stake, result (maps won or "pending") and outcome (won, lost, no bet)
 - Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
-- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, the bookmaker values and decision, and a disabled **Played heroes** placeholder
+- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged), the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
 - **Edit** changes the odds, series, bet, stake and comment of a saved prediction; the saved tables stay as they were
 - **Delete** removes a prediction made by mistake (its snapshots stay)

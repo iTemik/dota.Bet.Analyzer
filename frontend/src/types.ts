@@ -132,3 +132,17 @@ export interface PredictionDetail extends Prediction {
   team1_snapshot: Snapshot
   team2_snapshot: Snapshot
 }
+
+// GET /api/predictions/{id}/head-to-head: matches[] (team1_won is null when the result is unknown)
+export interface HeadToHeadMatch {
+  match_id: number
+  start_time: number
+  team1_won: boolean | null
+  before_prediction: boolean
+}
+
+// GET /api/predictions/{id}/head-to-head
+export interface HeadToHead {
+  since: number
+  matches: HeadToHeadMatch[]
+}
