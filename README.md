@@ -2,6 +2,8 @@
 
 The web application provides analytic services and highlights about the Dota 2 teams on the pro scene to help make better-informed bets. This README covers getting started with development, testing, database initialization, and running the backend.
 
+![Team comparison and Team Insights tables](docs/images/comparison-insights.png)
+
 **This project was created for coding learning purpose**
 
 ---
