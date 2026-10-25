@@ -703,6 +703,16 @@ pre {
   text-align: center;
 }
 
+.head-to-head-table a {
+  color: white;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.head-to-head-table a:hover {
+  text-decoration: underline;
+}
+
 .head-to-head-table tr.before-prediction {
   background: rgba(255, 255, 255, 0.06);
 }
