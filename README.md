@@ -646,6 +646,11 @@ Async task for comprehensive player analysis:
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
+#### Matches (`/matches`)
+- `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, Bo, teams, score
+- Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache)
+- Teams are matched by name to the teams table for their OpenDota ID and logo
+
 #### Teams List (`/teams/sync`)
 - "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota (shows an error if it fails)
 - Synced at startup in the background when the last sync is 30+ days old (or never happened); one sync runs at a time
@@ -694,6 +699,7 @@ npm test          # Run tests
 - Form validation (both teams required)
 - Keyboard support (Enter to submit)
 - Auto-focus on first input field
+- Upcoming and Finished Matches tables below; clicking an upcoming match fills both teams and checks statistics
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings

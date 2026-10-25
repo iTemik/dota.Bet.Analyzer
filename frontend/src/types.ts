@@ -146,3 +146,26 @@ export interface HeadToHead {
   since: number
   matches: HeadToHeadMatch[]
 }
+
+// GET /api/matches: a team of a Liquipedia series (team_id and logo_url are null when the name is not in the teams table)
+export interface MatchTeam {
+  name: string
+  team_id: number | null
+  logo_url: string | null
+}
+
+// GET /api/matches: one series; score1/score2 only on finished series
+export interface Match {
+  start_time: number
+  best_of: number | null
+  team1: MatchTeam
+  team2: MatchTeam
+  score1?: number | null
+  score2?: number | null
+}
+
+// GET /api/matches
+export interface Matches {
+  upcoming: Match[]
+  finished: Match[]
+}

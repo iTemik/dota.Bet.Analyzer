@@ -703,3 +703,32 @@ pre {
   font-size: 0.8rem;
   background: rgba(255, 255, 255, 0.15);
 }
+
+.matches-table .match-team-icon {
+  width: 2rem;
+  padding-left: 0;
+}
+
+.matches-table .match-team-icon img {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.matches-table th,
+.matches-table td {
+  padding: 0.5rem 0.75rem;
+}
+
+.match-row-clickable {
+  cursor: pointer;
+}
+
+.match-row-clickable:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stats-table.matches-table td {
+  text-align: left;
+}

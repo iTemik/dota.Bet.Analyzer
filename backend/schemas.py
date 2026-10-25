@@ -619,6 +619,47 @@ class HeadToHeadSchema(Schema):
     matches = fields.List(fields.Nested(HeadToHeadMatchSchema), required=True)
 
 
+class MatchTeamSchema(Schema):
+    """A team of a Liquipedia series, linked to the teams table by name when possible."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    name = fields.Str(required=True, metadata={"description": "Team name on Liquipedia"})
+    team_id = fields.Int(allow_none=True, metadata={"description": "OpenDota team ID, null if the name is not known"})
+    logo_url = fields.Str(allow_none=True, metadata={"description": "Team logo from the teams table, null if unknown"})
+
+
+class MatchSchema(Schema):
+    """One upcoming or finished series."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    start_time = fields.Int(required=True, metadata={"description": "Series start (unix seconds)"})
+    best_of = fields.Int(allow_none=True, metadata={"description": "Number of maps (Bo1/2/3/5), null if not shown"})
+    team1 = fields.Nested(MatchTeamSchema, required=True)
+    team2 = fields.Nested(MatchTeamSchema, required=True)
+    score1 = fields.Int(allow_none=True, metadata={"description": "Maps won by team 1 (finished series only)"})
+    score2 = fields.Int(allow_none=True, metadata={"description": "Maps won by team 2 (finished series only)"})
+
+
+class MatchesSchema(Schema):
+    """Upcoming series soonest first and finished series newest first."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    upcoming = fields.List(fields.Nested(MatchSchema), required=True)
+    finished = fields.List(fields.Nested(MatchSchema), required=True)
+
+
 # Auto-generated schemas from Pydantic models
 # These are generated at module import time to ensure they stay in sync with Pydantic models
 # If you modify the Pydantic models (Player, TeamStats, StatsResponse), these schemas

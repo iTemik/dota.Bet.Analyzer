@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
+import MatchesTables from './components/MatchesTables'
 import InsightsTable, { type PlayerRanks } from './components/InsightsTable'
 import PredictionDetail from './components/PredictionDetail'
 import PredictionList from './components/PredictionList'
@@ -8,7 +9,7 @@ import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import TeamsSync from './components/TeamsSync'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
-import type { MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
+import type { Match, MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
 import { VERSION } from './version'
 import trollFace from './assets/trollface.png'
@@ -110,8 +111,16 @@ function App() {
     stopPolling()
   }
 
-  const handleCheck = async () => {
-    if (!team1.value.trim() || !team2.value.trim()) {
+  // `params` overrides the inputs' query params (a clicked match fills the inputs, but their state updates later)
+  // A clicked upcoming match: fill both inputs, check them and scroll up to the results
+  const checkMatch = (match: Match) => {
+    if (loading) return
+    handleCheck([team1.fill(match.team1), team2.fill(match.team2)])
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleCheck = async (params?: [[string, string], [string, string]]) => {
+    if (!params && (!team1.value.trim() || !team2.value.trim())) {
       setError('Please enter both team names')
       return
     }
@@ -129,12 +138,13 @@ function App() {
     setProgress(null)
 
     try {
-      const params = new URLSearchParams()
-      params.append(...team1.queryParam())
-      params.append(...team2.queryParam())
-      params.append('days', String(STATS_DAYS))
+      const [param1, param2] = params ?? [team1.queryParam(), team2.queryParam()]
+      const query = new URLSearchParams()
+      query.append(...param1)
+      query.append(...param2)
+      query.append('days', String(STATS_DAYS))
 
-      const response = await fetch(`/api/statistics?${params.toString()}`)
+      const response = await fetch(`/api/statistics?${query.toString()}`)
 
       if (!response.ok) {
         // Try to extract error message from response body
@@ -316,7 +326,7 @@ function App() {
             </div>
           </div>
 
-          <button onClick={handleCheck} disabled={loading} className="check-btn">
+          <button onClick={() => handleCheck()} disabled={loading} className="check-btn">
             {loading ? 'Loading...' : 'Check Statistics'}
           </button>
         </div>
@@ -383,6 +393,8 @@ function App() {
             )}
           </div>
         )}
+
+        <MatchesTables onSelect={checkMatch} />
       </div>
     </div>
   )
