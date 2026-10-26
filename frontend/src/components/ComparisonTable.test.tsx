@@ -71,19 +71,28 @@ describe('ComparisonTable', () => {
     expect(rowCells(/^Average Player Rank$/)[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
   })
 
-  it('uses the days prop in the record label when the team has no league form', () => {
-    render(<ComparisonTable teams={[team({}), team({})]} summaries={[null, null]} showSummaryRows={false} days={30} />)
-    expect(screen.getByText('Tournaments Record (30d)')).toBeInTheDocument()
+  it('uses the days prop in the record label when the first team has no league form', () => {
+    const form = { days: 20, matches: 4, wins: 3, losses: 1, win_percentage: 75, last_match_time: null }
+    render(<ComparisonTable teams={[team({}), team({ league_form: form })]} summaries={[null, null]} showSummaryRows={false} days={30} />)
+    expect(rowCells(/^Tournament matches, last 30 days$/).map((c) => c.textContent)).toEqual(['-', '3-1 (75.0%)'])
   })
 
-  it('shows "-" for fields an old snapshot lacks', () => {
+  it('adds a plus sign to a positive last match rating', () => {
+    render(<ComparisonTable teams={[team({ delta: 12.34 }), team({ delta: -5 })]} summaries={[null, null]} showSummaryRows={false} days={20} />)
+    expect(rowCells(/^Last match rating$/).map((c) => c.textContent)).toEqual(['+12.3', '-5.0'])
+  })
+
+  it('hides rows that are empty for both teams and keeps rows with a value on one side', () => {
     // A snapshot saved before some fields existed: only the basic team fields are there
-    const old = { team: 'Old', players: [] } as unknown as TeamData
-    render(<ComparisonTable teams={[old, undefined]} summaries={[{} as MatchesSummary, null]} showSummaryRows days={20} />)
+    const old = { team: 'Old', tag: 'OLD', players: [] } as unknown as TeamData
+    const summaries = [{ rating_matches: 5 } as MatchesSummary, null]
+    render(<ComparisonTable teams={[old, undefined]} summaries={summaries} showSummaryRows days={20} />)
 
     expect(screen.getByText('Team #2')).toBeInTheDocument()
-    expect(rowCells(/^Roster Changes$/).map((c) => c.textContent)).toEqual(['-', '-'])
-    expect(rowCells(/^Pub Win %$/).map((c) => c.textContent)).toEqual(['-', '-'])
-    expect(rowCells(/^Last Match$/).map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells(/^Team Tag$/).map((c) => c.textContent)).toEqual(['OLD', '-'])
+    expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['5', '-'])
+    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
   })
 })

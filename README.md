@@ -708,7 +708,8 @@ npm test          # Run tests
 - **Team Insights**: Team #1 vs Team #2 notes next to the comparison: core players, stand-ins, other players and the
   last tournament match; unnamed accounts show as "ID 123…"; each player shows "games: N" and, once the player
   statistics task finishes, "rank: R" (leaderboard rank, "-" when not on it)
-- **Rating Delta**: Last match rating change with color coding
+- **Rating Delta**: Last match rating change with color coding, "+" for a gain
+- Rows empty for both teams ("-" or 0-0) are hidden
 - **Match Analysis**:
   - Win percentage across all matches
   - Rating matches count

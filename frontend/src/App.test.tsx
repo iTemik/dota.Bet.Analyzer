@@ -52,19 +52,22 @@ describe('App Component', () => {
             expect(screen.getByRole('heading', { name: /Dota 2 Bet Analyzer/i })).toBeInTheDocument()
         })
 
-        it('should render the tagline with a troll face', async () => {
+        it('should render the tagline with a troll face under it', async () => {
             await act(async () => {
                 render(<App />)
             })
-            expect(screen.getByText('stealing from bookmakers since 2022')).toBeInTheDocument()
-            expect(screen.getByTestId('troll-face')).toBeInTheDocument()
+            const tagline = screen.getByText('stealing from bookmakers since 2022')
+            expect(tagline.nextElementSibling).toBe(screen.getByTestId('troll-face'))
         })
 
-        it('should render version in header', async () => {
+        it('should render both versions in header with the same style', async () => {
             await act(async () => {
                 render(<App />)
             })
-            expect(screen.getByText(/v\d+\.\d+/)).toBeInTheDocument()
+            const frontend = screen.getByText(/Frontend: v\d+\.\d+/)
+            const backend = screen.getByText(/Backend:/)
+            expect(frontend).toHaveClass('app-version')
+            expect(backend).toHaveClass('app-version')
         })
 
         it('should render team input fields', async () => {
@@ -1207,8 +1210,8 @@ describe('App Component', () => {
             }) as unknown as typeof fetch
 
             render(<App />)
-            expect(screen.getByText(/Backend: v loading/)).toBeInTheDocument()
-            await waitFor(() => expect(screen.getByText(/Backend: v 0\.11\.DEV/)).toBeInTheDocument(), { timeout: 5000 })
+            expect(screen.getByText(/Backend: loading/)).toBeInTheDocument()
+            await waitFor(() => expect(screen.getByText(/Backend: v0\.11\.DEV/)).toBeInTheDocument(), { timeout: 5000 })
             expect(versionCalls).toBe(2)
             expect(consoleError).toHaveBeenCalledWith('Failed to fetch backend version:', expect.any(Error))
             consoleError.mockRestore()
@@ -1634,7 +1637,7 @@ describe('App Component', () => {
             expect(playerLines(cells('Other Players')[1])).toEqual(['Benched'])
             expect(cells('Other Players')[2]).toHaveTextContent('None')
 
-            const recordRow = rowOf('Tournaments Record (20d)')
+            const recordRow = rowOf('Tournament matches, last 20 days')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
             expect(screen.getByText('Last Match')).toBeInTheDocument()
@@ -1785,13 +1788,9 @@ describe('App Component', () => {
             expect(screen.getByText('OldMember')).toBeInTheDocument()
             expect(screen.getByText('unconfirmed: no recent tournament match')).toBeInTheDocument()
 
-            // Roster state is unknown for unconfirmed players, and there is no tournament record
-            const stateCells = rowOf('Roster Changes').querySelectorAll('td')
-            expect(stateCells[1]).toHaveTextContent('-')
-            expect(stateCells[2]).toHaveTextContent('-')
-            const recordCells = rowOf('Tournaments Record (20d)').querySelectorAll('td')
-            expect(recordCells[1]).toHaveTextContent('-')
-            expect(recordCells[2]).toHaveTextContent('-')
+            // Roster state is unknown for unconfirmed players and there is no tournament record, so both rows are hidden
+            expect(screen.queryByText('Roster Changes')).not.toBeInTheDocument()
+            expect(screen.queryByText('Tournament matches, last 20 days')).not.toBeInTheDocument()
         })
     })
 
