@@ -4,7 +4,7 @@ import { betTotals, isSettled, outcome, requestJson, teamLabel } from '../predic
 import type { Prediction } from '../types'
 import { bestOfLabel, scoreLabel, usePage } from '../series'
 import { Pager, TeamCells } from './seriesTable'
-import BetOutcome, { Loss, Profit } from './BetOutcome'
+import BetOutcome, { Loss, Profit, SIMULATION_NOTE } from './BetOutcome'
 
 type Filter = 'all' | 'pending' | 'settled'
 
@@ -115,7 +115,7 @@ function PredictionList() {
         <p className="prediction-totals">
           Bets: {filtered.length - count('no_bet')} · Won: {count('won')} · Lost: {count('lost')} · Pending:{' '}
           {count('pending')} · Possible profit: <Profit value={totals.profit} /> · Possible loss:{' '}
-          <Loss value={totals.loss} />
+          <Loss value={totals.loss} /> <span className="simulation-badge">{SIMULATION_NOTE}</span>
         </p>
       </div>
 

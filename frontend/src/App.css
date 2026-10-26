@@ -633,6 +633,17 @@ pre {
   font-weight: 600;
 }
 
+/* Marks the money amounts as simulated */
+.simulation-badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px dashed rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 /* On the green/red outcome background the amount keeps the cell's text color */
 .outcome-won .money-profit,
 .outcome-lost .money-loss {
