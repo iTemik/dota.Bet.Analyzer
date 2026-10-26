@@ -105,7 +105,7 @@ describe('ComparisonTable', () => {
     const label = screen.getByText(/^Rating$/)
     const tooltip = within(label).getByRole('tooltip')
     expect(within(label).getByRole('button', { name: 'Row info' })).toHaveAttribute('tabindex', '0')
-    expect(tooltip).toHaveTextContent('Description: OpenDota team rating')
+    expect(tooltip).toHaveTextContent('Description: OpenDota Elo rating')
     expect(tooltip).toHaveTextContent('Color Highlighting: Higher is green')
     expect(tooltip).toHaveTextContent('Assumption:')
     // The Russian note moved from the label into the tooltip
