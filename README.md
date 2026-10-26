@@ -724,7 +724,7 @@ npm test          # Run tests
 - **Delete** removes a prediction made by mistake (its snapshots stay)
 
 #### Log Prediction
-- Framed panel under Team Comparison and Team Insights, enabled once the player statistics of both teams have loaded
+- Framed panel under Team Comparison and Team Insights; works before the player statistics have loaded (the snapshots are then saved without them)
 - **From bookmaker** box: coefficient per team (above 1, "1,85" also accepted) and series (bo1, bo2, bo3, bo5 or n/a)
 - **My decision**: bet on team 1, team 2 or no bet, stake (required with a bet) and a comment
 - **Save prediction** saves both team snapshots, then the prediction, and links to it; **Save snapshots only** skips the prediction

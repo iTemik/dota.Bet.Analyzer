@@ -1711,16 +1711,16 @@ describe('App Component', () => {
             expect(await screen.findByRole('heading', { name: 'Log prediction' })).toBeInTheDocument()
             await waitFor(() => expect(screen.getByRole('button', { name: 'Save prediction' })).toBeEnabled())
             expect(screen.getByText('Coefficient Team A')).toBeInTheDocument()
-            expect(screen.queryByText(/Available once the player statistics/)).not.toBeInTheDocument()
+            expect(screen.queryByText(/Player statistics are not loaded/)).not.toBeInTheDocument()
         })
 
-        it('keeps the Log prediction panel disabled without player statistics', async () => {
+        it('enables the Log prediction panel without player statistics', async () => {
             await renderComparison([
                 { ...baseTeam, team: 'Team A', team_id: 1, players: [] },
                 { ...baseTeam, team: 'Team B', team_id: 2, players: [] },
             ])
-            expect(screen.getByText(/Available once the player statistics/)).toBeInTheDocument()
-            expect(screen.getByRole('button', { name: 'Save prediction' })).toBeDisabled()
+            expect(screen.getByText(/Player statistics are not loaded/)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: 'Save prediction' })).toBeEnabled()
         })
 
         it('shows a stable roster without stand-ins', async () => {
