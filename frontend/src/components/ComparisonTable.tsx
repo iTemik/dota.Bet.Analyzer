@@ -91,9 +91,11 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   {
     label: 'Rating',
     info: {
-      description: 'OpenDota team rating (Elo style), from the synced teams list.',
+      description:
+        'OpenDota Elo rating over all tournament games since the team was created (start 1000, up to 32 points per game, never reset). Even teams trade 16 points a game; about 7 straight wins over equal teams add 100.',
       colors: 'Higher is green, lower is red; no colour when they differ by 100 or less.',
-      assumption: 'Long-term team strength across all tournament games.',
+      assumption:
+        'A 100-point gap means the stronger team is expected to win about 64% of games (about 70% of a Bo3). Beating a team 100 points stronger gives +20.5, losing to it only -11.5.',
     },
     compare: (team) => team?.rating || null,
     better: 'higher',
