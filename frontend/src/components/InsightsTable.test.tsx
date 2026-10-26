@@ -70,4 +70,12 @@ describe('InsightsTable', () => {
     expect(rowCells('Other Players').map((c) => c.textContent)).toEqual(['None', '-'])
     expect(rowCells('Last Tournament Match').map((c) => c.textContent)).toEqual(['-', '-'])
   })
+
+  it('shows an info tooltip on each insight row', () => {
+    render(<InsightsTable teams={[team({}), team({})]} ranks={[]} />)
+    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match']) {
+      expect(within(screen.getByText(label)).getByRole('tooltip')).toHaveTextContent(/^Description: /)
+    }
+    expect(within(screen.getByText('Stand-ins')).getByRole('tooltip')).toHaveTextContent('outside the core who played')
+  })
 })
