@@ -113,4 +113,25 @@ describe('ComparisonTable', () => {
     expect(lowRank).toHaveTextContent(/^Low Rank Playersi/)
     expect(within(lowRank).getByRole('tooltip')).toHaveTextContent('тысячники')
   })
+
+  it('colours a long-ago or missing last match red when the other team played in the last 14 days', () => {
+    const now = 100 * 86400
+    const at = (daysAgo: number) => team({ roster_last_match_time: now - daysAgo * 86400 })
+    const { rerender } = render(<ComparisonTable teams={[at(3), at(20)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
+    let [first, second] = rowCells(/^Last Match$/)
+    expect(first.style.backgroundColor).toBe('transparent')
+    expect(second).toHaveStyle({ backgroundColor: '#9d6b6b' })
+
+    // No date counts as a long break
+    rerender(<ComparisonTable teams={[team({}), at(3)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
+    ;[first, second] = rowCells(/^Last Match$/)
+    expect(first).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(second.style.backgroundColor).toBe('transparent')
+
+    // Both on a break or both recent: no colour
+    rerender(<ComparisonTable teams={[at(15), at(30)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
+    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    rerender(<ComparisonTable teams={[at(1), at(13)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
+    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+  })
 })

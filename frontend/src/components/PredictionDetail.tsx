@@ -318,6 +318,7 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
             summaries={summaries}
             showSummaryRows={summaries.some(Boolean)}
             days={snapshots[0].days}
+            now={detail.created_at}
           />
         </div>
         <div className="results-column">

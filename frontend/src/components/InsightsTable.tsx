@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { formatDate, teamName } from '../format'
 import { getCorePlayers, getStandins, hasCore, renderName } from '../roster'
 import type { Player, TeamData } from '../types'
+import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 // Leaderboard rank per account id (null: not on the leaderboard); only players whose rank was fetched are in it
 export type PlayerRanks = Map<number, number | null>
@@ -57,12 +58,38 @@ const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
 }
 
 // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
-const insightRows: { label: string; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
-  { label: 'Core Players', render: renderCorePlayers },
-  { label: 'Stand-ins', render: renderStandinPlayers },
-  { label: 'Other Players', render: renderOtherPlayers },
+const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+  {
+    label: 'Core Players',
+    info: {
+      description:
+        'The 5 players with 75%+ of the team’s tournament games in the window (50%+ if none). "games: N of total" when a player missed some; "rank" is the leaderboard rank.',
+      assumption: 'The main stats come from these players. TBD',
+    },
+    render: renderCorePlayers,
+  },
+  {
+    label: 'Stand-ins',
+    info: {
+      description: 'Players outside the core who played tournament games for the team in the window.',
+      assumption: 'Stand-ins weaken teamplay. TBD',
+    },
+    render: renderStandinPlayers,
+  },
+  {
+    label: 'Other Players',
+    info: {
+      description: 'Listed on the team by OpenDota but without tournament games in the window (backups, former players).',
+      assumption: 'TBD',
+    },
+    render: renderOtherPlayers,
+  },
   {
     label: 'Last Tournament Match',
+    info: {
+      description: 'Date of the team’s latest tournament game and how many players outside the core played it.',
+      assumption: 'Players outside the core in the latest game can mean a roster problem. TBD',
+    },
     render: (team) => {
       if (team?.roster_source !== 'recent_matches' || !team.latest_match_time) return '-'
       // Mention players outside the core only when there were any
@@ -86,7 +113,10 @@ const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
     <tbody>
       {insightRows.map((row) => (
         <tr key={row.label}>
-          <td className="row-label">{row.label}</td>
+          <td className="row-label">
+            {row.label}
+            {row.info && <RowInfoIcon info={row.info} />}
+          </td>
           <td>{row.render(teams[0], ranks[0] ?? new Map())}</td>
           <td>{row.render(teams[1], ranks[1] ?? new Map())}</td>
         </tr>

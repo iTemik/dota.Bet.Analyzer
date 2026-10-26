@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
 import type { LeagueForm, MatchesSummary, TeamData } from '../types'
@@ -11,6 +11,7 @@ interface ComparisonTableProps {
   summaries: Summary[] // match summary per team, null while it is loading
   showSummaryRows: boolean // rows that need the summary are hidden until it has arrived
   days: number // window used for the label when the team has no league form
+  now?: number // unix time the Last Match colours are judged at; a saved prediction passes its own time
 }
 
 // Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
@@ -21,7 +22,7 @@ interface CompareRowConfig {
   compare?: (team: TeamData | undefined, summary: Summary) => number | null
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
-  color?: (team: TeamData | undefined) => string // per-team colour, for rows that don't compare
+  color?: (team: TeamData | undefined, index: number) => string // per-team colour, for rows that don't compare
   render: (team: TeamData | undefined, summary: Summary) => ReactNode
 }
 
@@ -78,6 +79,19 @@ const renderRosterState = (team: TeamData | undefined) => {
   return <span title={state.hint}>{`${state.label}${suffix}`}</span>
 }
 
+const STALE_DAYS = 14 // a last match older than this is a long break
+
+const lastMatchTime = (team: TeamData | undefined): number | null => team?.roster_last_match_time ?? team?.league_form?.last_match_time ?? null
+
+// Last Match: a team on a long break (or with no date) is red when the other team played recently
+const lastMatchColor = (teams: (TeamData | undefined)[], now: number) => {
+  const recent = teams.map((team) => {
+    const time = lastMatchTime(team)
+    return time !== null && now - time <= STALE_DAYS * 24 * 3600
+  })
+  return (_: TeamData | undefined, i: number) => (!recent[i] && recent[1 - i] ? COLOR_NEGATIVE : 'transparent')
+}
+
 const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
   if (!form || !form.matches) return '-'
   return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
@@ -85,7 +99,7 @@ const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
 
 // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list.
 // `info` texts: "Players" means the 5 main roster players (most tournament games in the window).
-const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowConfig[] => [
+const compareRows = (teams: (TeamData | undefined)[], days: number, now: number): CompareRowConfig[] => [
   { label: 'Team Tag', render: (team) => (team?.tag ? team.tag : '-') },
   { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
   {
@@ -130,7 +144,8 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     info: {
       description: 'Team wins-losses (win %) in tournament (league) games over the window.',
       colors: 'Higher win % is green, lower is red.',
-      assumption: 'Current form in official games.',
+      assumption:
+        'Current form in official games. A team that played many more games has the better chance against a team that played few, even with a bad win rate.',
     },
     compare: (team) => team?.league_form?.win_percentage ?? null,
     better: 'higher',
@@ -140,16 +155,18 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     label: 'Last Match',
     info: {
       description: 'Date of the latest tournament game played by at least 3 of the 5 players.',
-      assumption: 'A long break can mean rust or a lineup change. TBD',
+      colors: `Red when the other team played in the last ${STALE_DAYS} days and this one did not (or has no date).`,
+      assumption: 'A team that played long ago has a high chance to lose against a team that played recently.',
     },
-    render: (team) => formatDate(team?.roster_last_match_time ?? team?.league_form?.last_match_time),
+    color: lastMatchColor(teams, now),
+    render: (team) => formatDate(lastMatchTime(team)),
   },
   {
     label: 'Rating Matches',
     info: {
       description: 'Ranked pub games played by all players in the window, summed.',
       colors: 'More is green, fewer is red.',
-      assumption: 'TBD',
+      assumption: 'Playing ranked between tournaments with a high win rate is a good sign: the team practices a lot and knows the current meta.',
     },
     summary: true,
     compare: (_, s) => s?.rating_matches ?? null,
@@ -162,7 +179,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
       description:
         'Captains Mode lobby games (tournament and scrims; OpenDota can’t tell them apart) played by all players in the window, summed. A game counts once per player.',
       colors: 'More is green, fewer is red.',
-      assumption: 'More team practice. TBD',
+      assumption: 'Playing lobbies between tournaments with a high win rate is a good sign: the team practices a lot.',
     },
     summary: true,
     compare: (_, s) => s?.tournament_matches ?? null,
@@ -174,7 +191,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     info: {
       description: 'Wins / ranked pub games, over all players’ games.',
       colors: 'Higher is green, lower is red.',
-      assumption: 'Individual form of the players. TBD',
+      assumption: 'Low means the team can’t punish mistakes. A bad sign even with a good tournament win rate: a low chance to come back.',
     },
     summary: true,
     compare: (_, s) => s?.rating_win_percentage ?? null,
@@ -210,7 +227,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     info: {
       description: 'Players ranked worse than 150 on the leaderboard ("тысячники": once "not top 1000", ~top 150 after the July 2026 MMR rework).',
       colors: 'Fewer is green, more is red.',
-      assumption: 'TBD',
+      assumption: 'Even one such player can ruin tough matches, unintentionally.',
     },
     summary: true,
     compare: (_, s) => s?.bad_rank_players ?? null,
@@ -243,7 +260,8 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     info: {
       description: 'Median number of games per player in the window; less affected by one very active or inactive player.',
       colors: 'More is green, fewer is red.',
-      assumption: 'How much a typical player plays. TBD',
+      assumption:
+        'The whole team should practice, and players often slack. A median above the tournament games means the whole team practices, not only in tournament matches.',
     },
     summary: true,
     compare: (_, s) => s?.matches_median ?? null,
@@ -253,29 +271,32 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
 ]
 
 /** Team Comparison table for two teams; renders live statistics and saved snapshots alike. */
-const ComparisonTable = ({ teams, summaries, showSummaryRows, days }: ComparisonTableProps) => (
-  <table className="stats-table comparison-table">
-    <thead>
-      <tr>
-        <th></th>
-        {[0, 1].map((i) => (
-          <th key={i}>
-            <div className="team-header">
-              <span>{teamName(teams[i], i)}</span>
-              {teams[i]?.logo_url && <img src={teams[i].logo_url} alt={`Team ${i + 1} Logo`} className="team-logo" />}
-            </div>
-          </th>
-        ))}
-      </tr>
-    </thead>
-    <tbody>
-      {compareRows(teams, days)
-        .filter((row) => !row.summary || showSummaryRows)
-        .map((row, i) => (
-          <CompareRow key={i} row={row} teams={teams} summaries={summaries} />
-        ))}
-    </tbody>
-  </table>
-)
+const ComparisonTable = ({ teams, summaries, showSummaryRows, days, now }: ComparisonTableProps) => {
+  const [shownAt] = useState(() => Date.now() / 1000) // live statistics are judged at the time they were shown
+  return (
+    <table className="stats-table comparison-table">
+      <thead>
+        <tr>
+          <th></th>
+          {[0, 1].map((i) => (
+            <th key={i}>
+              <div className="team-header">
+                <span>{teamName(teams[i], i)}</span>
+                {teams[i]?.logo_url && <img src={teams[i].logo_url} alt={`Team ${i + 1} Logo`} className="team-logo" />}
+              </div>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {compareRows(teams, days, now ?? shownAt)
+          .filter((row) => !row.summary || showSummaryRows)
+          .map((row, i) => (
+            <CompareRow key={i} row={row} teams={teams} summaries={summaries} />
+          ))}
+      </tbody>
+    </table>
+  )
+}
 
 export default ComparisonTable
