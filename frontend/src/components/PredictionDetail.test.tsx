@@ -109,7 +109,7 @@ describe('PredictionDetail', () => {
     })
     const review = screen.getByRole('group', { name: 'Review' })
     expect(review).toHaveTextContent('ResultTeam A 2-1 Team B')
-    expect(review).toHaveTextContent('OutcomeWon +185')
+    expect(review).toHaveTextContent('OutcomeWon +85')
     expect(review).toHaveTextContent('Review noteRead it right')
   })
 
