@@ -31,7 +31,13 @@ const compareColors = (a: number | null, b: number | null, better: 'higher' | 'l
   return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
 }
 
+// A cell with nothing to show: no value or an empty 0-0 record
+const isEmptyCell = (value: ReactNode): boolean => value == null || value === '-' || (typeof value === 'string' && value.startsWith('0-0'))
+
 const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
+  const cells = teams.map((team, i) => row.render(team, summaries[i]))
+  // Rows that are empty for both teams are hidden
+  if (cells.every(isEmptyCell)) return null
   let colors: string[] | null = null
   if (row.compare && row.better) {
     colors = compareColors(row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1]), row.better, row.threshold)
@@ -43,9 +49,9 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
       <td className="row-label" title={row.title}>
         {row.label}
       </td>
-      {teams.map((team, i) => (
+      {cells.map((cell, i) => (
         <td key={i} style={colors ? { backgroundColor: colors[i] } : undefined}>
-          {row.render(team, summaries[i])}
+          {cell}
         </td>
       ))}
     </tr>
@@ -89,11 +95,12 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   {
     label: 'Last match rating',
     color: (team) => getDeltaBackgroundColor(team?.delta),
-    render: (team) => (team?.delta ? team.delta.toFixed(1) : '-'),
+    render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
   },
   { label: 'Roster Changes', compare: getRosterRank, better: 'lower', render: renderRosterState },
   {
-    label: `Tournaments Record (${teams[0]?.league_form?.days ?? days}d)`,
+    label: `Tournament matches, last ${teams[0]?.league_form?.days ?? days} days`,
+    title: 'Wins and losses in tournament matches over the stats window',
     compare: (team) => team?.league_form?.win_percentage ?? null,
     better: 'higher',
     render: (team) => formatLeagueRecord(team?.league_form),
@@ -111,13 +118,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
     render: (_, s) => String(s?.rating_matches ?? '-'),
   },
   {
-    label: (
-      <>
-        Lobby Matches
-        <br />
-        (tournaments + scrims)
-      </>
-    ),
+    label: 'Tournament + scrim matches',
     summary: true,
     compare: (_, s) => s?.tournament_matches ?? null,
     better: 'higher',

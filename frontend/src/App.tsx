@@ -265,14 +265,12 @@ function App() {
       <div className="app-header">
         <div className="app-title">
           <h1>Dota 2 Bet Analyzer</h1>
-          <div className="app-tagline">
-            stealing from bookmakers since 2022
-            <img className="app-tagline-troll" src={trollFace} alt="" data-testid="troll-face" />
-          </div>
+          <div className="app-tagline">stealing from bookmakers since 2022</div>
+          <img className="app-tagline-troll" src={trollFace} alt="" data-testid="troll-face" />
         </div>
         <div className="app-versions">
-          <span className="app-version-frontend">Frontend: v{VERSION}</span>
-          <span className="app-version-backend">Backend: v {backendVersion || 'loading...'}</span>
+          <span className="app-version">Frontend: v{VERSION}</span>
+          <span className="app-version">Backend: {backendVersion ? `v${backendVersion}` : 'loading...'}</span>
         </div>
       </div>
 
