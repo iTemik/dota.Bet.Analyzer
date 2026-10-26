@@ -723,7 +723,7 @@ npm test          # Run tests
 - **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
 
 #### Predictions
-- List of saved predictions, newest first: date, teams with logos, odds, series, bet and stake, result (maps won or "pending") and outcome (won, lost, no bet)
+- List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet); 10 per page
 - Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
 - Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged), the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**

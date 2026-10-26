@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { formatShortDateTime } from '../format'
 import { requestJson } from '../predictions'
-import type { Match, MatchTeam, Matches } from '../types'
+import type { Match, Matches } from '../types'
+import { bestOfLabel, scoreLabel, usePage } from '../series'
+import { Pager, TeamCells } from './seriesTable'
 
 interface MatchesTablesProps {
   // Called with an upcoming series the user clicked
@@ -11,25 +13,6 @@ interface MatchesTablesProps {
 // A series with a team still to be decided can't be checked
 const isCheckable = (match: Match): boolean => match.team1.name !== 'TBD' && match.team2.name !== 'TBD'
 
-// Rows per page of each table
-export const MATCHES_PAGE_SIZE = 10
-
-const bestOf = (match: Match): string => (match.best_of ? `Bo${match.best_of}` : '-')
-
-const score = (match: Match): string =>
-  match.score1 === null || match.score1 === undefined || match.score2 === null || match.score2 === undefined
-    ? '-'
-    : `${match.score1}:${match.score2}`
-
-function TeamCells({ team }: { team: MatchTeam }) {
-  return (
-    <>
-      <td className="match-team-icon">{team.logo_url && <img src={team.logo_url} alt={`${team.name} logo`} />}</td>
-      <td>{team.name}</td>
-    </>
-  )
-}
-
 interface MatchesTableProps {
   label: string
   matches: Match[]
@@ -37,11 +20,9 @@ interface MatchesTableProps {
   onSelect?: (match: Match) => void
 }
 
-/** One table of series, MATCHES_PAGE_SIZE rows per page with Previous / Next buttons when there is more than one page. */
+/** One table of series, PAGE_SIZE rows per page with Previous / Next buttons when there is more than one page. */
 function MatchesTable({ label, matches, finished, onSelect }: MatchesTableProps) {
-  const [page, setPage] = useState(0)
-  const pages = Math.max(1, Math.ceil(matches.length / MATCHES_PAGE_SIZE))
-  const shown = matches.slice(page * MATCHES_PAGE_SIZE, (page + 1) * MATCHES_PAGE_SIZE)
+  const { page, pages, shown, setPage } = usePage(matches)
 
   return (
     <>
@@ -66,28 +47,16 @@ function MatchesTable({ label, matches, finished, onSelect }: MatchesTableProps)
                 title={select ? 'Check statistics of these teams' : undefined}
               >
                 <td>{formatShortDateTime(m.start_time)}</td>
-                <td>{bestOf(m)}</td>
-                <TeamCells team={m.team1} />
-                <TeamCells team={m.team2} />
-                {finished && <td>{score(m)}</td>}
+                <td>{bestOfLabel(m.best_of)}</td>
+                <TeamCells name={m.team1.name} logoUrl={m.team1.logo_url} />
+                <TeamCells name={m.team2.name} logoUrl={m.team2.logo_url} />
+                {finished && <td>{scoreLabel(m.score1, m.score2)}</td>}
               </tr>
             )
           })}
         </tbody>
       </table>
-      {pages > 1 && (
-        <div className="matches-pager">
-          <button className="secondary-btn" onClick={() => setPage(page - 1)} disabled={page === 0}>
-            Previous
-          </button>
-          <span>
-            Page {page + 1} of {pages}
-          </span>
-          <button className="secondary-btn" onClick={() => setPage(page + 1)} disabled={page === pages - 1}>
-            Next
-          </button>
-        </div>
-      )}
+      <Pager page={page} pages={pages} setPage={setPage} />
     </>
   )
 }

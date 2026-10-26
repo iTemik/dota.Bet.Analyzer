@@ -2,7 +2,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Matches } from '../types'
-import MatchesTables, { MATCHES_PAGE_SIZE } from './MatchesTables'
+import MatchesTables from './MatchesTables'
+import { PAGE_SIZE } from '../series'
 
 const mockFetch = (data: unknown, ok = true, status = 200) => {
   const fetchMock = vi.fn(() => Promise.resolve({ ok, status, json: () => Promise.resolve(data) }))
@@ -80,7 +81,7 @@ describe('MatchesTables', () => {
 
     const upcomingTable = await screen.findByRole('table', { name: 'Upcoming matches' })
     const names = () => within(upcomingTable).getAllByRole('row').slice(1).map((r) => r.children[3].textContent)
-    expect(MATCHES_PAGE_SIZE).toBe(10)
+    expect(PAGE_SIZE).toBe(10)
     expect(names()).toHaveLength(10)
     expect(names()[0]).toBe('Team 0')
     expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
