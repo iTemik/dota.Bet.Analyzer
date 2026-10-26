@@ -233,6 +233,7 @@ def test_lists_upcoming_and_finished(client, fake_redis, known_teams):
     assert get.call_count == 1
     assert get.call_args.kwargs["params"]["page"] == "Liquipedia:Matches"
     assert get.call_args.kwargs["headers"]["User-Agent"].startswith("DotaBetAnalyzer/")
+    assert "github" not in get.call_args.kwargs["headers"]["User-Agent"]
 
 
 def test_second_call_uses_cache(client, fake_redis, known_teams):

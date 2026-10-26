@@ -648,7 +648,7 @@ Async task for comprehensive player analysis:
 
 #### Matches (`/matches`)
 - `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, Bo, teams, score
-- Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache)
+- Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache); credited under the tables as its CC-BY-SA license requires
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
 #### Teams List (`/teams/sync`)

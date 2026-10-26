@@ -22,8 +22,8 @@ logger = setup_logging(__name__)
 
 LIQUIPEDIA_API = "https://liquipedia.net/dota2/api.php"
 MATCHES_PAGE = "Liquipedia:Matches"
-# Liquipedia asks for a custom User-Agent with contact info and blocks generic ones
-USER_AGENT = f"DotaBetAnalyzer/{__version__} (https://github.com/iTemik/dota.Bet.Analyzer)"
+# Liquipedia asks for a custom User-Agent that names the project and blocks generic ones; no link or contact sent
+USER_AGENT = f"DotaBetAnalyzer/{__version__}"
 CACHE_KEY = "liquipedia:matches"
 CACHE_TTL = 600  # seconds
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner, to stay inside Liquipedia's limits

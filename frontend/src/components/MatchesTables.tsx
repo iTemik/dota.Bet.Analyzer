@@ -96,6 +96,14 @@ function MatchesTables({ onSelect }: MatchesTablesProps) {
       ) : (
         <p className="prediction-hint">No finished matches.</p>
       )}
+      {/* Liquipedia content is CC-BY-SA 3.0, which requires naming it as the source */}
+      <p className="prediction-hint">
+        Match data:{' '}
+        <a href="https://liquipedia.net/dota2/Liquipedia:Matches" target="_blank" rel="noreferrer">
+          Liquipedia
+        </a>{' '}
+        (CC-BY-SA 3.0)
+      </p>
     </div>
   )
 }

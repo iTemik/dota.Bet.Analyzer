@@ -47,6 +47,10 @@ describe('MatchesTables', () => {
     const finished = within(table('Finished Matches')).getAllByRole('row').slice(1)
     expect(finished.map((r) => r.lastElementChild?.textContent)).toEqual(['2:1', '0:2'])
     expect(within(finished[1]).getAllByRole('cell')[1]).toHaveTextContent('-')
+    expect(screen.getByRole('link', { name: 'Liquipedia' })).toHaveAttribute(
+      'href',
+      'https://liquipedia.net/dota2/Liquipedia:Matches',
+    )
   })
 
   it('calls onSelect with a clicked upcoming series, finished and TBD rows are not clickable', async () => {
