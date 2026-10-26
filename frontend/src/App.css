@@ -622,6 +622,23 @@ pre {
   background-color: var(--color-negative);
 }
 
+/* Possible profit (green) and loss (red) of bets */
+.money-profit {
+  color: #7ddc95;
+  font-weight: 600;
+}
+
+.money-loss {
+  color: #ff8a8a;
+  font-weight: 600;
+}
+
+/* On the green/red outcome background the amount keeps the cell's text color */
+.outcome-won .money-profit,
+.outcome-lost .money-loss {
+  color: inherit;
+}
+
 /* Predictions tab: one prediction */
 .prediction-detail>h2 {
   margin: 1rem 0 0.5rem;

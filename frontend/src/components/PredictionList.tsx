@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { formatShortDateTime } from '../format'
-import { OUTCOME_LABELS, isSettled, outcome, requestJson, teamLabel } from '../predictions'
+import { betTotals, isSettled, outcome, requestJson, teamLabel } from '../predictions'
 import type { Prediction } from '../types'
 import { bestOfLabel, scoreLabel, usePage } from '../series'
 import { Pager, TeamCells } from './seriesTable'
+import BetOutcome, { Loss, Profit } from './BetOutcome'
 
 type Filter = 'all' | 'pending' | 'settled'
 
@@ -58,7 +59,9 @@ function PredictionTable({ predictions }: { predictions: Prediction[] }) {
                   {p.team1_odds} / {p.team2_odds}
                 </td>
                 <td>{betText(p)}</td>
-                <td className={`outcome outcome-${result}`}>{OUTCOME_LABELS[result]}</td>
+                <td className={`outcome outcome-${result}`}>
+                  <BetOutcome prediction={p} />
+                </td>
               </tr>
             )
           })}
@@ -91,6 +94,7 @@ function PredictionList() {
   const filtered = predictions.filter((p) => filter === 'all' || (filter === 'settled') === isSettled(p))
   const outcomes = filtered.map(outcome)
   const count = (o: string) => outcomes.filter((x) => x === o).length
+  const totals = betTotals(filtered)
 
   return (
     <section className="prediction-list">
@@ -110,7 +114,8 @@ function PredictionList() {
         </div>
         <p className="prediction-totals">
           Bets: {filtered.length - count('no_bet')} · Won: {count('won')} · Lost: {count('lost')} · Pending:{' '}
-          {count('pending')}
+          {count('pending')} · Possible profit: <Profit value={totals.profit} /> · Possible loss:{' '}
+          <Loss value={totals.loss} />
         </p>
       </div>
 

@@ -109,14 +109,14 @@ describe('PredictionDetail', () => {
     })
     const review = screen.getByRole('group', { name: 'Review' })
     expect(review).toHaveTextContent('ResultTeam A 2-1 Team B')
-    expect(review).toHaveTextContent('OutcomeWon')
+    expect(review).toHaveTextContent('OutcomeWon +185')
     expect(review).toHaveTextContent('Review noteRead it right')
   })
 
   it('opens Edit review with the saved result selected', async () => {
     mockBackend(predictionDetail({ team1_maps_won: 0, team2_maps_won: 2, review_note: 'Wrong', bet_won: false }))
     await renderDetail()
-    expect(screen.getByRole('group', { name: 'Review' })).toHaveTextContent('OutcomeLost')
+    expect(screen.getByRole('group', { name: 'Review' })).toHaveTextContent('OutcomeLost -100')
     await userEvent.click(screen.getByRole('button', { name: 'Edit review' }))
     expect(screen.getByRole('button', { name: '0-2' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('textbox', { name: 'Review note' })).toHaveValue('Wrong')

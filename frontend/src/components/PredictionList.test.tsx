@@ -38,21 +38,29 @@ describe('PredictionList', () => {
     expect(pending.getByRole('link')).toHaveAttribute('href', '#predictions/3')
     expect(pending.getByRole('link').textContent).toMatch(/^[A-Z][a-z]{2} \d+/)
     const cells = pending.getAllByRole('cell').map((c) => c.textContent)
-    expect(cells.slice(1)).toEqual(['Bo3', '', 'Team A', '', 'Team B', '-', '1.85 / 2.05', 'Team A · 100', 'Pending'])
+    expect(cells.slice(1)).toEqual(['Bo3', '', 'Team A', '', 'Team B', '-', '1.85 / 2.05', 'Team A · 100', 'Pending +185 / -100'])
 
     expect(within(rows()[1]).getAllByText('No bet')).toHaveLength(2)
     expect(within(rows()[1]).getByText('1:2')).toBeInTheDocument()
-    expect(within(rows()[2]).getByText('Won')).toHaveClass('outcome-won')
+    expect(pending.getByText('+185')).toHaveClass('money-profit')
+    expect(pending.getByText('-100')).toHaveClass('money-loss')
+    const won = within(rows()[2]).getAllByRole('cell').at(-1)
+    expect(won).toHaveClass('outcome-won')
+    expect(won).toHaveTextContent('Won +185')
   })
 
   it('shows totals and filters pending and settled predictions', async () => {
     mockList()
     render(<PredictionList />)
-    expect(await screen.findByText('Bets: 2 · Won: 1 · Lost: 0 · Pending: 1')).toBeInTheDocument()
+    await screen.findByRole('table')
+    const totals = () => document.querySelector<HTMLElement>('.prediction-totals')!
+    expect(totals()).toHaveTextContent('Bets: 2 · Won: 1 · Lost: 0 · Pending: 1 · Possible profit: +370 · Possible loss: -100')
+    expect(within(totals()).getByText('+370')).toHaveClass('money-profit')
+    expect(within(totals()).getByText('-100')).toHaveClass('money-loss')
 
     await userEvent.click(screen.getByRole('button', { name: 'Settled' }))
     expect(rows()).toHaveLength(2)
-    expect(screen.getByText('Bets: 1 · Won: 1 · Lost: 0 · Pending: 0')).toBeInTheDocument()
+    expect(totals()).toHaveTextContent('Bets: 1 · Won: 1 · Lost: 0 · Pending: 0 · Possible profit: +185 · Possible loss: 0')
 
     await userEvent.click(screen.getByRole('button', { name: 'Pending' }))
     expect(rows()).toHaveLength(1)
