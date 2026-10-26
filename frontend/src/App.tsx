@@ -7,7 +7,6 @@ import PredictionDetail from './components/PredictionDetail'
 import PredictionList from './components/PredictionList'
 import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
-import TeamsSync from './components/TeamsSync'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
 import type { Match, MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
@@ -274,7 +273,7 @@ function App() {
         </div>
       </div>
 
-      {/* Tabs on the left, page-wide actions on the right */}
+      {/* Tabs under the header */}
       <div className="tab-row">
         <nav className="tab-bar">
           {TABS.map((t) => (
@@ -288,7 +287,6 @@ function App() {
             </a>
           ))}
         </nav>
-        <TeamsSync />
       </div>
 
       {/* Mounted only while open, so the list is loaded again after logging a new prediction */}

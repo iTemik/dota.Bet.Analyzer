@@ -3,7 +3,7 @@ import os
 import time
 
 from celery import Celery  # type: ignore[import-untyped]
-from flask import Response, jsonify, request, stream_with_context
+from flask import Response, current_app, jsonify, request, stream_with_context
 from flask_smorest import Blueprint
 
 from backend import __version__
@@ -45,8 +45,8 @@ from backend.schemas import (
     TaskResponseSchema,
     TeamSchema,
     TeamSearchQuerySchema,
+    TeamsSyncQuerySchema,
     TeamsSyncResponseSchema,
-    TeamsSyncStatusSchema,
     TeamStatisticsQuerySchema,
     VersionSchema,
 )
@@ -72,8 +72,8 @@ from backend.task_store import (
 from backend.teams_sync import (
     TeamsSyncRunningError,
     get_teams_synced_at,
-    is_teams_sync_running,
     run_teams_sync,
+    sync_teams_if_obsolete,
 )
 
 # Setup logger
@@ -763,19 +763,14 @@ def sync_pro_players() -> tuple[Response, int]:
         return api_error(500, Errors.FAILED_TO_STORE_PRO_PLAYERS, e)
 
 
-@bp.route("/teams/sync", methods=["GET"])
-@bp.response(200, TeamsSyncStatusSchema)
-@bp.alt_response(500, schema=ErrorSchema, description="Database read failed")
-def get_teams_sync_status() -> tuple[Response, int]:
-    """When the teams list was last synced, and whether a sync is running now (no OpenDota request)."""
-    try:
-        synced_at = get_teams_synced_at()
-    except Exception as e:
-        return api_error(500, Errors.FAILED_TO_READ_SYNC_STATE, e)
-    return jsonify({"synced_at": synced_at, "running": is_teams_sync_running()}), 200
+def _sync_teams_if_obsolete() -> None:
+    """Update the teams list in the background when it is obsolete (not in tests, which never reach OpenDota)."""
+    if not current_app.config.get("TESTING"):
+        sync_teams_if_obsolete(current_app._get_current_object())  # type: ignore[attr-defined]
 
 
 @bp.route("/teams/sync", methods=["POST"])
+@bp.arguments(TeamsSyncQuerySchema, location="query")
 @bp.response(200, TeamsSyncResponseSchema)
 @bp.alt_response(
     409,
@@ -821,16 +816,17 @@ def get_teams_sync_status() -> tuple[Response, int]:
         "details": {"url": "/api/teams/sync", "exception": "Database connection error"},
     },
 )
-def sync_teams() -> tuple[Response, int]:
+def sync_teams(args: dict) -> tuple[Response, int]:
     """Sync teams from OpenDota API to local database.
 
-    Fetches fresh team data from OpenDota API (paginated, 1000 entries per page) and updates the d2ba database.
-    Also runs at startup when the last sync is 30+ days old. Only one sync runs at a time.
+    Incremental by default (two explorer queries: teams with a league game since the newest stored one), full with
+    `full=true` or when no team is stored (every `/teams` page, 1000 entries each). Also runs on its own when the
+    last sync is 24+ hours old. Only one sync runs at a time.
 
     Returns the number of teams successfully synced and the time of the last successful sync.
     """
     try:
-        count = run_teams_sync()
+        count = run_teams_sync(full=args["full"])
     except TeamsSyncRunningError:
         return api_error(409, Errors.TEAMS_SYNC_RUNNING)
     except ConnectionError as e:
@@ -840,7 +836,7 @@ def sync_teams() -> tuple[Response, int]:
     except Exception as e:
         return api_error(500, Errors.FAILED_TO_STORE_TEAMS, e)
 
-    message = f"Stored {count} teams" if count else "No teams data available"
+    message = f"Stored {count} teams" if count else "No new teams data"
     return jsonify({"synced_count": count, "message": message, "synced_at": get_teams_synced_at()}), 200
 
 
@@ -889,9 +885,10 @@ def sync_heroes() -> tuple[Response, int]:
 def list_matches() -> tuple[Response, int]:
     """Upcoming (soonest first) and recently finished (newest first) pro series from Liquipedia.
 
-    One Liquipedia request at most every 10 minutes (cached in Redis); no OpenDota request. Teams are matched by
-    name to the teams table for their OpenDota ID and logo.
+    One Liquipedia request at most every 10 minutes (cached in Redis). Teams are matched by
+    name to the teams table for their OpenDota ID and logo; an obsolete teams list is updated in the background.
     """
+    _sync_teams_if_obsolete()
     try:
         return jsonify(get_matches()), 200
     except ConnectionError as e:
@@ -913,6 +910,7 @@ def search_teams(args):
     """
     from backend.pro_players import get_d2ba_db
 
+    _sync_teams_if_obsolete()
     search_query = args["q"]
     limit = args.get("limit", 10)
 

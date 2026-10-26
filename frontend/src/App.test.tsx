@@ -1190,6 +1190,15 @@ describe('App Component', () => {
             await waitFor(() => expect(screen.getByPlaceholderText(/Enter first team name/i)).toBeVisible())
             expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Team A')
         })
+
+        it('has no teams data update button (the backend updates obsolete teams data itself)', async () => {
+            const urls = () => (globalThis.fetch as any).mock.calls.map((call: unknown[]) => call[0])
+            render(<App />)
+            await waitFor(() => expect(urls()).toContain('/api/matches'))
+            expect(screen.queryByRole('button', { name: /Update teams data/i })).not.toBeInTheDocument()
+            expect(screen.queryByText(/^Updated /)).not.toBeInTheDocument()
+            expect(urls()).not.toContain('/api/teams/sync')
+        })
     })
 
     describe('Backend Version', () => {
@@ -1409,9 +1418,6 @@ describe('App Component', () => {
                         text: () => Promise.resolve(versionResponse),
                         json: () => Promise.resolve({ backend: '0.4.DEV' }),
                     })
-                }
-                if (url === '/api/teams/sync') {
-                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ synced_at: null, running: false }) })
                 }
 
                 callCount++

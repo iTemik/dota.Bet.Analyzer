@@ -35,7 +35,6 @@ class Errors:
     FAILED_TO_READ_PREDICTIONS = ErrorDefinition(
         "FAILED_TO_READ_PREDICTIONS", "Failed to read predictions from database"
     )
-    FAILED_TO_READ_SYNC_STATE = ErrorDefinition("FAILED_TO_READ_SYNC_STATE", "Failed to read sync state from database")
     FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
     FAILED_TO_STORE_HEROES = ErrorDefinition("FAILED_TO_STORE_HEROES", "Failed to store heroes to database")
     FAILED_TO_STORE_PREDICTION = ErrorDefinition("FAILED_TO_STORE_PREDICTION", "Failed to store prediction to database")
