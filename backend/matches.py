@@ -27,7 +27,6 @@ USER_AGENT = f"DotaBetAnalyzer/{__version__}"
 CACHE_KEY = "liquipedia:matches"
 CACHE_TTL = 600  # seconds
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner, to stay inside Liquipedia's limits
-FINISHED_LIMIT = 30
 
 LIQUIPEDIA_HOST = "https://liquipedia.net"  # team icon paths on the page are relative to it
 # Match ticker markup: one `match-info` block per series, the two `opponent` blocks hold the team name link
@@ -323,5 +322,5 @@ def get_matches(now: Optional[int] = None) -> dict[str, list[dict[str, Any]]]:
     finished = sorted((m for m in matches if m["finished"]), key=lambda m: m["start_time"], reverse=True)
     return {
         "upcoming": [entry(m, with_score=False) for m in upcoming],
-        "finished": [entry(m, with_score=True) for m in finished[:FINISHED_LIMIT]],
+        "finished": [entry(m, with_score=True) for m in finished],
     }

@@ -1822,6 +1822,11 @@ describe('App Component', () => {
             })
             expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Aurora')
             expect(screen.getByPlaceholderText(/Enter second team name/i)).toHaveValue('New Squad')
+
+            // Raw JSON stays below the matches tables
+            const raw = await screen.findByRole('heading', { name: 'Raw team stats JSON' })
+            const upcoming = screen.getByRole('heading', { name: 'Upcoming Matches' })
+            expect(upcoming.compareDocumentPosition(raw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         })
     })
 })

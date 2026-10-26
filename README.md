@@ -699,7 +699,8 @@ npm test          # Run tests
 - Form validation (both teams required)
 - Keyboard support (Enter to submit)
 - Auto-focus on first input field
-- Upcoming and Finished Matches tables below; clicking an upcoming match fills both teams and checks statistics
+- Upcoming and Finished Matches tables below (10 per page); clicking an upcoming match fills both teams and checks statistics
+- Raw team stats and match summary JSON stay at the bottom of the page
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings

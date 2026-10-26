@@ -732,3 +732,25 @@ pre {
 .stats-table.matches-table td {
   text-align: left;
 }
+
+.matches-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: -1rem 0 2rem;
+}
+
+.matches-pager .secondary-btn {
+  margin-top: 0;
+}
+
+.matches-pager .secondary-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Raw JSON blocks at the bottom of the Compare tab */
+.raw-json-section {
+  margin-top: 2rem;
+}

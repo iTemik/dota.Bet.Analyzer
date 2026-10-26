@@ -371,7 +371,14 @@ function App() {
               results={results}
               days={STATS_DAYS}
             />
+          </div>
+        )}
 
+        <MatchesTables onSelect={checkMatch} />
+
+        {/* Raw JSON stays at the very bottom, below the matches */}
+        {statistics && (
+          <div className="results-section raw-json-section">
             <div className="collapsible-header" onClick={() => setShowRawStats(!showRawStats)}>
               <h2>Raw team stats JSON</h2>
               <span className={`collapsible-toggle ${showRawStats ? 'expanded' : ''}`}>▼</span>
@@ -393,8 +400,6 @@ function App() {
             )}
           </div>
         )}
-
-        <MatchesTables onSelect={checkMatch} />
       </div>
     </div>
   )

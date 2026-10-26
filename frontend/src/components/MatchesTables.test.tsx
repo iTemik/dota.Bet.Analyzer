@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Matches } from '../types'
-import MatchesTables from './MatchesTables'
+import MatchesTables, { MATCHES_PAGE_SIZE } from './MatchesTables'
 
 const mockFetch = (data: unknown, ok = true, status = 200) => {
   const fetchMock = vi.fn(() => Promise.resolve({ ok, status, json: () => Promise.resolve(data) }))
@@ -40,7 +40,8 @@ describe('MatchesTables', () => {
     const upcoming = within(table('Upcoming Matches')).getAllByRole('row').slice(1)
     expect(upcoming).toHaveLength(2)
     const cells = within(upcoming[0]).getAllByRole('cell').map((c) => c.textContent)
-    expect(cells.slice(1)).toEqual(['Bo3', 'Team Alpha', '', 'Beta Squad', ''])
+    expect(cells.slice(1)).toEqual(['Bo3', '', 'Team Alpha', '', 'Beta Squad'])
+    expect(cells[0]).toMatch(/^[A-Z][a-z]{2} \d+/)
     expect(within(upcoming[0]).getByRole('img', { name: 'Team Alpha logo' })).toHaveAttribute('src', alpha.logo_url)
     expect(within(upcoming[0]).queryByRole('img', { name: 'Beta Squad logo' })).not.toBeInTheDocument()
 
@@ -65,6 +66,34 @@ describe('MatchesTables', () => {
     await userEvent.click(within(table('Upcoming Matches')).getAllByText('TBD')[0])
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(within(table('Upcoming Matches')).getAllByRole('row')[2]).not.toHaveClass('match-row-clickable')
+  })
+
+  it('shows 10 matches per page with Previous and Next buttons', async () => {
+    const many = Array.from({ length: 23 }, (_, i) => ({
+      start_time: 1_800_000_000 + i * 3600,
+      best_of: 3,
+      team1: { ...alpha, name: `Team ${i}` },
+      team2: beta,
+    }))
+    mockFetch({ upcoming: many, finished: matches.finished })
+    render(<MatchesTables onSelect={vi.fn()} />)
+
+    const upcomingTable = await screen.findByRole('table', { name: 'Upcoming matches' })
+    const names = () => within(upcomingTable).getAllByRole('row').slice(1).map((r) => r.children[3].textContent)
+    expect(MATCHES_PAGE_SIZE).toBe(10)
+    expect(names()).toHaveLength(10)
+    expect(names()[0]).toBe('Team 0')
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+    expect(names()).toEqual(['Team 20', 'Team 21', 'Team 22'])
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    // The finished table has a single page, so no buttons of its own
+    expect(screen.getAllByRole('button', { name: 'Next' })).toHaveLength(1)
   })
 
   it('says when there are no matches', async () => {
