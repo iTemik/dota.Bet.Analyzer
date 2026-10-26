@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatShortDateTime } from '../format'
 import { requestJson } from '../predictions'
-import type { Match, Matches } from '../types'
+import type { Match, Matches, MatchTournament } from '../types'
 import { bestOfLabel, scoreLabel, usePage } from '../series'
 import { Pager, TeamCells } from './seriesTable'
 
@@ -12,6 +12,27 @@ interface MatchesTablesProps {
 
 // A series with a team still to be decided can't be checked
 const isCheckable = (match: Match): boolean => match.team1.name !== 'TBD' && match.team2.name !== 'TBD'
+
+/** Two cells for the tournament: icon, then the name linked to its Liquipedia page. */
+function TournamentCells({ tournament }: { tournament: MatchTournament | null }) {
+  return (
+    <>
+      <td className="match-team-icon">
+        {tournament?.icon && <img src={tournament.icon} alt={`${tournament.name} icon`} />}
+      </td>
+      <td>
+        {tournament?.url ? (
+          // A click on the link opens Liquipedia, not the statistics of the row
+          <a href={tournament.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+            {tournament.name}
+          </a>
+        ) : (
+          (tournament?.name ?? '-')
+        )}
+      </td>
+    </>
+  )
+}
 
 interface MatchesTableProps {
   label: string
@@ -30,6 +51,7 @@ function MatchesTable({ label, matches, finished, onSelect }: MatchesTableProps)
         <thead>
           <tr>
             <th>Time</th>
+            <th colSpan={2}>Tournament</th>
             <th>Best of</th>
             <th colSpan={2}>Team #1</th>
             <th colSpan={2}>Team #2</th>
@@ -47,6 +69,7 @@ function MatchesTable({ label, matches, finished, onSelect }: MatchesTableProps)
                 title={select ? 'Check statistics of these teams' : undefined}
               >
                 <td>{formatShortDateTime(m.start_time)}</td>
+                <TournamentCells tournament={m.tournament} />
                 <td>{bestOfLabel(m.best_of)}</td>
                 <TeamCells name={m.team1.name} logoUrl={m.team1.logo_url} />
                 <TeamCells name={m.team2.name} logoUrl={m.team2.logo_url} />

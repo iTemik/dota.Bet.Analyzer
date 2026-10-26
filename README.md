@@ -647,7 +647,7 @@ Async task for comprehensive player analysis:
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
 #### Matches (`/matches`)
-- `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, Bo, teams, score
+- `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, tournament (name, Liquipedia link, icon), Bo, teams, score
 - Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache); credited under the tables as its CC-BY-SA license requires
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
@@ -699,7 +699,7 @@ npm test          # Run tests
 - Form validation (both teams required)
 - Keyboard support (Enter to submit)
 - Auto-focus on first input field
-- Upcoming and Finished Matches tables below (10 per page); clicking an upcoming match fills both teams and checks statistics
+- Upcoming and Finished Matches tables below (10 per page, tournament icon and name linked to Liquipedia); clicking an upcoming match fills both teams and checks statistics
 - Raw team stats and match summary JSON stay at the bottom of the page
 
 #### Statistics Display

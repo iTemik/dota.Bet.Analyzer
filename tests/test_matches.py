@@ -52,8 +52,34 @@ def score_spans(score: str) -> str:
     )
 
 
-def match_info(team1: str, team2: str, start: int, score: str, best_of: str = "(Bo3)", finished: bool = False) -> str:
-    """One series of the Liquipedia match ticker (trimmed real markup)."""
+LEAGUE = "Some League 2:3 Bo5 Cup"
+LEAGUE_URL = "https://liquipedia.net/dota2/Some_League/Cup"
+
+
+def tournament_block(name: str) -> str:
+    """Tournament line under a series: light and dark icons, then the name link (trimmed real markup)."""
+    icons = "".join(
+        f'<span class="league-icon-small-image {mode}"><a href="/dota2/Some_League/Cup#Day" title="Some League/Cup">'
+        f'<img alt="" src="/img/league-{mode}.png" /></a></span>'
+        for mode in ("lightmode", "darkmode")
+    )
+    return (
+        f'<div class="match-info-tournament"><span>{icons}</span><span class="match-info-tournament-wrapper">'
+        '<span class="match-info-tournament-name"><a href="/dota2/Some_League/Cup#Day" title="Some League/Cup">'
+        f"<span>{name}</span></a></span></span></div>"
+    )
+
+
+def match_info(
+    team1: str,
+    team2: str,
+    start: int,
+    score: str,
+    best_of: str = "(Bo3)",
+    finished: bool = False,
+    tournament: str = f"{LEAGUE} - October 26",
+) -> str:
+    """One series of the Liquipedia match ticker (trimmed real markup); an empty tournament leaves its line out."""
     done = ' data-finished="finished"' if finished else ""
     return (
         '<div class="match-info"><span class="match-info-countdown">'
@@ -64,8 +90,7 @@ def match_info(team1: str, team2: str, start: int, score: str, best_of: str = "(
         f'<span class="match-info-header-scoreholder-upper">{score_spans(score)}</span>'
         f'<span class="match-info-header-scoreholder-lower">{best_of}</span></span></div>'
         f'<div class="match-info-header-opponent">{team2}</div></div>'
-        '<div class="match-info-tournament"><span class="match-info-tournament-name">'
-        '<a title="Some League/Bo5 Cup"><span>Some League 2:3 Bo5 Cup</span></a></span></div></div>'
+        f"{tournament_block(tournament) if tournament else ''}</div>"
     )
 
 
@@ -74,12 +99,12 @@ PAGE = (
     '<div data-filter-expansion-template="type=upcoming"><div class="">'
     + match_info(team("Team Alpha", "Alpha"), team("Beta Squad", "BETA", page=False), NOW + 7200, "vs")
     + match_info(team("Gamma", "GAM", dark_icon=True), team("Team Alpha", "Alpha"), NOW + 3600, "vs", "(Bo5)")
-    + match_info(TBD, TBD, NOW + 9000, "vs", "")
+    + match_info(TBD, TBD, NOW + 9000, "vs", "", tournament="")
     + '</div></div><div class="toggle-area-content-inactive" data-toggle-area-content="2">'
     # Recent tab
     + match_info(team("Beta Squad", "BETA"), team("Delta", "DEL"), NOW - 9000, "2:1", finished=True)
     + match_info(team("Gamma", "GAM"), team("Team Alpha", "Alpha"), NOW - 20000, "0:2", finished=True)
-    + match_info(team("Delta", "DEL"), team("Gamma", "GAM"), NOW - 30000, "FF:W", "", finished=True)
+    + match_info(team("Delta", "DEL"), team("Gamma", "GAM"), NOW - 30000, "FF:W", "", True, f"{LEAGUE} - Playoffs")
     + '<div class="match-info"><span class="timer-object" data-timestamp="1">x</span></div></div>'
 )
 
@@ -88,21 +113,38 @@ def icon(short: str) -> str:
     return f"https://liquipedia.net/img/{short}.png"
 
 
+def league(stage: str = "") -> dict:
+    """Parsed tournament: the day suffix is dropped, a stage like "Playoffs" kept, the dark mode icon taken."""
+    return {"name": f"{LEAGUE}{stage}", "url": f"{LEAGUE_URL}#Day", "icon": icon("league-darkmode")}
+
+
 def test_parse_matches():
     matches = parse_matches(PAGE)
 
-    def series(start, team1, team2, icon1, icon2, best_of=3, finished=False, score1=None, score2=None):
+    def series(start, team1, team2, icon1, icon2, best_of=3, finished=False, score1=None, score2=None, tour=...):
+        tour = league() if tour is ... else tour
         return {"start_time": start, "best_of": best_of, "team1": team1, "team2": team2, "team1_icon": icon1,
-                "team2_icon": icon2, "finished": finished, "score1": score1, "score2": score2}  # fmt: skip
+                "team2_icon": icon2, "tournament": tour, "finished": finished, "score1": score1,
+                "score2": score2}  # fmt: skip
 
     assert matches == [
         series(NOW + 7200, "Team Alpha", "Beta Squad", icon("Alpha"), icon("BETA")),
         series(NOW + 3600, "Gamma", "Team Alpha", icon("GAM-dark"), icon("Alpha"), best_of=5),
-        series(NOW + 9000, "TBD", "TBD", None, None, best_of=None),
+        # No tournament line
+        series(NOW + 9000, "TBD", "TBD", None, None, best_of=None, tour=None),
         series(NOW - 9000, "Beta Squad", "Delta", icon("BETA"), icon("DEL"), finished=True, score1=2, score2=1),
         series(NOW - 20000, "Gamma", "Team Alpha", icon("GAM"), icon("Alpha"), finished=True, score1=0, score2=2),
         # Forfeit: no map score
-        series(NOW - 30000, "Delta", "Gamma", icon("DEL"), icon("GAM"), best_of=None, finished=True),
+        series(
+            NOW - 30000,
+            "Delta",
+            "Gamma",
+            icon("DEL"),
+            icon("GAM"),
+            best_of=None,
+            finished=True,
+            tour=league(" - Playoffs"),
+        ),
     ]
 
 
@@ -213,18 +255,35 @@ def test_lists_upcoming_and_finished(client, fake_redis, known_teams):
     tbd = {"name": "TBD", "team_id": None, "logo_url": None}
     assert response.get_json() == {
         "upcoming": [
-            {"start_time": NOW + 3600, "best_of": 5, "team1": gamma, "team2": alpha},
-            {"start_time": NOW + 7200, "best_of": 3, "team1": alpha, "team2": beta},
-            {"start_time": NOW + 9000, "best_of": None, "team1": tbd, "team2": tbd},
+            {"start_time": NOW + 3600, "best_of": 5, "team1": gamma, "team2": alpha, "tournament": league()},
+            {"start_time": NOW + 7200, "best_of": 3, "team1": alpha, "team2": beta, "tournament": league()},
+            {"start_time": NOW + 9000, "best_of": None, "team1": tbd, "team2": tbd, "tournament": None},
         ],
         "finished": [
-            {"start_time": NOW - 9000, "best_of": 3, "team1": beta, "team2": delta, "score1": 2, "score2": 1},
-            {"start_time": NOW - 20000, "best_of": 3, "team1": gamma, "team2": alpha, "score1": 0, "score2": 2},
+            {
+                "start_time": NOW - 9000,
+                "best_of": 3,
+                "team1": beta,
+                "team2": delta,
+                "tournament": league(),
+                "score1": 2,
+                "score2": 1,
+            },
+            {
+                "start_time": NOW - 20000,
+                "best_of": 3,
+                "team1": gamma,
+                "team2": alpha,
+                "tournament": league(),
+                "score1": 0,
+                "score2": 2,
+            },
             {
                 "start_time": NOW - 30000,
                 "best_of": None,
                 "team1": delta,
                 "team2": gamma,
+                "tournament": league(" - Playoffs"),
                 "score1": None,
                 "score2": None,
             },
@@ -282,3 +341,14 @@ def test_works_without_redis(client, known_teams):
 
     assert response.status_code == 200
     assert get.call_count == 1
+
+
+def test_series_cached_without_tournament(client, fake_redis):
+    """Series cached by a version before tournaments were parsed are served with a null tournament."""
+    cached = {"start_time": NOW + 60, "best_of": 3, "team1": "A", "team2": "B", "team1_icon": None,
+              "team2_icon": None, "finished": False, "score1": None, "score2": None}  # fmt: skip
+    fake_redis.setex(CACHE_KEY, 600, json.dumps({"matches": [cached]}))
+
+    response, _ = get_matches(client, liquipedia_response(""))
+
+    assert response.get_json()["upcoming"][0]["tournament"] is None
