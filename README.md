@@ -724,8 +724,9 @@ npm test          # Run tests
 - **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
 
 #### Predictions
-- List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet); 10 per page
-- Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
+- List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet) with the bet's profit in green and loss in red; 10 per page
+- Possible profit = stake * odds of the bet team (the whole payout), possible loss = stake; a pending bet shows both; amounts are a simulation (no real money), marked so on the totals line and in each amount's tooltip
+- Filter: all, pending or settled, with a totals line (bets, won, lost, pending, possible profit over won and pending bets, possible loss over lost and pending bets)
 - Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged, and a "Prediction saved" row sits between the matches after and before it), the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
 - **Edit** changes the odds, series, bet, stake and comment of a saved prediction; the saved tables stay as they were

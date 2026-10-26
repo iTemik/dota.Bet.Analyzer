@@ -18,6 +18,30 @@ export const outcome = (p: Prediction): Outcome => {
   return p.bet_won ? 'won' : 'lost'
 }
 
+// Possible profit of a bet: stake * odds of the bet team (the whole payout); null without a bet
+export const possibleProfit = (p: Prediction): number | null => {
+  if (p.bet_team === null || p.stake === null) return null
+  return p.stake * (p.bet_team === 1 ? p.team1_odds : p.team2_odds)
+}
+
+// Possible loss of a bet: the stake; null without a bet
+export const possibleLoss = (p: Prediction): number | null => (p.bet_team === null ? null : p.stake)
+
+// Totals over won and pending bets (profit) and lost and pending bets (loss)
+export const betTotals = (predictions: Prediction[]) => {
+  let profit = 0
+  let loss = 0
+  for (const p of predictions) {
+    const result = outcome(p)
+    if (result === 'won' || result === 'pending') profit += possibleProfit(p) ?? 0
+    if (result === 'lost' || result === 'pending') loss += possibleLoss(p) ?? 0
+  }
+  return { profit, loss }
+}
+
+// Money amount with at most 2 decimals: 185, 92.5
+export const formatMoney = (value: number): string => String(Number(value.toFixed(2)))
+
 // Series formats accepted by best_of; '' is n/a (unknown, sent as null)
 export const SERIES_OPTIONS = [
   { value: '1', label: 'bo1' },

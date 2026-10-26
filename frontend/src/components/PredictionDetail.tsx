@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { formatDateTime } from '../format'
 import {
   type BetChoice,
-  OUTCOME_LABELS,
   SERIES_OPTIONS,
   decisionBody,
   decisionErrors,
@@ -15,6 +14,7 @@ import {
 } from '../predictions'
 import type { Prediction, PredictionDetail as Detail, Snapshot, TeamData } from '../types'
 import ComparisonTable from './ComparisonTable'
+import BetOutcome from './BetOutcome'
 import HeadToHeadTable from './HeadToHeadTable'
 import InsightsTable, { type PlayerRanks } from './InsightsTable'
 
@@ -397,7 +397,9 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
                 </div>
                 <div>
                   <dt>Outcome</dt>
-                  <dd className={`outcome outcome-${result}`}>{OUTCOME_LABELS[result]}</dd>
+                  <dd className={`outcome outcome-${result}`}>
+                    <BetOutcome prediction={detail} />
+                  </dd>
                 </div>
               </dl>
               {detail.review_note && (
