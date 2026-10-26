@@ -710,7 +710,7 @@ npm test          # Run tests
   statistics task finishes, "rank: R" (leaderboard rank, "-" when not on it)
 - **Rating Delta**: Last match rating change with color coding, "+" for a gain
 - Rows empty for both teams ("-" or 0-0) are hidden
-- Stat rows have an "i" icon; its tooltip explains the number, the colour rules and why it matters (texts in `frontend/src/components/comparisonRowInfo.ts`)
+- Stat rows have an "i" icon; its tooltip explains the number, the colour rules and why it matters (texts in each row of `frontend/src/components/ComparisonTable.tsx`)
 - **Match Analysis**:
   - Win percentage across all matches
   - Rating matches count
