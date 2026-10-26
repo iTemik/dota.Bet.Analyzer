@@ -327,7 +327,7 @@ function PredictionDetail({ predictionId }: PredictionDetailProps) {
       </div>
 
       <h2>Head-to-head</h2>
-      <HeadToHeadTable predictionId={detail.prediction_id} teamNames={names} />
+      <HeadToHeadTable predictionId={detail.prediction_id} predictedAt={detail.created_at} teamNames={names} />
 
       <div className="prediction-panel">
         <h2>Prediction</h2>

@@ -725,7 +725,7 @@ npm test          # Run tests
 #### Predictions
 - List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet); 10 per page
 - Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
-- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged), the bookmaker values and decision, and a disabled **Played heroes** placeholder
+- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged, and a "Prediction saved" row sits between the matches after and before it), the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
 - **Edit** changes the odds, series, bet, stake and comment of a saved prediction; the saved tables stay as they were
 - **Delete** removes a prediction made by mistake (its snapshots stay)

@@ -721,3 +721,10 @@ pre {
 .raw-json-section {
   margin-top: 2rem;
 }
+
+/* Head-to-head: when the prediction was saved, between the matches after and before it */
+.head-to-head-table tr.prediction-time-row td {
+  text-align: center;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.15);
+}
