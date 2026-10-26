@@ -80,7 +80,8 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
     label: 'Other Players',
     info: {
       description: 'Listed on the team by OpenDota but without tournament games in the window (backups, former players).',
-      assumption: 'TBD',
+      assumption:
+        'Usually the coach and backup players. A good sign: the team discusses strategies and has a ready replacement.',
     },
     render: renderOtherPlayers,
   },
