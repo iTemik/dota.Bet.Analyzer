@@ -632,6 +632,19 @@ class MatchTeamSchema(Schema):
     logo_url = fields.Str(allow_none=True, metadata={"description": "Team logo from the teams table, null if unknown"})
 
 
+class MatchTournamentSchema(Schema):
+    """Tournament of a Liquipedia series."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    name = fields.Str(required=True, metadata={"description": "Tournament name, with the stage but no day"})
+    url = fields.Str(allow_none=True, metadata={"description": "Tournament page on Liquipedia, null if not linked"})
+    icon = fields.Str(allow_none=True, metadata={"description": "Tournament icon on Liquipedia, null if none"})
+
+
 class MatchSchema(Schema):
     """One upcoming or finished series."""
 
@@ -644,6 +657,9 @@ class MatchSchema(Schema):
     best_of = fields.Int(allow_none=True, metadata={"description": "Number of maps (Bo1/2/3/5), null if not shown"})
     team1 = fields.Nested(MatchTeamSchema, required=True)
     team2 = fields.Nested(MatchTeamSchema, required=True)
+    tournament = fields.Nested(
+        MatchTournamentSchema, allow_none=True, metadata={"description": "Tournament, null if not shown"}
+    )
     score1 = fields.Int(allow_none=True, metadata={"description": "Maps won by team 1 (finished series only)"})
     score2 = fields.Int(allow_none=True, metadata={"description": "Maps won by team 2 (finished series only)"})
 

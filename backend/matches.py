@@ -34,9 +34,15 @@ LIQUIPEDIA_HOST = "https://liquipedia.net"  # team icon paths on the page are re
 MATCH_CLASS = "match-info"
 OPPONENT_CLASS = "match-info-header-opponent"
 SCORE_CLASS = "match-info-header-scoreholder"
+# Tournament line: `league-icon-small-image` icons (lightmode and darkmode) and the name link
+TOURNAMENT_CLASS = "match-info-tournament"
+TOURNAMENT_NAME_CLASS = "match-info-tournament-name"
+TOURNAMENT_ICON_CLASS = "league-icon-small-image"
 MISSING_PAGE_SUFFIX = " (page does not exist)"  # title of a link to a team without a wiki page
 BEST_OF_RE = re.compile(r"\bBo\s?(\d)\b")
 SCORE_RE = re.compile(r"(\d+)\s*:\s*(\d+)")
+# Day suffix of a tournament name ("EPC Season 3 - October 26"); the time column shows the date already
+DAY_SUFFIX_RE = re.compile(r"\s+-\s+[A-Z][a-z]+ \d{1,2}$")
 
 
 class _Node:
@@ -112,6 +118,11 @@ def _has_class(*names: str) -> Any:
     return lambda node: any(c in node.classes for c in names)
 
 
+def _url(src: str) -> Optional[str]:
+    """Absolute URL of a link or image path on the page."""
+    return f"{LIQUIPEDIA_HOST}{src}" if src.startswith("/") else (src or None)
+
+
 def _team(node: _Node) -> dict[str, Optional[str]]:
     """Team of an opponent block: full name (the name link title, else the shown text) and Liquipedia icon URL."""
     names = node.find_all(_has_class("name"))
@@ -121,9 +132,25 @@ def _team(node: _Node) -> dict[str, Optional[str]]:
     # The app has a dark background, so take the dark mode icon when the team has light and dark ones
     dark = node.find_all(_has_class("team-template-darkmode"))
     images = (dark or [node])[0].find_all(lambda n: n.tag == "img")
-    src = images[0].attrs.get("src", "") if images else ""
-    icon = f"{LIQUIPEDIA_HOST}{src}" if src.startswith("/") else (src or None)
-    return {"name": name, "icon": icon}
+    return {"name": name, "icon": _url(images[0].attrs.get("src", "")) if images else None}
+
+
+def _tournament(node: _Node) -> Optional[dict[str, Optional[str]]]:
+    """Tournament of a match block: shown name without a day suffix, Liquipedia page URL and dark mode icon."""
+    blocks = node.find_all(_has_class(TOURNAMENT_CLASS))
+    names = blocks[0].find_all(_has_class(TOURNAMENT_NAME_CLASS)) if blocks else []
+    name = DAY_SUFFIX_RE.sub("", " ".join(names[0].text().split())) if names else ""
+    if not name:
+        return None
+    links = names[0].find_all(lambda n: n.tag == "a")
+    icons = blocks[0].find_all(_has_class(TOURNAMENT_ICON_CLASS))
+    dark = [i for i in icons if "darkmode" in i.classes]
+    images = (dark or icons or [_Node("span", {})])[0].find_all(lambda n: n.tag == "img")
+    return {
+        "name": name,
+        "url": _url(links[0].attrs.get("href", "")) if links else None,
+        "icon": _url(images[0].attrs.get("src", "")) if images else None,
+    }
 
 
 def _parse_match(node: _Node) -> Optional[dict[str, Any]]:
@@ -147,6 +174,7 @@ def _parse_match(node: _Node) -> Optional[dict[str, Any]]:
         "team2": teams[1]["name"],
         "team1_icon": teams[0]["icon"],
         "team2_icon": teams[1]["icon"],
+        "tournament": _tournament(node),
         "finished": timers[0].attrs.get("data-finished") == "finished",
         "score1": int(score.group(1)) if score else None,
         "score2": int(score.group(2)) if score else None,
@@ -160,8 +188,8 @@ def parse_matches(html: str) -> list[dict[str, Any]]:
         html: Rendered page HTML from the parse API
 
     Returns:
-        Series with start_time, best_of, team1/team2 names, team1_icon/team2_icon, finished and score1/score2
-        (None when not shown, e.g. "FF : W" for a forfeit)
+        Series with start_time, best_of, team1/team2 names, team1_icon/team2_icon, tournament (name, url, icon;
+        None when missing), finished and score1/score2 (None when not shown, e.g. "FF : W" for a forfeit)
     """
     builder = _TreeBuilder()
     builder.feed(html)
@@ -290,8 +318,8 @@ def get_matches(now: Optional[int] = None) -> dict[str, list[dict[str, Any]]]:
         now: Current unix time (for tests)
 
     Returns:
-        `upcoming` and `finished` lists of series with start_time, best_of, team1, team2 (name, team_id, logo_url);
-        finished series also carry score1 and score2
+        `upcoming` and `finished` lists of series with start_time, best_of, team1, team2 (name, team_id, logo_url),
+        tournament (name, url, icon or None); finished series also carry score1 and score2
 
     Raises:
         ConnectionError: If the series could not be loaded from Liquipedia
@@ -310,6 +338,8 @@ def get_matches(now: Optional[int] = None) -> dict[str, list[dict[str, Any]]]:
             "best_of": match["best_of"],
             "team1": teams[match["team1"]],
             "team2": teams[match["team2"]],
+            # .get: series cached by an older version have no tournament
+            "tournament": match.get("tournament"),
         }
         if with_score:
             result["score1"] = match["score1"]

@@ -111,7 +111,11 @@ export interface Prediction {
 export interface SnapshotData {
   team: Partial<TeamData>
   summary: MatchesSummary | null
-  players: { account_id: number; rank: number | null; match_count: number | null }[]
+  players: {
+    account_id: number
+    rank: number | null
+    match_count: number | null
+  }[]
 }
 
 // GET /api/predictions/{id}: team1_snapshot and team2_snapshot
@@ -154,12 +158,20 @@ export interface MatchTeam {
   logo_url: string | null
 }
 
+// GET /api/matches: tournament of a series (url and icon are Liquipedia links, null when missing)
+export interface MatchTournament {
+  name: string
+  url: string | null
+  icon: string | null
+}
+
 // GET /api/matches: one series; score1/score2 only on finished series
 export interface Match {
   start_time: number
   best_of: number | null
   team1: MatchTeam
   team2: MatchTeam
+  tournament: MatchTournament | null
   score1?: number | null
   score2?: number | null
 }

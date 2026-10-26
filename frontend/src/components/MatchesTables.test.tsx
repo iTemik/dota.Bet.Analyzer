@@ -14,15 +14,16 @@ const mockFetch = (data: unknown, ok = true, status = 200) => {
 const alpha = { name: 'Team Alpha', team_id: 11, logo_url: 'https://logo/alpha.png' }
 const beta = { name: 'Beta Squad', team_id: null, logo_url: null }
 const tbd = { name: 'TBD', team_id: null, logo_url: null }
+const league = { name: 'EPC Season 3', url: 'https://liquipedia.net/dota2/EPC/3', icon: 'https://liquipedia.net/epc.png' }
 
 const matches: Matches = {
   upcoming: [
-    { start_time: 1_800_003_600, best_of: 3, team1: alpha, team2: beta },
-    { start_time: 1_800_009_000, best_of: null, team1: tbd, team2: tbd },
+    { start_time: 1_800_003_600, best_of: 3, team1: alpha, team2: beta, tournament: league },
+    { start_time: 1_800_009_000, best_of: null, team1: tbd, team2: tbd, tournament: null },
   ],
   finished: [
-    { start_time: 1_799_990_000, best_of: 3, team1: beta, team2: alpha, score1: 2, score2: 1 },
-    { start_time: 1_799_980_000, best_of: null, team1: alpha, team2: beta, score1: 0, score2: 2 },
+    { start_time: 1_799_990_000, best_of: 3, team1: beta, team2: alpha, tournament: league, score1: 2, score2: 1 },
+    { start_time: 1_799_980_000, best_of: null, team1: alpha, team2: beta, tournament: null, score1: 0, score2: 2 },
   ],
 }
 
@@ -31,7 +32,7 @@ const table = (heading: string) => screen.getByRole('heading', { name: heading }
 describe('MatchesTables', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('shows upcoming and finished series with Bo, icons and scores', async () => {
+  it('shows upcoming and finished series with tournament, Bo, icons and scores', async () => {
     const fetchMock = mockFetch(matches)
     render(<MatchesTables onSelect={vi.fn()} />)
 
@@ -41,14 +42,19 @@ describe('MatchesTables', () => {
     const upcoming = within(table('Upcoming Matches')).getAllByRole('row').slice(1)
     expect(upcoming).toHaveLength(2)
     const cells = within(upcoming[0]).getAllByRole('cell').map((c) => c.textContent)
-    expect(cells.slice(1)).toEqual(['Bo3', '', 'Team Alpha', '', 'Beta Squad'])
+    expect(cells.slice(1)).toEqual(['', 'EPC Season 3', 'Bo3', '', 'Team Alpha', '', 'Beta Squad'])
     expect(cells[0]).toMatch(/^[A-Z][a-z]{2} \d+/)
     expect(within(upcoming[0]).getByRole('img', { name: 'Team Alpha logo' })).toHaveAttribute('src', alpha.logo_url)
     expect(within(upcoming[0]).queryByRole('img', { name: 'Beta Squad logo' })).not.toBeInTheDocument()
+    expect(within(upcoming[0]).getByRole('img', { name: 'EPC Season 3 icon' })).toHaveAttribute('src', league.icon)
+    expect(within(upcoming[0]).getByRole('link', { name: 'EPC Season 3' })).toHaveAttribute('href', league.url)
+    // No tournament on Liquipedia
+    expect(within(upcoming[1]).getAllByRole('cell')[2]).toHaveTextContent('-')
 
     const finished = within(table('Finished Matches')).getAllByRole('row').slice(1)
     expect(finished.map((r) => r.lastElementChild?.textContent)).toEqual(['2:1', '0:2'])
-    expect(within(finished[1]).getAllByRole('cell')[1]).toHaveTextContent('-')
+    expect(within(finished[0]).getByRole('link', { name: 'EPC Season 3' })).toBeInTheDocument()
+    expect(within(finished[1]).getAllByRole('cell')[3]).toHaveTextContent('-')
     expect(screen.getByRole('link', { name: 'Liquipedia' })).toHaveAttribute(
       'href',
       'https://liquipedia.net/dota2/Liquipedia:Matches',
@@ -63,6 +69,8 @@ describe('MatchesTables', () => {
     await userEvent.click(await screen.findByText('Bo3', { selector: '.match-row-clickable td' }))
     expect(onSelect).toHaveBeenCalledWith(matches.upcoming[0])
 
+    // The tournament link opens Liquipedia without checking the teams
+    await userEvent.click(within(table('Upcoming Matches')).getByRole('link', { name: 'EPC Season 3' }))
     await userEvent.click(within(table('Finished Matches')).getByText('2:1'))
     await userEvent.click(within(table('Upcoming Matches')).getAllByText('TBD')[0])
     expect(onSelect).toHaveBeenCalledTimes(1)
@@ -75,12 +83,13 @@ describe('MatchesTables', () => {
       best_of: 3,
       team1: { ...alpha, name: `Team ${i}` },
       team2: beta,
+      tournament: null,
     }))
     mockFetch({ upcoming: many, finished: matches.finished })
     render(<MatchesTables onSelect={vi.fn()} />)
 
     const upcomingTable = await screen.findByRole('table', { name: 'Upcoming matches' })
-    const names = () => within(upcomingTable).getAllByRole('row').slice(1).map((r) => r.children[3].textContent)
+    const names = () => within(upcomingTable).getAllByRole('row').slice(1).map((r) => r.children[5].textContent)
     expect(PAGE_SIZE).toBe(10)
     expect(names()).toHaveLength(10)
     expect(names()[0]).toBe('Team 0')
