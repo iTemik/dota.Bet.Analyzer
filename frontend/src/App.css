@@ -165,7 +165,8 @@ input:focus {
 }
 
 /* Row info tooltips may reach past the table edge */
-.stats-table.comparison-table {
+.stats-table.comparison-table,
+.stats-table.insights-table {
   overflow: visible;
 }
 
