@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { formatDateTime } from '../format'
-import { OUTCOME_LABELS, isSettled, outcome, requestJson, resultText, seriesLabel, teamLabel } from '../predictions'
+import { formatShortDateTime } from '../format'
+import { OUTCOME_LABELS, isSettled, outcome, requestJson, teamLabel } from '../predictions'
 import type { Prediction } from '../types'
+import { bestOfLabel, scoreLabel, usePage } from '../series'
+import { Pager, TeamCells } from './seriesTable'
 
 type Filter = 'all' | 'pending' | 'settled'
 
@@ -11,17 +13,60 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'settled', label: 'Settled' },
 ]
 
-const TeamCell = ({ team, index }: { team: Prediction['team1']; index: number }) => (
-  <span className="prediction-team">
-    {team.logo_url && <img src={team.logo_url} alt="" className="prediction-team-logo" />}
-    {teamLabel(team, index)}
-  </span>
-)
-
 const betText = (p: Prediction): string => {
   if (p.bet_team === null) return 'No bet'
   const team = teamLabel(p.bet_team === 1 ? p.team1 : p.team2, p.bet_team - 1)
   return p.stake !== null ? `${team} · ${p.stake}` : team
+}
+
+/** Predictions, laid out like the Finished Matches table (time, Bo, teams, score), then odds, bet and outcome. */
+function PredictionTable({ predictions }: { predictions: Prediction[] }) {
+  const { page, pages, shown, setPage } = usePage(predictions)
+
+  return (
+    <>
+      <table className="stats-table matches-table prediction-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Best of</th>
+            <th colSpan={2}>Team #1</th>
+            <th colSpan={2}>Team #2</th>
+            <th>Score</th>
+            <th>Odds</th>
+            <th>Bet</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((p) => {
+            const result = outcome(p)
+            return (
+              <tr
+                key={p.prediction_id}
+                className="prediction-row-link"
+                onClick={() => (window.location.hash = `#predictions/${p.prediction_id}`)}
+              >
+                <td>
+                  <a href={`#predictions/${p.prediction_id}`}>{formatShortDateTime(p.created_at)}</a>
+                </td>
+                <td>{bestOfLabel(p.best_of)}</td>
+                <TeamCells name={teamLabel(p.team1, 0)} logoUrl={p.team1.logo_url} />
+                <TeamCells name={teamLabel(p.team2, 1)} logoUrl={p.team2.logo_url} />
+                <td>{scoreLabel(p.team1_maps_won, p.team2_maps_won)}</td>
+                <td>
+                  {p.team1_odds} / {p.team2_odds}
+                </td>
+                <td>{betText(p)}</td>
+                <td className={`outcome outcome-${result}`}>{OUTCOME_LABELS[result]}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <Pager page={page} pages={pages} setPage={setPage} />
+    </>
+  )
 }
 
 /** Predictions tab: every saved prediction, newest first, with a pending/settled filter and totals. */
@@ -43,8 +88,8 @@ function PredictionList() {
   if (error) return <div className="error-message">Failed to load predictions: {error}</div>
   if (!predictions) return <p>Loading predictions...</p>
 
-  const shown = predictions.filter((p) => filter === 'all' || (filter === 'settled') === isSettled(p))
-  const outcomes = shown.map(outcome)
+  const filtered = predictions.filter((p) => filter === 'all' || (filter === 'settled') === isSettled(p))
+  const outcomes = filtered.map(outcome)
   const count = (o: string) => outcomes.filter((x) => x === o).length
 
   return (
@@ -64,52 +109,15 @@ function PredictionList() {
           ))}
         </div>
         <p className="prediction-totals">
-          Bets: {shown.length - count('no_bet')} · Won: {count('won')} · Lost: {count('lost')} · Pending:{' '}
+          Bets: {filtered.length - count('no_bet')} · Won: {count('won')} · Lost: {count('lost')} · Pending:{' '}
           {count('pending')}
         </p>
       </div>
 
-      {shown.length === 0 ? (
+      {filtered.length === 0 ? (
         <p>{predictions.length ? 'No predictions match this filter.' : 'No predictions yet. Log one on the Compare tab.'}</p>
       ) : (
-        <table className="stats-table prediction-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Teams</th>
-              <th>Odds</th>
-              <th>Series</th>
-              <th>Bet</th>
-              <th>Result</th>
-              <th>Outcome</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((p, i) => (
-              <tr
-                key={p.prediction_id}
-                className="prediction-row-link"
-                onClick={() => (window.location.hash = `#predictions/${p.prediction_id}`)}
-              >
-                <td>{formatDateTime(p.created_at)}</td>
-                <td>
-                  <a href={`#predictions/${p.prediction_id}`} className="prediction-teams">
-                    <TeamCell team={p.team1} index={0} />
-                    <span className="versus">vs</span>
-                    <TeamCell team={p.team2} index={1} />
-                  </a>
-                </td>
-                <td>
-                  {p.team1_odds} / {p.team2_odds}
-                </td>
-                <td>{seriesLabel(p.best_of)}</td>
-                <td>{betText(p)}</td>
-                <td>{resultText(p)}</td>
-                <td className={`outcome outcome-${outcomes[i]}`}>{OUTCOME_LABELS[outcomes[i]]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <PredictionTable key={filter} predictions={filtered} />
       )}
     </section>
   )

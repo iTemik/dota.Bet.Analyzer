@@ -606,45 +606,12 @@ pre {
   font-weight: 600;
 }
 
-.stats-table.prediction-table td,
-.stats-table.prediction-table th {
-  text-align: left;
-  padding: 0.75rem;
-}
-
 .prediction-row-link {
   cursor: pointer;
 }
 
 .prediction-row-link:hover {
   background: rgba(255, 255, 255, 0.08);
-}
-
-.prediction-teams {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  color: white;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.prediction-team {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.prediction-team-logo {
-  height: 24px;
-  width: 32px;
-  object-fit: contain;
-}
-
-.versus {
-  opacity: 0.7;
-  font-weight: normal;
 }
 
 .outcome-won {
@@ -701,5 +668,63 @@ pre {
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
   font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.matches-table .match-team-icon {
+  width: 2rem;
+  padding-left: 0;
+}
+
+.matches-table .match-team-icon img {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.matches-table th,
+.matches-table td {
+  padding: 0.5rem 0.75rem;
+}
+
+.match-row-clickable {
+  cursor: pointer;
+}
+
+.match-row-clickable:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stats-table.matches-table td {
+  text-align: left;
+}
+
+.matches-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: -1rem 0 2rem;
+}
+
+.matches-pager .secondary-btn {
+  margin-top: 0;
+}
+
+.matches-pager .secondary-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Raw JSON blocks at the bottom of the Compare tab */
+.raw-json-section {
+  margin-top: 2rem;
+}
+
+/* Head-to-head: when the prediction was saved, between the matches after and before it */
+.head-to-head-table tr.prediction-time-row td {
+  text-align: center;
+  font-weight: 600;
   background: rgba(255, 255, 255, 0.15);
 }

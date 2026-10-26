@@ -9,6 +9,8 @@ export interface TeamInput {
   value: string
   onChange: (value: string) => void
   onSelect: (team: SelectedTeam) => void
+  // Fill the input with a team (picked when team_id is known, plain text otherwise); returns its query param
+  fill: (team: { name: string; team_id: number | null }) => [string, string]
   // /api/statistics query param: `team_id` if the text still matches the team picked from the list, else `team`
   queryParam: () => [string, string]
 }
@@ -26,6 +28,11 @@ export function useTeamInput(): TeamInput {
       setSelected(null)
     },
     onSelect: (team) => setSelected({ team_id: team.team_id, name: team.name }),
+    fill: (team) => {
+      setValue(team.name)
+      setSelected(team.team_id === null ? null : { team_id: team.team_id, name: team.name })
+      return team.team_id === null ? ['team', team.name] : ['team_id', String(team.team_id)]
+    },
     queryParam: () =>
       selected !== null && value === selected.name ? ['team_id', String(selected.team_id)] : ['team', value],
   }

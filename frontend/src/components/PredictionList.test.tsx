@@ -27,7 +27,7 @@ describe('PredictionList', () => {
     window.location.hash = '#predictions'
   })
 
-  it('lists the predictions with odds, series, bet, result and outcome', async () => {
+  it('lists the predictions like the Finished Matches table, then odds, bet and outcome', async () => {
     const fetchMock = mockList()
     render(<PredictionList />)
     await screen.findByRole('table')
@@ -36,15 +36,12 @@ describe('PredictionList', () => {
 
     const pending = within(rows()[0])
     expect(pending.getByRole('link')).toHaveAttribute('href', '#predictions/3')
-    expect(pending.getByRole('link')).toHaveTextContent(/Team A\s*vs\s*Team B/)
-    expect(pending.getByText('1.85 / 2.05')).toBeInTheDocument()
-    expect(pending.getByText('bo3')).toBeInTheDocument()
-    expect(pending.getByText('Team A · 100')).toBeInTheDocument()
-    expect(pending.getByText('pending')).toBeInTheDocument()
-    expect(pending.getByText('Pending')).toBeInTheDocument()
+    expect(pending.getByRole('link').textContent).toMatch(/^[A-Z][a-z]{2} \d+/)
+    const cells = pending.getAllByRole('cell').map((c) => c.textContent)
+    expect(cells.slice(1)).toEqual(['Bo3', '', 'Team A', '', 'Team B', '-', '1.85 / 2.05', 'Team A · 100', 'Pending'])
 
     expect(within(rows()[1]).getAllByText('No bet')).toHaveLength(2)
-    expect(within(rows()[1]).getByText('1-2')).toBeInTheDocument()
+    expect(within(rows()[1]).getByText('1:2')).toBeInTheDocument()
     expect(within(rows()[2]).getByText('Won')).toHaveClass('outcome-won')
   })
 
@@ -69,8 +66,24 @@ describe('PredictionList', () => {
     mockList()
     render(<PredictionList />)
     await screen.findByRole('table')
-    await userEvent.click(within(rows()[2]).getByText('bo5'))
+    await userEvent.click(within(rows()[2]).getByText('Bo5'))
     expect(window.location.hash).toBe('#predictions/1')
+  })
+
+  it('shows 10 predictions per page', async () => {
+    mockList(jsonResponse(Array.from({ length: 12 }, (_, i) => prediction({ prediction_id: 100 - i }))))
+    render(<PredictionList />)
+    await screen.findByRole('table')
+    expect(rows()).toHaveLength(10)
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(rows()).toHaveLength(2)
+    expect(within(rows()[0]).getByRole('link')).toHaveAttribute('href', '#predictions/90')
+
+    // A filter starts again from the first page
+    await userEvent.click(screen.getByRole('button', { name: 'Pending' }))
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
   })
 
   it('says when there are no predictions yet', async () => {

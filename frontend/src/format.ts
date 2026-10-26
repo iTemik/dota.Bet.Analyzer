@@ -22,3 +22,14 @@ export const formatDateTime = (unixTime: number | null | undefined): string => {
   if (!unixTime) return '-'
   return new Date(unixTime * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
 }
+
+// Date with a short month name and time, e.g. "Oct 26, 14:00"
+export const formatShortDateTime = (unixTime: number | null | undefined): string => {
+  if (!unixTime) return '-'
+  return new Date(unixTime * 1000).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}

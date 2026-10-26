@@ -23,21 +23,36 @@ describe('HeadToHeadTable', () => {
 
   it('lists matches with OpenDota links, results and a tag on matches before the prediction', async () => {
     const fetchMock = mockFetch(headToHead)
-    render(<HeadToHeadTable predictionId={7} teamNames={['Team A', 'Team B']} />)
+    render(<HeadToHeadTable predictionId={7} predictedAt={1_760_950_000} teamNames={['Team A', 'Team B']} />)
 
     const link = await screen.findByRole('link', { name: '8003' })
     expect(fetchMock).toHaveBeenCalledWith('/api/predictions/7/head-to-head', undefined)
     expect(link).toHaveAttribute('href', 'https://www.opendota.com/matches/8003')
     const rows = screen.getAllByRole('row').slice(1)
-    expect(rows.map((r) => r.lastElementChild?.textContent)).toEqual(['Team B won', 'Team A won', 'unknown'])
+    expect(rows.map((r) => r.lastElementChild?.textContent)).toEqual([
+      'Team B won',
+      expect.stringMatching(/^Prediction saved [A-Z][a-z]{2} \d+/),
+      'Team A won',
+      'unknown',
+    ])
     expect(rows[0]).not.toHaveTextContent('before prediction')
-    expect(rows[1]).toHaveTextContent('before prediction')
-    expect(rows[1]).toHaveClass('before-prediction')
+    expect(rows[2]).toHaveTextContent('before prediction')
+    expect(rows[2]).toHaveClass('before-prediction')
+  })
+
+  it('puts the prediction row last when every match came after it', async () => {
+    mockFetch({ since: 1_760_000_000, matches: [headToHead.matches[0]] })
+    render(<HeadToHeadTable predictionId={7} predictedAt={1_760_950_000} teamNames={['Team A', 'Team B']} />)
+
+    await screen.findByRole('link', { name: '8003' })
+    const rows = screen.getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toHaveTextContent(/^Prediction saved/)
   })
 
   it('says when the teams have not played each other', async () => {
     mockFetch({ since: 1_760_000_000, matches: [] })
-    render(<HeadToHeadTable predictionId={7} teamNames={['Team A', 'Team B']} />)
+    render(<HeadToHeadTable predictionId={7} predictedAt={1_760_950_000} teamNames={['Team A', 'Team B']} />)
 
     expect(await screen.findByText(/No matches between these teams since/)).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
@@ -45,7 +60,7 @@ describe('HeadToHeadTable', () => {
 
   it('shows the backend error', async () => {
     mockFetch({ message: 'Failed to read predictions from database' }, false, 500)
-    render(<HeadToHeadTable predictionId={7} teamNames={['Team A', 'Team B']} />)
+    render(<HeadToHeadTable predictionId={7} predictedAt={1_760_950_000} teamNames={['Team A', 'Team B']} />)
 
     expect(await screen.findByText('Failed to read predictions from database')).toBeInTheDocument()
   })

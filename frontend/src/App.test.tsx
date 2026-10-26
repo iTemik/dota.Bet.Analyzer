@@ -29,6 +29,7 @@ describe('App Component', () => {
         vi.clearAllMocks()
             // Setup default fetch mock that handles all routes
             ; (globalThis.fetch as any).mockImplementation((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -142,6 +143,7 @@ describe('App Component', () => {
     describe('API Integration', () => {
         it('should call fetch with correct parameters', async () => {
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -169,6 +171,7 @@ describe('App Component', () => {
                 new Promise((resolve) =>
                     setTimeout(
                         () => {
+                            if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                             if (url === '/api/version') {
                                 resolve(createMockResponse({ backend: '0.4.DEV' }))
                             } else {
@@ -196,6 +199,7 @@ describe('App Component', () => {
 
         it('should handle HTTP errors', async () => {
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -220,6 +224,7 @@ describe('App Component', () => {
 
         it('should handle network errors', async () => {
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return createVersionResponse()
                 }
@@ -279,6 +284,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -336,6 +342,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -392,6 +399,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -448,6 +456,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -550,6 +559,7 @@ describe('App Component', () => {
                         json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
                     })
                 }
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -643,6 +653,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return createVersionResponse()
                 }
@@ -711,6 +722,7 @@ describe('App Component', () => {
     describe('Keyboard Input', () => {
         it('should submit form when Enter key is pressed in team1 input', async () => {
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -734,6 +746,7 @@ describe('App Component', () => {
 
         it('should submit form when Enter key is pressed in team2 input', async () => {
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -790,6 +803,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -850,6 +864,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -961,6 +976,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return createVersionResponse()
                 }
@@ -1107,6 +1123,7 @@ describe('App Component', () => {
                         json: () => Promise.resolve(mockSummary[taskId as keyof typeof mockSummary]),
                     })
                 }
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1180,6 +1197,7 @@ describe('App Component', () => {
             // The first request fails on purpose, so silence the expected log and check it instead
             const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
             globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     versionCalls += 1
                     if (versionCalls === 1) return Promise.reject(new Error('backend not started yet'))
@@ -1202,6 +1220,7 @@ describe('App Component', () => {
             const waitLine = { step: 1, message: 'OpenDota rate limit reached, retrying account 7 in 20s', progress: 10, data: {}, timestamp: 1 }
             const timeoutLine = { step: -1, message: 'Task timed out - no progress updates for 30s', progress: -1, data: { error: true, timeout: true } }
             globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1230,6 +1249,7 @@ describe('App Component', () => {
         it('shows the error and stops polling when the progress request fails', async () => {
             let progressCalls = 0
             globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1259,6 +1279,7 @@ describe('App Component', () => {
             let progressCalls = 0
             const failedLine = { step: -1, message: 'Task error: OpenDota unavailable', progress: -1, data: { error: true } }
             globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1287,6 +1308,7 @@ describe('App Component', () => {
         it('closes the open progress stream when the page is closed', async () => {
             let streamSignal: AbortSignal | undefined
             globalThis.fetch = vi.fn((url: string, init?: RequestInit) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1378,6 +1400,7 @@ describe('App Component', () => {
 
             let callCount = 0
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     const versionResponse = JSON.stringify({ backend: '0.4.DEV' })
                     return Promise.resolve({
@@ -1464,6 +1487,7 @@ describe('App Component', () => {
             }
 
             const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1514,6 +1538,7 @@ describe('App Component', () => {
 
         const renderComparison = async (teams: unknown[]) => {
             globalThis.fetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
                 if (url === '/api/version') {
                     return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
                 }
@@ -1767,6 +1792,41 @@ describe('App Component', () => {
             const recordCells = rowOf('Tournaments Record (20d)').querySelectorAll('td')
             expect(recordCells[1]).toHaveTextContent('-')
             expect(recordCells[2]).toHaveTextContent('-')
+        })
+    })
+
+    describe('Matches', () => {
+        it('fills both inputs and checks statistics when an upcoming match is clicked', async () => {
+            const matches = {
+                upcoming: [{
+                    start_time: 1_800_000_000,
+                    best_of: 3,
+                    team1: { name: 'Aurora', team_id: 9467224, logo_url: null },
+                    team2: { name: 'New Squad', team_id: null, logo_url: null },
+                }],
+                finished: [],
+            }
+            const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/version') return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                if (url === '/api/matches') return Promise.resolve(createMockResponse(matches))
+                return Promise.resolve(createMockResponse({ teams: [] }))
+            }) as any
+            globalThis.fetch = mockFetch
+            window.scrollTo = vi.fn() as any
+
+            render(<App />)
+            await userEvent.click(await screen.findByText('New Squad'))
+
+            await waitFor(() => {
+                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team_id=9467224&team=New+Squad&days=20')
+            })
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Aurora')
+            expect(screen.getByPlaceholderText(/Enter second team name/i)).toHaveValue('New Squad')
+
+            // Raw JSON stays below the matches tables
+            const raw = await screen.findByRole('heading', { name: 'Raw team stats JSON' })
+            const upcoming = screen.getByRole('heading', { name: 'Upcoming Matches' })
+            expect(upcoming.compareDocumentPosition(raw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         })
     })
 })

@@ -646,6 +646,11 @@ Async task for comprehensive player analysis:
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
+#### Matches (`/matches`)
+- `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, Bo, teams, score
+- Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache); credited under the tables as its CC-BY-SA license requires
+- Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
+
 #### Teams List (`/teams/sync`)
 - "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota (shows an error if it fails)
 - Synced at startup in the background when the last sync is 30+ days old (or never happened); one sync runs at a time
@@ -694,6 +699,8 @@ npm test          # Run tests
 - Form validation (both teams required)
 - Keyboard support (Enter to submit)
 - Auto-focus on first input field
+- Upcoming and Finished Matches tables below (10 per page); clicking an upcoming match fills both teams and checks statistics
+- Raw team stats and match summary JSON stay at the bottom of the page
 
 #### Statistics Display
 - **Team Metadata**: Tags, IDs, current ratings
@@ -716,9 +723,9 @@ npm test          # Run tests
 - **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
 
 #### Predictions
-- List of saved predictions, newest first: date, teams with logos, odds, series, bet and stake, result (maps won or "pending") and outcome (won, lost, no bet)
+- List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet); 10 per page
 - Filter: all, pending or settled, with a totals line (bets, won, lost, pending)
-- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged), the bookmaker values and decision, and a disabled **Played heroes** placeholder
+- Click a prediction (`#predictions/<id>`) to see the Team Comparison and Team Insights tables as they were saved, a **Head-to-head** table (match link to OpenDota, date, winner; matches played before the prediction are tagged, and a "Prediction saved" row sits between the matches after and before it), the bookmaker values and decision, and a disabled **Played heroes** placeholder
 - **Add review** opens the result (buttons valid for the series format, or maps won per team when it is n/a) and a review note; once saved it becomes **Edit review**
 - **Edit** changes the odds, series, bet, stake and comment of a saved prediction; the saved tables stay as they were
 - **Delete** removes a prediction made by mistake (its snapshots stay)

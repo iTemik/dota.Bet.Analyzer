@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { formatDateTime } from '../format'
+import { formatDateTime, formatShortDateTime } from '../format'
 import { requestJson } from '../predictions'
 import type { HeadToHead } from '../types'
 
 interface HeadToHeadTableProps {
   predictionId: number
+  // When the prediction was saved (unix seconds), shown as a row between the matches after and before it
+  predictedAt: number
   teamNames: string[]
 }
 
 /** League matches between the prediction's two teams, newest first; matches before the prediction are tagged. */
-function HeadToHeadTable({ predictionId, teamNames }: HeadToHeadTableProps) {
+function HeadToHeadTable({ predictionId, predictedAt, teamNames }: HeadToHeadTableProps) {
   const [data, setData] = useState<HeadToHead | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,6 +30,15 @@ function HeadToHeadTable({ predictionId, teamNames }: HeadToHeadTableProps) {
   if (!data.matches.length)
     return <p className="prediction-hint">No matches between these teams since {formatDateTime(data.since)}.</p>
 
+  // Matches are newest first, so the prediction row goes above the first match played before it
+  const firstBefore = data.matches.findIndex((m) => m.before_prediction)
+  const predictionRowAt = firstBefore === -1 ? data.matches.length : firstBefore
+  const predictionRow = (
+    <tr key="prediction" className="prediction-time-row">
+      <td colSpan={3}>Prediction saved {formatShortDateTime(predictedAt)}</td>
+    </tr>
+  )
+
   return (
     <table className="stats-table head-to-head-table">
       <thead>
@@ -38,7 +49,8 @@ function HeadToHeadTable({ predictionId, teamNames }: HeadToHeadTableProps) {
         </tr>
       </thead>
       <tbody>
-        {data.matches.map((m) => (
+        {data.matches.flatMap((m, i) => [
+          ...(i === predictionRowAt ? [predictionRow] : []),
           <tr key={m.match_id} className={m.before_prediction ? 'before-prediction' : undefined}>
             <td>
               <a href={`https://www.opendota.com/matches/${m.match_id}`} target="_blank" rel="noreferrer">
@@ -46,12 +58,13 @@ function HeadToHeadTable({ predictionId, teamNames }: HeadToHeadTableProps) {
               </a>
             </td>
             <td>
-              {formatDateTime(m.start_time)}
+              {formatShortDateTime(m.start_time)}
               {m.before_prediction && <span className="before-prediction-tag">before prediction</span>}
             </td>
             <td>{m.team1_won === null ? 'unknown' : `${teamNames[m.team1_won ? 0 : 1]} won`}</td>
-          </tr>
-        ))}
+          </tr>,
+        ])}
+        {predictionRowAt === data.matches.length && predictionRow}
       </tbody>
     </table>
   )

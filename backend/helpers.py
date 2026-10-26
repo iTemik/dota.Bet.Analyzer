@@ -22,6 +22,7 @@ class Errors:
         "COMPUTATION_ERROR", "An unexpected error occurred during statistics computation"
     )
     FAILED_TO_FETCH_HEROES = ErrorDefinition("FAILED_TO_FETCH_HEROES", "Failed to fetch heroes from API")
+    FAILED_TO_FETCH_MATCHES = ErrorDefinition("FAILED_TO_FETCH_MATCHES", "Failed to fetch matches from Liquipedia")
     FAILED_TO_FETCH_PRO_PLAYERS = ErrorDefinition("FAILED_TO_FETCH_PRO_PLAYERS", "Failed to fetch pro players from API")
     FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
     FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
