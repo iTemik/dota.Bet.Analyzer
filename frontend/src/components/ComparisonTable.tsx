@@ -105,9 +105,10 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   {
     label: 'Last match rating',
     info: {
-      description: 'Rating change from the team’s latest rated match.',
-      colors: 'Above +15 is green, below -15 is red, otherwise no colour.',
-      assumption: 'Shows whether the team just won or lost against a strong or weak opponent. TBD',
+      description:
+        'Elo points from the team’s latest game (one game, not the series): a win gives 0 to +32, a loss 0 to -32. Even teams: ±16; beating a team 100 points stronger: +20.5, losing to it: -11.5.',
+      colors: 'Above +15 is green (won against an equal or stronger team), below -15 is red (lost to an equal or weaker team), otherwise no colour.',
+      assumption: 'A big gain means a win over a strong team; a small one means an expected win over a weaker team. TBD',
     },
     color: (team) => getDeltaBackgroundColor(team?.delta),
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
