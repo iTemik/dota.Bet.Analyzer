@@ -18,10 +18,10 @@ export const outcome = (p: Prediction): Outcome => {
   return p.bet_won ? 'won' : 'lost'
 }
 
-// Possible profit of a bet: stake * odds of the bet team (the whole payout); null without a bet
+// Possible profit of a bet: net win, stake * (odds of the bet team - 1), the returned stake is not profit; null without a bet
 export const possibleProfit = (p: Prediction): number | null => {
   if (p.bet_team === null || p.stake === null) return null
-  return p.stake * (p.bet_team === 1 ? p.team1_odds : p.team2_odds)
+  return p.stake * ((p.bet_team === 1 ? p.team1_odds : p.team2_odds) - 1)
 }
 
 // Possible loss of a bet: the stake; null without a bet

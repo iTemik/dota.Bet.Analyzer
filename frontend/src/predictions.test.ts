@@ -29,9 +29,9 @@ describe('predictions helpers', () => {
     expect(resultOptions(null)).toEqual([])
   })
 
-  it('computes possible profit as stake * odds of the bet team and possible loss as the stake', () => {
-    expect(possibleProfit(prediction({}))).toBeCloseTo(185)
-    expect(possibleProfit(prediction({ bet_team: 2, stake: 50 }))).toBeCloseTo(102.5)
+  it('computes possible profit as stake * (odds of the bet team - 1) and possible loss as the stake', () => {
+    expect(possibleProfit(prediction({}))).toBeCloseTo(85)
+    expect(possibleProfit(prediction({ bet_team: 2, stake: 50 }))).toBeCloseTo(52.5)
     expect(possibleLoss(prediction({ bet_team: 2, stake: 50 }))).toBe(50)
     expect(possibleProfit(prediction({ bet_team: null, stake: null }))).toBeNull()
     expect(possibleLoss(prediction({ bet_team: null, stake: null }))).toBeNull()
@@ -44,9 +44,9 @@ describe('predictions helpers', () => {
       prediction({ bet_team: 2, stake: 40, team1_maps_won: 2, team2_maps_won: 0, bet_won: false }),
       prediction({ bet_team: null, stake: null }),
     ])
-    expect(totals.profit).toBeCloseTo(370)
+    expect(totals.profit).toBeCloseTo(170)
     expect(totals.loss).toBe(140)
-    expect(formatMoney(100 * 1.85)).toBe('185')
+    expect(formatMoney(100 * 0.85)).toBe('85')
     expect(formatMoney(92.456)).toBe('92.46')
   })
 
