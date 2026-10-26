@@ -53,7 +53,9 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SaveResult | null>(null)
 
-  const ready = teams.every(Boolean) && results.every((r) => r?.summary)
+  // Player statistics are optional: without them the snapshot is saved with an empty summary
+  const ready = teams.every(Boolean)
+  const statsMissing = ready && !results.every((r) => r?.summary)
   const names = teams.map(teamName)
 
   // Any change makes the form a new prediction again
@@ -105,7 +107,9 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
   return (
     <section className="prediction-panel" aria-labelledby="prediction-panel-title">
       <h2 id="prediction-panel-title">Log prediction</h2>
-      {!ready && <p className="prediction-hint">Available once the player statistics of both teams have loaded.</p>}
+      {statsMissing && (
+        <p className="prediction-hint">Player statistics are not loaded, the snapshots are saved without them.</p>
+      )}
 
       <fieldset disabled={!ready || saving} className="prediction-fieldset">
         <fieldset className="bookmaker-box">

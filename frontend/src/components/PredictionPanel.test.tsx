@@ -74,11 +74,24 @@ describe('PredictionPanel', () => {
     vi.clearAllMocks()
   })
 
-  it('is disabled until the summaries of both teams arrive', () => {
-    render(<PredictionPanel teams={teams} results={[results[0], undefined]} days={20} />)
-    expect(screen.getByText(/Available once the player statistics/)).toBeInTheDocument()
+  it('is disabled until both teams are known', () => {
+    render(<PredictionPanel teams={[teams[0], undefined]} results={results} days={20} />)
     expect(screen.getByRole('button', { name: 'Save prediction' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save snapshots only' })).toBeDisabled()
+  })
+
+  it('saves a prediction before the player statistics have loaded', async () => {
+    const fetchMock = mockBackend()
+    render(<PredictionPanel teams={teams} results={[results[0], undefined]} days={20} />)
+    expect(screen.getByText(/Player statistics are not loaded/)).toBeInTheDocument()
+
+    await fillOdds('1.85', '2.05')
+    await userEvent.click(screen.getByRole('button', { name: 'Save prediction' }))
+
+    expect(await screen.findByRole('link', { name: '#3' })).toHaveAttribute('href', '#predictions/3')
+    const [snapshot1, snapshot2] = postedBodies(fetchMock, '/api/snapshots')
+    expect(snapshot1.summary).toEqual(results[0].summary)
+    expect(snapshot2).toMatchObject({ team_id: 2, summary: null, players: [] })
   })
 
   it('keeps the bookmaker inputs in their own labelled box', () => {
