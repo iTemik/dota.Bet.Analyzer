@@ -95,4 +95,22 @@ describe('ComparisonTable', () => {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
   })
+
+  it('shows an info icon with description, colour rules and assumption on the stat rows', () => {
+    const summaries = [summary({ bad_rank_players: 1 }), summary({ bad_rank_players: 2 })]
+    render(<ComparisonTable teams={[team({ rating: 1500 }), team({ rating: 1300 })]} summaries={summaries} showSummaryRows days={20} />)
+
+    // Plain team fields have no info icon
+    expect(within(screen.getByText(/^Team Tag$/)).queryByRole('button', { name: 'Row info' })).not.toBeInTheDocument()
+    const label = screen.getByText(/^Rating$/)
+    const tooltip = within(label).getByRole('tooltip')
+    expect(within(label).getByRole('button', { name: 'Row info' })).toHaveAttribute('tabindex', '0')
+    expect(tooltip).toHaveTextContent('Description: OpenDota team rating')
+    expect(tooltip).toHaveTextContent('Color Highlighting: Higher is green')
+    expect(tooltip).toHaveTextContent('Assumption:')
+    // The Russian note moved from the label into the tooltip
+    const lowRank = screen.getByText(/^Low Rank Players$/)
+    expect(lowRank).toHaveTextContent(/^Low Rank Playersi/)
+    expect(within(lowRank).getByRole('tooltip')).toHaveTextContent('тысячники')
+  })
 })

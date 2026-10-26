@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
 import type { LeagueForm, MatchesSummary, TeamData } from '../types'
+import { ROW_INFO, type RowInfo } from './comparisonRowInfo'
 
 type Summary = MatchesSummary | null
 
@@ -15,7 +16,7 @@ interface ComparisonTableProps {
 // Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
 interface CompareRowConfig {
   label: ReactNode
-  title?: string
+  info?: RowInfo // texts for the row's "i" tooltip
   summary?: boolean // shown only once the match summary has arrived
   compare?: (team: TeamData | undefined, summary: Summary) => number | null
   better?: 'higher' | 'lower'
@@ -34,6 +35,28 @@ const compareColors = (a: number | null, b: number | null, better: 'higher' | 'l
 // A cell with nothing to show: no value or an empty 0-0 record
 const isEmptyCell = (value: ReactNode): boolean => value == null || value === '-' || (typeof value === 'string' && value.startsWith('0-0'))
 
+// "i" icon after a row label; its tooltip shows on hover or keyboard focus
+const RowInfoIcon = ({ info }: { info: RowInfo }) => (
+  <span className="row-info" tabIndex={0} role="button" aria-label="Row info">
+    i
+    <span className="row-info-tooltip" role="tooltip">
+      <span>
+        <b>Description:</b> {info.description}
+      </span>
+      {info.colors && (
+        <span>
+          <b>Color Highlighting:</b> {info.colors}
+        </span>
+      )}
+      {info.assumption && (
+        <span>
+          <b>Assumption:</b> {info.assumption}
+        </span>
+      )}
+    </span>
+  </span>
+)
+
 const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
   const cells = teams.map((team, i) => row.render(team, summaries[i]))
   // Rows that are empty for both teams are hidden
@@ -46,8 +69,9 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
   }
   return (
     <tr>
-      <td className="row-label" title={row.title}>
+      <td className="row-label">
         {row.label}
+        {row.info && <RowInfoIcon info={row.info} />}
       </td>
       {cells.map((cell, i) => (
         <td key={i} style={colors ? { backgroundColor: colors[i] } : undefined}>
@@ -87,6 +111,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
   {
     label: 'Rating',
+    info: ROW_INFO.rating,
     compare: (team) => team?.rating || null,
     better: 'higher',
     threshold: 100,
@@ -94,24 +119,26 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Last match rating',
+    info: ROW_INFO.lastMatchRating,
     color: (team) => getDeltaBackgroundColor(team?.delta),
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
   },
-  { label: 'Roster Changes', compare: getRosterRank, better: 'lower', render: renderRosterState },
+  { label: 'Roster Changes', info: ROW_INFO.rosterChanges, compare: getRosterRank, better: 'lower', render: renderRosterState },
   {
     label: `Tournament matches, last ${teams[0]?.league_form?.days ?? days} days`,
-    title: 'Wins and losses in tournament matches over the stats window',
+    info: ROW_INFO.tournamentMatches,
     compare: (team) => team?.league_form?.win_percentage ?? null,
     better: 'higher',
     render: (team) => formatLeagueRecord(team?.league_form),
   },
   {
     label: 'Last Match',
-    title: 'Latest tournament game played by at least 3 of the 5 players',
+    info: ROW_INFO.lastMatch,
     render: (team) => formatDate(team?.roster_last_match_time ?? team?.league_form?.last_match_time),
   },
   {
     label: 'Rating Matches',
+    info: ROW_INFO.ratingMatches,
     summary: true,
     compare: (_, s) => s?.rating_matches ?? null,
     better: 'higher',
@@ -119,6 +146,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Tournament + scrim matches',
+    info: ROW_INFO.lobbyMatches,
     summary: true,
     compare: (_, s) => s?.tournament_matches ?? null,
     better: 'higher',
@@ -126,6 +154,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Pub Win %',
+    info: ROW_INFO.pubWin,
     summary: true,
     compare: (_, s) => s?.rating_win_percentage ?? null,
     better: 'higher',
@@ -133,6 +162,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Lobby Win %',
+    info: ROW_INFO.lobbyWin,
     summary: true,
     compare: (_, s) => s?.tournament_win_percentage ?? null,
     better: 'higher',
@@ -140,27 +170,24 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Average Player Rank',
+    info: ROW_INFO.avgRank,
     summary: true,
     compare: (_, s) => s?.avg_rank ?? null,
     better: 'lower',
     render: (_, s) => formatFixed(s?.avg_rank, 0),
   },
   {
-    label: (
-      <>
-        Low Rank Players
-        <br />
-        (тысячники в команде)
-      </>
-    ),
+    label: 'Low Rank Players',
+    info: ROW_INFO.lowRankPlayers,
     summary: true,
     compare: (_, s) => s?.bad_rank_players ?? null,
     better: 'lower',
     render: (_, s) => String(s?.bad_rank_players ?? '-'),
   },
-  { label: 'Other Matches', summary: true, render: (_, s) => String(s?.other_matches ?? '-') },
+  { label: 'Other Matches', info: ROW_INFO.otherMatches, summary: true, render: (_, s) => String(s?.other_matches ?? '-') },
   {
     label: 'Average Matches Per Player',
+    info: ROW_INFO.avgMatches,
     summary: true,
     compare: (_, s) => s?.matches_avg ?? null,
     better: 'higher',
@@ -168,6 +195,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number): CompareRowC
   },
   {
     label: 'Median Matches Per Player',
+    info: ROW_INFO.medianMatches,
     summary: true,
     compare: (_, s) => s?.matches_median ?? null,
     better: 'higher',

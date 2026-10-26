@@ -164,6 +164,64 @@ input:focus {
   white-space: nowrap;
 }
 
+/* Row info tooltips may reach past the table edge */
+.stats-table.comparison-table {
+  overflow: visible;
+}
+
+.row-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.4em;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.75em;
+  font-style: italic;
+  cursor: help;
+  opacity: 0.7;
+}
+
+.row-info-tooltip {
+  display: none;
+  position: absolute;
+  left: 1.6em;
+  top: -0.5em;
+  z-index: 10;
+  width: 22rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: #1e1e1e;
+  color: #f0f0f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  font-size: 0.85rem;
+  font-style: normal;
+  font-weight: normal;
+  text-align: left;
+  white-space: normal;
+}
+
+.row-info-tooltip > span {
+  display: block;
+}
+
+.row-info-tooltip > span + span {
+  margin-top: 0.4em;
+}
+
+.row-info:hover,
+.row-info:focus {
+  opacity: 1;
+}
+
+.row-info:hover .row-info-tooltip,
+.row-info:focus .row-info-tooltip {
+  display: block;
+}
+
 .stats-table td:nth-child(2),
 .stats-table td:nth-child(3) {
   text-align: center;

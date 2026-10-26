@@ -893,7 +893,7 @@ describe('App Component', () => {
             // Now query for rating cells
             const ratingCells = screen.getAllByRole('cell')
             const teamARatingCell = ratingCells.find(cell =>
-                cell.parentElement?.children[0]?.textContent === 'Rating' &&
+                cell.parentElement?.children[0]?.firstChild?.textContent === 'Rating' && // label text, without the info tooltip
                 cell.textContent === '2500'
             )
 
@@ -902,7 +902,7 @@ describe('App Component', () => {
             })
 
             const teamBRatingCell = ratingCells.find(cell =>
-                cell.parentElement?.children[0]?.textContent === 'Rating' &&
+                cell.parentElement?.children[0]?.firstChild?.textContent === 'Rating' && // label text, without the info tooltip
                 cell.textContent === '2300'
             )
 
@@ -1153,8 +1153,6 @@ describe('App Component', () => {
             await waitFor(() => {
                 expect(screen.getByText(/Low Rank Players/i)).toBeInTheDocument()
             }, { timeout: 5000 })
-            // The label is split by a line break, so check the whole cell text
-            expect(screen.getByText(/Low Rank Players/i).closest('td')).toHaveTextContent('Low Rank Players(тысячники в команде)')
         }, 10000)
     })
 
