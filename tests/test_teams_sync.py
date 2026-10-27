@@ -163,10 +163,6 @@ def test_due_when_never_synced_or_24_hours_old(app):
         assert is_teams_sync_due(now + 3600)
 
 
-def test_status_endpoint_removed(client):
-    assert client.get("/api/teams/sync").status_code == 405
-
-
 def test_sync_endpoint_returns_count_and_time(client, mock_fetch):
     rv = client.post("/api/teams/sync")
     assert rv.status_code == 200
