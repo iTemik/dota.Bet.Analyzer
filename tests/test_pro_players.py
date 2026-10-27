@@ -623,8 +623,8 @@ def test_teams_upsert(client, sample_teams_data, app):
 
         mock_fetch.return_value = updated_data
 
-        # Second insert (should update)
-        client.post("/api/teams/sync")
+        # Second full sync (should update)
+        client.post("/api/teams/sync?full=true")
 
         # Check database
         with app.app_context():

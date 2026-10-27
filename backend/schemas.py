@@ -329,15 +329,13 @@ class TeamsSyncResponseSchema(SyncResponseSchema):
     )
 
 
-class TeamsSyncStatusSchema(Schema):
-    """When the teams list was last synced and whether a sync is running now."""
+class TeamsSyncQuerySchema(Schema):
+    """Query parameters of POST /teams/sync."""
 
-    synced_at = fields.Int(
-        required=True,
-        allow_none=True,
-        metadata={"description": "Unix time of the last successful teams sync, null when never synced"},
+    full = fields.Bool(
+        load_default=False,
+        metadata={"description": "Fetch every OpenDota /teams page instead of only teams with new league games"},
     )
-    running = fields.Bool(required=True, metadata={"description": "A teams sync is running (button or startup)"})
 
 
 class HeroSchema(Schema):

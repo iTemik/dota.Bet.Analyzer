@@ -447,16 +447,16 @@ curl -X POST http://localhost:5000/api/pro-players/sync
 
 **Sync Teams Data:**
 
-Use the "Update teams data" button right of the tabs, or (paginated, ~1000 teams per page; also runs at startup when
-the last sync is 30+ days old):
+Updated automatically when the last sync is 24+ hours old (see Teams List below). To force one (`full=true` reads every
+page, ~22 requests):
 
 ```bash
-curl -X POST http://localhost:5000/api/teams/sync
+curl -X POST "http://localhost:5000/api/teams/sync?full=true"
 ```
 
 Or use your API client to send POST requests to:
 - `http://localhost:5000/api/pro-players/sync` - Sync professional players
-- `http://localhost:5000/api/teams/sync` - Sync all teams (handles pagination automatically)
+- `http://localhost:5000/api/teams/sync` - Sync teams (incremental, or all pages with `?full=true`)
 - `http://localhost:5000/api/heroes/sync` - Refresh the hero list (also filled at startup when empty)
 
 See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
@@ -652,9 +652,9 @@ Async task for comprehensive player analysis:
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
 #### Teams List (`/teams/sync`)
-- "Update teams data" button, right of the tabs, refreshes the team search list from OpenDota (shows an error if it fails)
-- Synced at startup in the background when the last sync is 30+ days old (or never happened); one sync runs at a time
-- `GET /api/teams/sync` returns the last sync time and whether a sync is running
+- Obsolete (last sync 24+ hours old, or never) teams data is updated in the background at startup and on team search or matches requests; one sync runs at a time, a failed one is retried after 10 minutes
+- Incremental update: 2 OpenDota explorer requests (teams with a league game since the newest stored one, then their names), so a team renamed without new league games keeps its old name until it plays
+- Full update (empty teams table or `POST /api/teams/sync?full=true`): every `/teams` page, ~22 requests
 
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
