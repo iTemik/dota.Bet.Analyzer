@@ -22,13 +22,23 @@ interface CompareRowConfig {
   compare?: (team: TeamData | undefined, summary: Summary) => number | null
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
+  thresholdPercent?: number // differences up to this % of the smaller value are not coloured
   color?: (team: TeamData | undefined, index: number) => string // per-team colour, for rows that don't compare
   render: (team: TeamData | undefined, summary: Summary) => ReactNode
 }
 
 // Colours for team 1 and team 2: the better value is positive, the other negative
-const compareColors = (a: number | null, b: number | null, better: 'higher' | 'lower', threshold = 0): [string, string] => {
-  if (a === null || b === null || Math.abs(a - b) <= threshold) return ['transparent', 'transparent']
+const compareColors = (
+  a: number | null,
+  b: number | null,
+  better: 'higher' | 'lower',
+  threshold = 0,
+  thresholdPercent = 0,
+): [string, string] => {
+  if (a === null || b === null) return ['transparent', 'transparent']
+  if (Math.abs(a - b) <= Math.max(threshold, (thresholdPercent / 100) * Math.min(Math.abs(a), Math.abs(b)))) {
+    return ['transparent', 'transparent']
+  }
   const firstWins = better === 'higher' ? a > b : a < b
   return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
 }
@@ -42,7 +52,8 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
   if (cells.every(isEmptyCell)) return null
   let colors: string[] | null = null
   if (row.compare && row.better) {
-    colors = compareColors(row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1]), row.better, row.threshold)
+    const values = [row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1])] as const
+    colors = compareColors(values[0], values[1], row.better, row.threshold, row.thresholdPercent)
   } else if (row.color) {
     colors = teams.map(row.color)
   }
@@ -110,22 +121,25 @@ const formatSigned = (value: number | null | undefined): string =>
 const farmRows = (): CompareRowConfig[] =>
   (
     [
-      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute'],
-      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute'],
-      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute'],
-      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute'],
-    ] as [Exclude<keyof FarmStats, 'games'>, string, string][]
-  ).map(([key, label, long]) => {
+      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute', 15],
+      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute', 15],
+      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute', 0],
+      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute', 0],
+    ] as [Exclude<keyof FarmStats, 'games'>, string, string, number][]
+  ).map(([key, label, long, thresholdPercent]) => {
     const value = (team: TeamData | undefined) => team?.league_form?.farm?.[key] ?? null
     return {
       label: `${label} (median)`,
       info: {
         description: `Median of the team’s ${long} in each tournament game of the window. GPM and XPM are ranked separately, so they can be different players. Games OpenDota has not parsed are skipped.`,
-        colors: 'Higher is green, lower is red.',
+        colors: thresholdPercent
+          ? `Higher is green, lower is red; no colour when they differ by ${thresholdPercent}% or less.`
+          : 'Higher is green, lower is red.',
         assumption: 'TBD',
       },
       compare: value,
       better: 'higher',
+      thresholdPercent,
       render: (team) => formatFixed(value(team), 0),
     }
   })
