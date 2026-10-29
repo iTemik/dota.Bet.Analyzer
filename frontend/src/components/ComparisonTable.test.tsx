@@ -185,7 +185,7 @@ describe('ComparisonTable', () => {
 
     expect(screen.getByText('Team #2')).toBeInTheDocument()
     expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['5', '-'])
-    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating', 'Radiant Win %', 'Top 1 GPM (median)']) {
+    for (const label of ['Roster Changes', 'Pub Win %', 'Last Tournament Match with core players', 'Last match rating', 'Radiant Win %', 'Top 1 GPM (median)']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
   })
@@ -210,20 +210,20 @@ describe('ComparisonTable', () => {
     const now = 100 * 86400
     const at = (daysAgo: number) => team({ roster_last_match_time: now - daysAgo * 86400 })
     const { rerender } = render(<ComparisonTable teams={[at(3), at(20)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    let [first, second] = rowCells(/^Last Match$/)
+    let [first, second] = rowCells(/^Last Tournament Match with core players$/)
     expect(first.style.backgroundColor).toBe('transparent')
     expect(second).toHaveStyle({ backgroundColor: '#9d6b6b' })
 
     // No date counts as a long break
     rerender(<ComparisonTable teams={[team({}), at(3)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    ;[first, second] = rowCells(/^Last Match$/)
+    ;[first, second] = rowCells(/^Last Tournament Match with core players$/)
     expect(first).toHaveStyle({ backgroundColor: '#9d6b6b' })
     expect(second.style.backgroundColor).toBe('transparent')
 
     // Both on a break or both recent: no colour
     rerender(<ComparisonTable teams={[at(15), at(30)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(rowCells(/^Last Tournament Match with core players$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
     rerender(<ComparisonTable teams={[at(1), at(13)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(rowCells(/^Last Tournament Match with core players$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
   })
 })

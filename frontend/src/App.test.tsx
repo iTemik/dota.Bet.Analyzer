@@ -1635,7 +1635,7 @@ describe('App Component', () => {
             const recordRow = rowOf('Tournament matches, last 20 days')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
-            expect(screen.getByText('Last Match')).toBeInTheDocument()
+            expect(screen.getByText('Last Tournament Match with core players')).toBeInTheDocument()
         })
 
         it('shows each player\'s rank from the task results once they arrive', async () => {
