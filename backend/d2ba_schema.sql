@@ -59,10 +59,8 @@ CREATE TABLE IF NOT EXISTS match_players (
     match_id INTEGER NOT NULL,
     player_slot INTEGER NOT NULL,
     account_id INTEGER,
-    gold_per_min INTEGER,          -- player match stats, NULL when the match is not parsed
+    gold_per_min INTEGER,          -- NULL when the match is not parsed
     xp_per_min INTEGER,
-    last_hits INTEGER,
-    lane INTEGER,                  -- OpenDota lane, 2 = mid
     PRIMARY KEY (match_id, player_slot)
 );
 

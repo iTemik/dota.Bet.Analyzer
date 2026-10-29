@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
-import type { LeagueForm, MatchesSummary, RoleStats, TeamData } from '../types'
+import type { FarmStats, LeagueForm, MatchesSummary, TeamData } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 type Summary = MatchesSummary | null
@@ -106,25 +106,21 @@ const formatRadiantRecord = (form: LeagueForm | null | undefined): string => {
 const formatSigned = (value: number | null | undefined): string =>
   value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`
 
-const ROLES = {
-  carry: 'the player with the most last hits outside the mid lane (usually the safe lane carry)',
-  mid: 'the team’s only player in the mid lane (games with two players there are skipped)',
-}
-
-// Carry and mid rows: one per stat, all from league_form.carry / league_form.mid
-const roleRows = (role: keyof typeof ROLES, name: string): CompareRowConfig[] =>
+// Top 1 and top 2 GPM and XPM rows, all from league_form.farm
+const farmRows = (): CompareRowConfig[] =>
   (
     [
-      ['gold_per_min', 'GPM', 'gold per minute'],
-      ['xp_per_min', 'XPM', 'experience per minute'],
-      ['last_hits', 'Last Hits', 'last hits'],
-    ] as [keyof RoleStats, string, string][]
-  ).map(([key, short, long]) => {
-    const value = (team: TeamData | undefined) => team?.league_form?.[role]?.[key] ?? null
+      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute'],
+      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute'],
+      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute'],
+      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute'],
+    ] as [Exclude<keyof FarmStats, 'games'>, string, string][]
+  ).map(([key, label, long]) => {
+    const value = (team: TeamData | undefined) => team?.league_form?.farm?.[key] ?? null
     return {
-      label: `${name} ${short} (median)`,
+      label: `${label} (median)`,
       info: {
-        description: `Median ${long} of the ${name.toLowerCase()} in the team’s tournament games of the window. ${name}: ${ROLES[role]}. Games OpenDota has not parsed are skipped.`,
+        description: `Median of the team’s ${long} in each tournament game of the window. GPM and XPM are ranked separately, so they can be different players. Games OpenDota has not parsed are skipped.`,
         colors: 'Higher is green, lower is red.',
         assumption: 'TBD',
       },
@@ -212,8 +208,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
     better: 'higher',
     render: (team) => formatRadiantRecord(team?.league_form),
   },
-  ...roleRows('carry', 'Carry'),
-  ...roleRows('mid', 'Mid'),
+  ...farmRows(),
   {
     label: 'Last Match',
     info: {

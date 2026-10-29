@@ -8,12 +8,13 @@ export interface Player {
   is_core?: boolean | null
 }
 
-// GET /api/statistics: teams[].league_form.carry and .mid (medians over the window's tournament games)
-export interface RoleStats {
+// GET /api/statistics: teams[].league_form.farm (medians of each tournament game's top 1 and top 2 GPM and XPM)
+export interface FarmStats {
   games: number
-  gold_per_min: number
-  xp_per_min: number
-  last_hits: number
+  gold_per_min_top1: number
+  gold_per_min_top2: number
+  xp_per_min_top1: number
+  xp_per_min_top2: number
 }
 
 // GET /api/statistics: teams[].league_form
@@ -29,8 +30,7 @@ export interface LeagueForm {
   radiant_wins?: number
   radiant_win_percentage?: number | null
   duration_median?: number | null // seconds
-  carry?: RoleStats | null
-  mid?: RoleStats | null
+  farm?: FarmStats | null
 }
 
 // Values the backend sends in teams[].roster_state (backend/rosters.py ROSTER_*)

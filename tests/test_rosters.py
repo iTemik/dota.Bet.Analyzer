@@ -11,8 +11,8 @@ from backend.rosters import (
     LineupPlayer,
     TeamMatch,
     classify_roster,
+    compute_farm_stats,
     compute_league_form,
-    compute_role_stats,
     get_match_lineup,
     get_team_league_matches,
     resolve_roster,
@@ -342,30 +342,28 @@ def test_league_form_radiant_wins_and_duration_median():
     assert compute_league_form([], days=20, now=NOW).radiant_win_percentage is None
 
 
-def _side(slot: int, lane: int | None, lh: int, gpm: int = 500, xpm: int = 600) -> LineupPlayer:
-    return LineupPlayer(slot, 100 + slot, gpm, xpm, lh, lane)
-
-
-def test_role_stats_take_mid_lane_and_most_last_hits():
-    """Mid = the only player in the mid lane; carry = most last hits outside mid; unparsed games are skipped."""
-    matches = [TeamMatch(match_id=i, start_time=NOW, radiant=True, radiant_win=True) for i in (1, 2, 3)]
+def test_farm_stats_take_top_two_gpm_and_xpm_of_each_game():
+    """GPM and XPM are ranked separately per game; games with an unparsed player are skipped."""
+    matches = [TeamMatch(match_id=i, start_time=NOW, radiant=i != 2, radiant_win=True) for i in (1, 2, 3)]
+    gpm_xpm = {1: [(700, 500), (650, 800), (400, 450), (300, 300), (250, 280)]}
+    gpm_xpm[2] = [(900, 900), (500, 600), (450, 400), (200, 300), (150, 200)]
     lineups = {
-        # The mid has the most last hits, but the carry is taken outside the mid lane
-        1: [_side(0, 1, 300, gpm=700), _side(1, 2, 400, gpm=650), _side(2, 3, 200), _side(3, 1, 40), _side(4, 3, 50)],
-        # Two players in mid: no mid this game
-        2: [_side(0, 1, 500, gpm=900), _side(1, 2, 100), _side(2, 2, 90), _side(3, 3, 30), _side(4, 3, 20)],
-        # Not parsed: no stats
-        3: [LineupPlayer(slot, 100 + slot) for slot in range(5)],
+        1: [LineupPlayer(slot, 100 + slot, g, x) for slot, (g, x) in enumerate(gpm_xpm[1])],
+        # Dire side of game 2
+        2: [LineupPlayer(128 + slot, 200 + slot, g, x) for slot, (g, x) in enumerate(gpm_xpm[2])],
+        # Game 3 not parsed for one player
+        3: [LineupPlayer(slot, 100 + slot, 500, None if slot == 0 else 500) for slot in range(5)],
     }
-    carry, mid = compute_role_stats(matches, lineups)
-    assert carry is not None and mid is not None
-    assert (carry.games, carry.last_hits, carry.gold_per_min) == (2, 400, 800)
-    assert (mid.games, mid.last_hits, mid.gold_per_min) == (1, 400, 650)
-    assert compute_role_stats(matches, {}) == (None, None)
+    farm = compute_farm_stats(matches, lineups)
+    assert farm is not None
+    assert farm.games == 2
+    assert (farm.gold_per_min_top1, farm.gold_per_min_top2) == (800, 575)  # medians of (700, 900) and (650, 500)
+    assert (farm.xp_per_min_top1, farm.xp_per_min_top2) == (850, 550)  # medians of (800, 900) and (500, 600)
+    assert compute_farm_stats(matches, {}) is None
 
 
 def test_lineup_stats_are_cached(ctx):
-    """Player match stats come with the lineup query and are read back from the cache."""
+    """GPM and XPM come with the lineup query and are read back from the cache."""
     rows = [
         {
             "match_id": 42,
@@ -373,8 +371,6 @@ def test_lineup_stats_are_cached(ctx):
             "account_id": 1000 + s,
             "gold_per_min": 600,
             "xp_per_min": 700,
-            "last_hits": 250,
-            "lane": 2,
         }
         for s in [0, 1, 2, 3, 4, 128, 129, 130, 131, 132]
     ]
@@ -384,7 +380,7 @@ def test_lineup_stats_are_cached(ctx):
     assert mock_get.call_count == 1
     assert "gold_per_min" in mock_get.call_args.kwargs["params"]["sql"]
     assert first == second
-    assert second[0] == LineupPlayer(0, 1000, 600, 700, 250, 2)
+    assert second[0] == LineupPlayer(0, 1000, 600, 700)
 
 
 def test_create_team_stats_uses_recent_lineup(ctx):

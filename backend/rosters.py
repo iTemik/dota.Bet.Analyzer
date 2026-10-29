@@ -36,10 +36,9 @@ CORE_GAME_SHARES = (0.75, 0.5)  # Core = players with at least this share of the
 ROSTER_STABLE = "stable"  # Only the core played
 ROSTER_STANDINS = "standins"  # A clear core, plus stand-ins in some games
 ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
-MID_LANE = 2  # OpenDota `lane` of the middle lane
 DAY_SECONDS = 24 * 60 * 60
 REQUEST_TIMEOUT = 30
-LINEUP_STATS = ("gold_per_min", "xp_per_min", "last_hits", "lane")  # Player match stats kept with a lineup
+LINEUP_STATS = ("gold_per_min", "xp_per_min")  # Player match stats kept with a lineup
 
 
 def window_start(days: int, now: int) -> int:
@@ -107,30 +106,32 @@ class TeamMatch(BaseModel):
 
 
 class LineupPlayer(NamedTuple):
-    """One player of a match lineup, with the player's match stats (None when the match is not parsed)."""
+    """One player of a match lineup, with the player's GPM and XPM (None when the match is not parsed)."""
 
     player_slot: int
     account_id: int
     gold_per_min: Optional[int] = None
     xp_per_min: Optional[int] = None
-    last_hits: Optional[int] = None
-    lane: Optional[int] = None
 
 
-class RoleStats(BaseModel):
-    """Median stats of one position over the team's league games.
+class FarmStats(BaseModel):
+    """Medians of the team's highest and second highest GPM and XPM per league game.
+
+    GPM and XPM are ranked separately: the top GPM and the top XPM of a game can belong to different players.
 
     Attributes:
-        games: Number of games the position was found in
-        gold_per_min: Median gold per minute
-        xp_per_min: Median experience per minute
-        last_hits: Median last hits
+        games: Number of games with known GPM and XPM
+        gold_per_min_top1: Median of the highest gold per minute
+        gold_per_min_top2: Median of the second highest gold per minute
+        xp_per_min_top1: Median of the highest experience per minute
+        xp_per_min_top2: Median of the second highest experience per minute
     """
 
     games: int
-    gold_per_min: float
-    xp_per_min: float
-    last_hits: float
+    gold_per_min_top1: float
+    gold_per_min_top2: float
+    xp_per_min_top1: float
+    xp_per_min_top2: float
 
 
 class LeagueForm(BaseModel):
@@ -147,8 +148,7 @@ class LeagueForm(BaseModel):
         radiant_wins: League wins on Radiant
         radiant_win_percentage: Radiant wins share in percent (None when the team never played on Radiant)
         duration_median: Median match length in seconds (None when no duration is known)
-        carry: Median stats of the carry (most last hits outside the mid lane); None when no game was parsed
-        mid: Median stats of the mid player (the team's only player in the mid lane); None when never found
+        farm: Top 1 and top 2 GPM and XPM medians (None when no game has known GPM and XPM)
     """
 
     days: int
@@ -161,8 +161,7 @@ class LeagueForm(BaseModel):
     radiant_wins: int = 0
     radiant_win_percentage: Optional[float] = None
     duration_median: Optional[float] = None
-    carry: Optional[RoleStats] = None
-    mid: Optional[RoleStats] = None
+    farm: Optional[FarmStats] = None
 
 
 class TeamRoster(BaseModel):
@@ -324,7 +323,7 @@ def _store_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
         db = get_d2ba_db()
         db.executemany(
             f"INSERT OR REPLACE INTO match_players (match_id, player_slot, account_id, {', '.join(LINEUP_STATS)}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?)",
             [(match_id, *player) for player in lineup],
         )
         db.commit()
@@ -480,48 +479,36 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
     )
 
 
-def _role_stats(players: list[LineupPlayer]) -> Optional[RoleStats]:
-    """Median stats of the players found in one position (None when there are none)."""
-    if not players:
-        return None
-    return RoleStats(
-        games=len(players),
-        gold_per_min=statistics.median(p.gold_per_min for p in players if p.gold_per_min is not None),
-        xp_per_min=statistics.median(p.xp_per_min for p in players if p.xp_per_min is not None),
-        last_hits=statistics.median(p.last_hits for p in players if p.last_hits is not None),
-    )
+def compute_farm_stats(matches: Iterable[TeamMatch], lineups: dict[int, list[LineupPlayer]]) -> Optional[FarmStats]:
+    """Medians of the team's top 1 and top 2 GPM and XPM over its league games.
 
-
-def compute_role_stats(
-    matches: Iterable[TeamMatch], lineups: dict[int, list[LineupPlayer]]
-) -> tuple[Optional[RoleStats], Optional[RoleStats]]:
-    """Median carry and mid stats over the team's league games; games without parsed stats are skipped.
-
-    - Mid: the team's only player in the mid lane (no mid in a game with none or two of them there).
-    - Carry: the player with the most last hits outside the mid lane.
+    Games where any of the team's players has no GPM or XPM (not parsed) are skipped.
 
     Args:
         matches: Team league matches
         lineups: Lineup per match id (from get_match_lineups)
 
     Returns:
-        Tuple of (carry, mid) RoleStats, each None when it was never found
+        FarmStats, None when no game had known GPM and XPM
     """
-    carries: list[LineupPlayer] = []
-    mids: list[LineupPlayer] = []
+    gpm: list[list[int]] = []
+    xpm: list[list[int]] = []
     for match in matches:
-        side = [
-            p
-            for p in _team_side(lineups.get(match.match_id, []), match.radiant)
-            if None not in (p.gold_per_min, p.xp_per_min, p.last_hits, p.lane)
-        ]
-        in_mid = [p for p in side if p.lane == MID_LANE]
-        if len(in_mid) == 1:
-            mids.append(in_mid[0])
-        others = [p for p in side if p.lane != MID_LANE]
-        if others:
-            carries.append(max(others, key=lambda p: p.last_hits or 0))
-    return _role_stats(carries), _role_stats(mids)
+        side = _team_side(lineups.get(match.match_id, []), match.radiant)
+        game_gpm = sorted((p.gold_per_min for p in side if p.gold_per_min is not None), reverse=True)
+        game_xpm = sorted((p.xp_per_min for p in side if p.xp_per_min is not None), reverse=True)
+        if len(side) >= 5 and len(game_gpm) == len(side) and len(game_xpm) == len(side):
+            gpm.append(game_gpm)
+            xpm.append(game_xpm)
+    if not gpm:
+        return None
+    return FarmStats(
+        games=len(gpm),
+        gold_per_min_top1=statistics.median(g[0] for g in gpm),
+        gold_per_min_top2=statistics.median(g[1] for g in gpm),
+        xp_per_min_top1=statistics.median(x[0] for x in xpm),
+        xp_per_min_top2=statistics.median(x[1] for x in xpm),
+    )
 
 
 def _team_lineups(
@@ -575,7 +562,7 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     - `players` are the ROSTER_SIZE players with the most of those games (ties: who played more recently),
       whether or not they played the latest game. Everyone else who played in the window goes to `other_players`.
     - Core players and the roster state come from classify_roster.
-    - Carry and mid medians in `league_form` come from the same lineups (compute_role_stats).
+    - Top 1 and top 2 GPM and XPM medians in `league_form` come from the same lineups (compute_farm_stats).
 
     Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus one explorer request per
     LINEUP_BATCH_SIZE games not cached yet; lineups are cached forever.
@@ -595,7 +582,7 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
 
     recent = [m for m in matches if m.start_time >= window_start(days, now)][:ROSTER_MAX_GAMES]
     lineups = get_match_lineups(m.match_id for m in recent) if recent else {}
-    form.carry, form.mid = compute_role_stats(recent, lineups)
+    form.farm = compute_farm_stats(recent, lineups)
     window = _team_lineups(recent, lineups)
     if not window:
         return roster

@@ -604,8 +604,8 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - `other_players`: others who played in the window, then OpenDota team members without league games (`games` 0)
 - `is_core`: exactly 5 players with 75% (else 50%) of the games, otherwise no clear core (`classify_roster`)
 - `standins_count`, `roster_state` (`stable`, `standins`, `new_team`), `latest_match_standins`: players outside the core
-- `league_form`: league W/L in the window (pubs excluded), Radiant W/L, median match duration, and median
-  GPM/XPM/last hits of the carry (most last hits outside mid) and the mid (the only player in the mid lane)
+- `league_form`: league W/L in the window (pubs excluded), Radiant W/L, median match duration, and medians of
+  each game's top 1 and top 2 GPM and XPM (`farm`)
 - `rating_change`: estimated Elo change over the window, worked back from today's rating with opponent ratings from
   the local teams table (no extra request)
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
