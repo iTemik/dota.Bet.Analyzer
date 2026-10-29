@@ -11,7 +11,7 @@ interface ComparisonTableProps {
   summaries: Summary[] // match summary per team, null while it is loading
   showSummaryRows: boolean // rows that need the summary are hidden until it has arrived
   days: number // window used for the label when the team has no league form
-  now?: number // unix time the last match colours are judged at; a saved prediction passes its own time
+  now?: number // unix time the Last Match colours are judged at; a saved prediction passes its own time
 }
 
 // Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
@@ -96,7 +96,7 @@ const STALE_DAYS = 14 // a last match older than this is a long break
 
 const lastMatchTime = (team: TeamData | undefined): number | null => team?.roster_last_match_time ?? team?.league_form?.last_match_time ?? null
 
-// Last Tournament Match with core players: a team on a long break (or with no date) is red when the other team played recently
+// Last Match: a team on a long break (or with no date) is red when the other team played recently
 const lastMatchColor = (teams: (TeamData | undefined)[], now: number) => {
   const recent = teams.map((team) => {
     const time = lastMatchTime(team)
@@ -226,7 +226,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
   },
   ...farmRows(),
   {
-    label: 'Last Tournament Match with core players',
+    label: 'Last Match',
     info: {
       description: 'Date of the latest tournament game played by at least 3 of the 5 players.',
       colors: `Red when the other team played in the last ${STALE_DAYS} days and this one did not (or has no date).`,

@@ -94,7 +94,7 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
     render: renderOtherPlayers,
   },
   {
-    label: 'Last Tournament Match',
+    label: 'Last Tournament Match with core players',
     info: {
       description: 'Date of the team’s latest tournament game and how many players outside the core played it.',
       assumption: 'Players outside the core in the latest game can mean a roster problem. TBD',

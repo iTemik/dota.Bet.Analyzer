@@ -68,7 +68,7 @@ describe('InsightsTable', () => {
     expect(rowCells('Core Players')[0]).toHaveTextContent('unconfirmed: no recent tournament match')
     expect(rowCells('Stand-ins').map((c) => c.textContent)).toEqual(['-', '-'])
     expect(rowCells('Other Players').map((c) => c.textContent)).toEqual(['None', '-'])
-    expect(rowCells('Last Tournament Match').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Last Tournament Match with core players').map((c) => c.textContent)).toEqual(['-', '-'])
     expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['-', '-'])
   })
 
@@ -88,7 +88,7 @@ describe('InsightsTable', () => {
 
   it('shows an info tooltip on each insight row', () => {
     render(<InsightsTable teams={[team({}), team({})]} ranks={[]} />)
-    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match', 'Median Match Duration']) {
+    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match with core players', 'Median Match Duration']) {
       expect(within(screen.getByText(label)).getByRole('tooltip')).toHaveTextContent(/^Description: /)
     }
     expect(within(screen.getByText('Stand-ins')).getByRole('tooltip')).toHaveTextContent('outside the core who played')

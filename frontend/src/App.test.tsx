@@ -1624,8 +1624,8 @@ describe('App Component', () => {
             expect(playerLines(cells('Stand-ins')[2])).toEqual(['Sub · games: 2 of 30'])
 
             // Last match: players outside the core are mentioned only when there were any
-            expect(cells('Last Tournament Match')[1]).toHaveTextContent('2 players outside the core')
-            expect(cells('Last Tournament Match')[2]).not.toHaveTextContent('outside the core')
+            expect(cells('Last Tournament Match with core players')[1]).toHaveTextContent('2 players outside the core')
+            expect(cells('Last Tournament Match with core players')[2]).not.toHaveTextContent('outside the core')
             expect(cells('Stand-ins')[1]).not.toHaveTextContent('Benched')
 
             // Other players: on the team in OpenDota but no league games in the window
@@ -1635,7 +1635,7 @@ describe('App Component', () => {
             const recordRow = rowOf('Tournament matches, last 20 days')
             expect(recordRow).toHaveTextContent('7-3 (70.0%)')
             expect(recordRow).toHaveTextContent('1-3 (25.0%)')
-            expect(screen.getByText('Last Tournament Match with core players')).toBeInTheDocument()
+            expect(screen.getByText('Last Match')).toBeInTheDocument()
         })
 
         it('shows each player\'s rank from the task results once they arrive', async () => {
