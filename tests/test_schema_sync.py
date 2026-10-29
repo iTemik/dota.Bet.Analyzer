@@ -129,6 +129,7 @@ def test_pydantic_to_marshmallow_utility():
                 "tag",
                 "rating",
                 "delta",
+                "rating_change",
                 "logo_url",
                 "players",
                 "other_players",

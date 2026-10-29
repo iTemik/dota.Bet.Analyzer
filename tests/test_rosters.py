@@ -8,8 +8,10 @@ from backend.opendota import RATE_LIMIT_RETRIES, opendota_get
 from backend.pro_players import get_d2ba_db
 from backend.rosters import (
     TEAM_MATCHES_TTL,
+    LineupPlayer,
     TeamMatch,
     classify_roster,
+    compute_farm_stats,
     compute_league_form,
     get_match_lineup,
     get_team_league_matches,
@@ -303,7 +305,7 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
         lineup = get_match_lineup(42)
 
     assert len(lineup) == 10
-    assert (128, 1128) in lineup
+    assert (128, 1128) in [(p.player_slot, p.account_id) for p in lineup]
 
 
 def test_incomplete_lineup_is_not_cached(ctx):
@@ -324,6 +326,61 @@ def test_league_form_counts_wins_on_both_sides():
     assert (form.matches, form.wins, form.losses) == (3, 2, 1)
     assert form.win_percentage == pytest.approx(66.666, rel=1e-3)
     assert form.last_match_time == NOW - DAY
+
+
+def test_league_form_radiant_wins_and_duration_median():
+    matches = [
+        TeamMatch(match_id=1, start_time=NOW - DAY, radiant=True, radiant_win=True, duration=1800),
+        TeamMatch(match_id=2, start_time=NOW - 2 * DAY, radiant=True, radiant_win=False, duration=2400),
+        TeamMatch(match_id=3, start_time=NOW - 3 * DAY, radiant=False, radiant_win=False, duration=3000),
+        TeamMatch(match_id=4, start_time=NOW - 4 * DAY, radiant=True, radiant_win=True),
+    ]
+    form = compute_league_form(matches, days=20, now=NOW)
+    assert (form.radiant_matches, form.radiant_wins) == (3, 2)
+    assert form.radiant_win_percentage == pytest.approx(66.666, rel=1e-3)
+    assert form.duration_median == 2400  # the game without a duration is skipped
+    assert compute_league_form([], days=20, now=NOW).radiant_win_percentage is None
+
+
+def test_farm_stats_take_top_two_gpm_and_xpm_of_each_game():
+    """GPM and XPM are ranked separately per game; games with an unparsed player are skipped."""
+    matches = [TeamMatch(match_id=i, start_time=NOW, radiant=i != 2, radiant_win=True) for i in (1, 2, 3)]
+    gpm_xpm = {1: [(700, 500), (650, 800), (400, 450), (300, 300), (250, 280)]}
+    gpm_xpm[2] = [(900, 900), (500, 600), (450, 400), (200, 300), (150, 200)]
+    lineups = {
+        1: [LineupPlayer(slot, 100 + slot, g, x) for slot, (g, x) in enumerate(gpm_xpm[1])],
+        # Dire side of game 2
+        2: [LineupPlayer(128 + slot, 200 + slot, g, x) for slot, (g, x) in enumerate(gpm_xpm[2])],
+        # Game 3 not parsed for one player
+        3: [LineupPlayer(slot, 100 + slot, 500, None if slot == 0 else 500) for slot in range(5)],
+    }
+    farm = compute_farm_stats(matches, lineups)
+    assert farm is not None
+    assert farm.games == 2
+    assert (farm.gold_per_min_top1, farm.gold_per_min_top2) == (800, 575)  # medians of (700, 900) and (650, 500)
+    assert (farm.xp_per_min_top1, farm.xp_per_min_top2) == (850, 550)  # medians of (800, 900) and (500, 600)
+    assert compute_farm_stats(matches, {}) is None
+
+
+def test_lineup_stats_are_cached(ctx):
+    """GPM and XPM come with the lineup query and are read back from the cache."""
+    rows = [
+        {
+            "match_id": 42,
+            "player_slot": s,
+            "account_id": 1000 + s,
+            "gold_per_min": 600,
+            "xp_per_min": 700,
+        }
+        for s in [0, 1, 2, 3, 4, 128, 129, 130, 131, 132]
+    ]
+    with patch("backend.opendota.requests.get", return_value=_response({"rows": rows})) as mock_get:
+        first = get_match_lineup(42)
+        second = get_match_lineup(42)
+    assert mock_get.call_count == 1
+    assert "gold_per_min" in mock_get.call_args.kwargs["params"]["sql"]
+    assert first == second
+    assert second[0] == LineupPlayer(0, 1000, 600, 700)
 
 
 def test_create_team_stats_uses_recent_lineup(ctx):

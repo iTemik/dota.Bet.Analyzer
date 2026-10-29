@@ -22,6 +22,19 @@ const formatPlayerStats = (player: Player, team: TeamData, ranks: PlayerRanks): 
   return text
 }
 
+const formatDuration = (seconds: number | null | undefined): string => {
+  if (!seconds) return '-'
+  const rounded = Math.round(seconds)
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`
+}
+
+const formatRadiantRecord = (team: TeamData | undefined): string => {
+  const form = team?.league_form
+  if (!form?.radiant_matches) return '-'
+  const wins = form.radiant_wins ?? 0
+  return `${wins}-${form.radiant_matches - wins} (${(form.radiant_win_percentage ?? 0).toFixed(1)}%)`
+}
+
 const renderPlayers = (players: Player[], team: TeamData, ranks: PlayerRanks) =>
   players.map((p) => (
     <div key={p.id}>
@@ -59,6 +72,8 @@ const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
 
 // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
 const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+  { label: 'Team Tag', render: (team) => team?.tag || '-' },
+  { label: 'Team ID', render: (team) => team?.team_id || '-' },
   {
     label: 'Core Players',
     info: {
@@ -86,7 +101,7 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
     render: renderOtherPlayers,
   },
   {
-    label: 'Last Tournament Match',
+    label: 'Last Tournament Match with core players',
     info: {
       description: 'Date of the team’s latest tournament game and how many players outside the core played it.',
       assumption: 'Players outside the core in the latest game can mean a roster problem. TBD',
@@ -98,6 +113,22 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
       const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
       return `${formatDate(team.latest_match_time)}${suffix}`
     },
+  },
+  {
+    label: 'Radiant Win %',
+    info: {
+      description: 'Team wins-losses (win %) in tournament games of the window played on the Radiant side.',
+      assumption: 'TBD',
+    },
+    render: formatRadiantRecord,
+  },
+  {
+    label: 'Median Match Duration',
+    info: {
+      description: 'Median length of the team’s tournament games in the window (minutes:seconds).',
+      assumption: 'Not used yet; kept for combined stats later.',
+    },
+    render: (team) => formatDuration(team?.league_form?.duration_median),
   },
 ]
 

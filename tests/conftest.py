@@ -29,7 +29,7 @@ def reset_app_singleton():
 
 @pytest.fixture(autouse=True)
 def no_roster_requests(request):
-    """Keep team statistics tests offline: roster resolution returns no recent lineup by default.
+    """Keep team statistics tests offline: roster resolution returns no recent lineup and no rating change by default.
 
     Tests of backend.rosters itself are not patched.
     """
@@ -38,7 +38,10 @@ def no_roster_requests(request):
         return
     from backend.rosters import TeamRoster
 
-    with patch("backend.stats.resolve_roster", return_value=TeamRoster()) as mock_resolve:
+    with (
+        patch("backend.stats.resolve_roster", return_value=TeamRoster()) as mock_resolve,
+        patch("backend.stats.window_rating_change", return_value=None),
+    ):
         yield mock_resolve
 
 

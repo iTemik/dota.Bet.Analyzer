@@ -68,12 +68,46 @@ describe('InsightsTable', () => {
     expect(rowCells('Core Players')[0]).toHaveTextContent('unconfirmed: no recent tournament match')
     expect(rowCells('Stand-ins').map((c) => c.textContent)).toEqual(['-', '-'])
     expect(rowCells('Other Players').map((c) => c.textContent)).toEqual(['None', '-'])
-    expect(rowCells('Last Tournament Match').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Last Tournament Match with core players').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Radiant Win %').map((c) => c.textContent)).toEqual(['-', '-'])
+  })
+
+  it('shows the Radiant record without colours', () => {
+    const form = (radiant_wins: number) => ({
+      days: 20,
+      matches: 6,
+      wins: 4,
+      losses: 2,
+      win_percentage: 66.7,
+      last_match_time: null,
+      radiant_matches: 4,
+      radiant_wins,
+      radiant_win_percentage: (100 * radiant_wins) / 4,
+    })
+    render(<InsightsTable teams={[team({ league_form: form(3) }), team({ league_form: form(1) })]} ranks={[]} />)
+    const cells = rowCells('Radiant Win %')
+    expect(cells.map((c) => c.textContent)).toEqual(['3-1 (75.0%)', '1-3 (25.0%)'])
+    expect(cells[0].style.backgroundColor).toBe('')
+  })
+
+  it('shows the median match duration as minutes and seconds', () => {
+    const form = (duration_median: number) => ({ days: 20, matches: 3, wins: 2, losses: 1, win_percentage: 66.7, last_match_time: null, duration_median })
+    render(<InsightsTable teams={[team({ league_form: form(2052.5) }), team({ league_form: form(1805) })]} ranks={[]} />)
+    expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['34:13', '30:05'])
+  })
+
+  it('shows the team tag and ID first, without an info icon', () => {
+    render(<InsightsTable teams={[team({ tag: 'ALP', team_id: 39 }), undefined]} ranks={[]} />)
+    expect(rowCells('Team Tag').map((c) => c.textContent)).toEqual(['ALP', '-'])
+    expect(rowCells('Team ID').map((c) => c.textContent)).toEqual(['39', '-'])
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent(/^Team Tag/)
+    expect(within(screen.getByText('Team Tag')).queryByRole('button', { name: 'Row info' })).not.toBeInTheDocument()
   })
 
   it('shows an info tooltip on each insight row', () => {
     render(<InsightsTable teams={[team({}), team({})]} ranks={[]} />)
-    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match']) {
+    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match with core players', 'Median Match Duration']) {
       expect(within(screen.getByText(label)).getByRole('tooltip')).toHaveTextContent(/^Description: /)
     }
     expect(within(screen.getByText('Stand-ins')).getByRole('tooltip')).toHaveTextContent('outside the core who played')

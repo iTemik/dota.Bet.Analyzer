@@ -25,7 +25,7 @@ def test_team_match_from_api_and_db():
     row = {"match_id": "7", "start_time": 100, "leagueid": 3, "radiant": 0, "radiant_win": True}
     match = TeamMatch.from_api(row)
     assert (match.match_id, match.radiant, match.won) == (7, False, False)
-    db_row = {**row, "match_id": 7, "radiant_win": 1, "opposing_team_id": None}
+    db_row = {**row, "match_id": 7, "radiant_win": 1, "opposing_team_id": None, "duration": None}
     assert TeamMatch.from_db(db_row) == match
     with pytest.raises(KeyError):
         TeamMatch.from_api({"match_id": 7})

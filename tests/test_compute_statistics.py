@@ -11,7 +11,7 @@ from backend.stats import ApiError, Player, StatsResponse, TeamStats, compute_st
 class TestComputeStatisticsByNames:
     """Test suite for compute_statistics with team names."""
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_by_names_success(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test successful computation with team names."""
@@ -44,7 +44,7 @@ class TestComputeStatisticsByNames:
         assert team.rating == 2500.0
         assert len(team.players) == 2
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_by_names_no_players(self, mock_get_players, mock_fetch_info):
         """Test computation when team has no players."""
@@ -64,7 +64,7 @@ class TestComputeStatisticsByNames:
         assert len(team.players) == 0
         assert team.task_id is None  # No task created without players
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     def test_compute_by_names_fetch_error(self, mock_fetch_info):
         """Test error handling when team fetch fails."""
         error = ApiError(status=503, code="NETWORK_ERROR", message="Connection failed")
@@ -81,7 +81,7 @@ class TestComputeStatisticsByNames:
 class TestComputeStatisticsById:
     """Test suite for compute_statistics with team IDs."""
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_by_ids_success(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test successful computation with team IDs."""
@@ -112,7 +112,7 @@ class TestComputeStatisticsById:
         assert call_kwargs.get("team_id") == 39
         assert call_kwargs.get("team_str") is None
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_by_ids_multiple(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test computation with multiple team IDs."""
@@ -164,7 +164,7 @@ class TestComputeStatisticsById:
 class TestComputeStatisticsValidation:
     """Test suite for parameter validation."""
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_with_both_teams_and_ids(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test that teams and team_ids can be provided together."""
@@ -229,7 +229,7 @@ class TestComputeStatisticsValidation:
 class TestComputeStatisticsErrorHandling:
     """Test suite for error handling in compute_statistics."""
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_partial_failure(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test that one team's error doesn't prevent processing of others."""
@@ -255,7 +255,7 @@ class TestComputeStatisticsErrorHandling:
         assert result.teams[0].error is None
         assert result.teams[1].error is not None
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     def test_compute_unexpected_exception(self, mock_fetch_info):
         """Test handling of unexpected exceptions during computation."""
         mock_fetch_info.side_effect = RuntimeError("Unexpected error")
@@ -268,7 +268,7 @@ class TestComputeStatisticsErrorHandling:
         assert team.error.status == 500
         assert team.error.code == "UNEXPECTED_ERROR"
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     def test_compute_fetch_stats_error(self, mock_fetch_info):
         """Test error handling when fetching team stats fails."""
         error = ApiError(status=502, code="HTTP_ERROR", message="API error")
@@ -292,7 +292,7 @@ class TestComputeStatisticsErrorHandling:
 class TestComputeStatisticsTaskInitiation:
     """Test suite for Celery task initiation."""
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_initiates_task_with_players(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test that task is initiated when team has players."""
@@ -320,7 +320,7 @@ class TestComputeStatisticsTaskInitiation:
         call_kwargs = mock_delay.call_args[1]
         assert set(call_kwargs["accounts"]) == {100, 200}
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_sends_stand_in_ids_for_rank_only(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Stand-ins from the recent roster are sent as rank accounts, not as match accounts."""
@@ -342,7 +342,7 @@ class TestComputeStatisticsTaskInitiation:
         assert call_kwargs["accounts"] == [100]
         assert call_kwargs["rank_accounts"] == [300]
 
-    @patch("backend.stats._fetch_team_from_explorer_api")
+    @patch("backend.stats._fetch_team")
     @patch("backend.stats.get_players_by_team")
     def test_compute_no_task_without_players(self, mock_get_players, mock_fetch_info, monkeypatch):
         """Test that task is not initiated when team has no players."""

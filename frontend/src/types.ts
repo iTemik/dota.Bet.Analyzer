@@ -8,7 +8,17 @@ export interface Player {
   is_core?: boolean | null
 }
 
+// GET /api/statistics: teams[].league_form.farm (medians of each tournament game's top 1 and top 2 GPM and XPM)
+export interface FarmStats {
+  games: number
+  gold_per_min_top1: number
+  gold_per_min_top2: number
+  xp_per_min_top1: number
+  xp_per_min_top2: number
+}
+
 // GET /api/statistics: teams[].league_form
+// Fields after last_match_time were added later and are missing in older saved snapshots
 export interface LeagueForm {
   days: number
   matches: number
@@ -16,6 +26,11 @@ export interface LeagueForm {
   losses: number
   win_percentage: number | null
   last_match_time: number | null
+  radiant_matches?: number
+  radiant_wins?: number
+  radiant_win_percentage?: number | null
+  duration_median?: number | null // seconds
+  farm?: FarmStats | null
 }
 
 // Values the backend sends in teams[].roster_state (backend/rosters.py ROSTER_*)
@@ -26,6 +41,7 @@ export interface TeamData {
   error_code: null | string
   rating: null | number
   delta: number
+  rating_change?: number | null // estimated rating change over the window; missing in older saved snapshots
   logo_url?: string
   task_id?: string | null
   other_players: Player[]

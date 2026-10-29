@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
-import type { LeagueForm, MatchesSummary, TeamData } from '../types'
+import type { FarmStats, LeagueForm, MatchesSummary, TeamData } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 type Summary = MatchesSummary | null
@@ -19,30 +19,43 @@ interface CompareRowConfig {
   label: ReactNode
   info?: RowInfo // texts for the row's "i" tooltip
   summary?: boolean // shown only once the match summary has arrived
+  emptyWhenZero?: boolean // 0 means no data: a row that is 0 (or empty) for both teams is hidden
   compare?: (team: TeamData | undefined, summary: Summary) => number | null
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
+  thresholdPercent?: number // differences up to this % of the smaller value are not coloured
   color?: (team: TeamData | undefined, index: number) => string // per-team colour, for rows that don't compare
   render: (team: TeamData | undefined, summary: Summary) => ReactNode
 }
 
 // Colours for team 1 and team 2: the better value is positive, the other negative
-const compareColors = (a: number | null, b: number | null, better: 'higher' | 'lower', threshold = 0): [string, string] => {
-  if (a === null || b === null || Math.abs(a - b) <= threshold) return ['transparent', 'transparent']
+const compareColors = (
+  a: number | null,
+  b: number | null,
+  better: 'higher' | 'lower',
+  threshold = 0,
+  thresholdPercent = 0,
+): [string, string] => {
+  if (a === null || b === null) return ['transparent', 'transparent']
+  if (Math.abs(a - b) <= Math.max(threshold, (thresholdPercent / 100) * Math.min(Math.abs(a), Math.abs(b)))) {
+    return ['transparent', 'transparent']
+  }
   const firstWins = better === 'higher' ? a > b : a < b
   return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
 }
 
 // A cell with nothing to show: no value or an empty 0-0 record
 const isEmptyCell = (value: ReactNode): boolean => value == null || value === '-' || (typeof value === 'string' && value.startsWith('0-0'))
+const isZeroCell = (value: ReactNode): boolean => typeof value === 'string' && value !== '' && Number(value) === 0
 
 const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
   const cells = teams.map((team, i) => row.render(team, summaries[i]))
   // Rows that are empty for both teams are hidden
-  if (cells.every(isEmptyCell)) return null
+  if (cells.every((cell) => isEmptyCell(cell) || (row.emptyWhenZero && isZeroCell(cell)))) return null
   let colors: string[] | null = null
   if (row.compare && row.better) {
-    colors = compareColors(row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1]), row.better, row.threshold)
+    const values = [row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1])] as const
+    colors = compareColors(values[0], values[1], row.better, row.threshold, row.thresholdPercent)
   } else if (row.color) {
     colors = teams.map(row.color)
   }
@@ -97,11 +110,40 @@ const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
   return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
 }
 
+const formatSigned = (value: number | null | undefined): string =>
+  value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`
+
+const FARM_THRESHOLD_PERCENT = 15 // GPM and XPM differences up to this % are not coloured
+
+// Top 1 and top 2 GPM and XPM rows, all from league_form.farm
+const farmRows = (): CompareRowConfig[] =>
+  (
+    [
+      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute'],
+      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute'],
+      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute'],
+      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute'],
+    ] as [Exclude<keyof FarmStats, 'games'>, string, string][]
+  ).map(([key, label, long]) => {
+    const value = (team: TeamData | undefined) => team?.league_form?.farm?.[key] ?? null
+    return {
+      label: `${label} (median)`,
+      info: {
+        description: `Median of the team’s ${long} over its tournament games in the window.`,
+        colors: `Higher is green, lower is red; no colour when they differ by ${FARM_THRESHOLD_PERCENT}% or less.`,
+        assumption:
+          'A team that farms on average 15% more than the other has the advantage in long games. Usually it is a sign of better skills. With a low win rate the numbers are lower, so the comparison means more for teams with a similar win rate.',
+      },
+      compare: value,
+      better: 'higher',
+      thresholdPercent: FARM_THRESHOLD_PERCENT,
+      render: (team) => formatFixed(value(team), 0),
+    }
+  })
+
 // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list.
 // `info` texts: "Players" means the 5 main roster players (most tournament games in the window).
 const compareRows = (teams: (TeamData | undefined)[], days: number, now: number): CompareRowConfig[] => [
-  { label: 'Team Tag', render: (team) => (team?.tag ? team.tag : '-') },
-  { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
   {
     label: 'Rating',
     info: {
@@ -122,10 +164,24 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       description:
         'Elo points from the team’s latest game (one game, not the series): a win gives 0 to +32, a loss 0 to -32. Even teams: ±16; beating a team 100 points stronger: +20.5, losing to it: -11.5.',
       colors: 'Above +15 is green (won against an equal or stronger team), below -15 is red (lost to an equal or weaker team), otherwise no colour.',
-      assumption: 'A big gain means a win over a strong team; a small one means an expected win over a weaker team. TBD',
+      assumption:
+        'A team whose rating changed a lot recently is in its prime or on a losing streak. A much better indicator than the team rating.',
     },
     color: (team) => getDeltaBackgroundColor(team?.delta),
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
+  },
+  {
+    label: `Rating change, last ${teams[0]?.league_form?.days ?? days} days`,
+    info: {
+      description:
+        'Estimated Elo change over the tournament games of the window, worked back from today’s rating with today’s opponent ratings (OpenDota keeps no rating history). Games against opponents of unknown rating are skipped.',
+      colors: 'Higher is green, lower is red; no colour when they differ by 16 or less (one game between equal teams).',
+      assumption: 'Rating trend: a team that gains points is in form. TBD',
+    },
+    compare: (team) => team?.rating_change ?? null,
+    better: 'higher',
+    threshold: 16,
+    render: (team) => formatSigned(team?.rating_change),
   },
   {
     label: 'Roster Changes',
@@ -151,6 +207,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
     better: 'higher',
     render: (team) => formatLeagueRecord(team?.league_form),
   },
+  ...farmRows(),
   {
     label: 'Last Match',
     info: {
@@ -169,6 +226,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Playing ranked between tournaments with a high win rate is a good sign: the team practices a lot and knows the current meta.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.rating_matches ?? null,
     better: 'higher',
     render: (_, s) => String(s?.rating_matches ?? '-'),
@@ -182,6 +240,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Playing lobbies between tournaments with a high win rate is a good sign: the team practices a lot.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.tournament_matches ?? null,
     better: 'higher',
     render: (_, s) => String(s?.tournament_matches ?? '-'),
@@ -218,6 +277,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Individual skill of the players.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.avg_rank ?? null,
     better: 'lower',
     render: (_, s) => formatFixed(s?.avg_rank, 0),
@@ -241,6 +301,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'TBD',
     },
     summary: true,
+    emptyWhenZero: true,
     render: (_, s) => String(s?.other_matches ?? '-'),
   },
   {
@@ -251,6 +312,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'How much the players play overall. TBD',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.matches_avg ?? null,
     better: 'higher',
     render: (_, s) => formatFixed(s?.matches_avg, 2),
@@ -264,6 +326,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
         'The whole team should practice, and players often slack. A median above the tournament games means the whole team practices, not only in tournament matches.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.matches_median ?? null,
     better: 'higher',
     render: (_, s) => formatFixed(s?.matches_median, 2),
