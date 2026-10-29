@@ -19,6 +19,7 @@ interface CompareRowConfig {
   label: ReactNode
   info?: RowInfo // texts for the row's "i" tooltip
   summary?: boolean // shown only once the match summary has arrived
+  emptyWhenZero?: boolean // 0 means no data: a row that is 0 (or empty) for both teams is hidden
   compare?: (team: TeamData | undefined, summary: Summary) => number | null
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
@@ -45,11 +46,12 @@ const compareColors = (
 
 // A cell with nothing to show: no value or an empty 0-0 record
 const isEmptyCell = (value: ReactNode): boolean => value == null || value === '-' || (typeof value === 'string' && value.startsWith('0-0'))
+const isZeroCell = (value: ReactNode): boolean => typeof value === 'string' && value !== '' && Number(value) === 0
 
 const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
   const cells = teams.map((team, i) => row.render(team, summaries[i]))
   // Rows that are empty for both teams are hidden
-  if (cells.every(isEmptyCell)) return null
+  if (cells.every((cell) => isEmptyCell(cell) || (row.emptyWhenZero && isZeroCell(cell)))) return null
   let colors: string[] | null = null
   if (row.compare && row.better) {
     const values = [row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1])] as const
@@ -242,6 +244,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Playing ranked between tournaments with a high win rate is a good sign: the team practices a lot and knows the current meta.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.rating_matches ?? null,
     better: 'higher',
     render: (_, s) => String(s?.rating_matches ?? '-'),
@@ -255,6 +258,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Playing lobbies between tournaments with a high win rate is a good sign: the team practices a lot.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.tournament_matches ?? null,
     better: 'higher',
     render: (_, s) => String(s?.tournament_matches ?? '-'),
@@ -291,6 +295,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'Individual skill of the players.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.avg_rank ?? null,
     better: 'lower',
     render: (_, s) => formatFixed(s?.avg_rank, 0),
@@ -314,6 +319,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'TBD',
     },
     summary: true,
+    emptyWhenZero: true,
     render: (_, s) => String(s?.other_matches ?? '-'),
   },
   {
@@ -324,6 +330,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption: 'How much the players play overall. TBD',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.matches_avg ?? null,
     better: 'higher',
     render: (_, s) => formatFixed(s?.matches_avg, 2),
@@ -337,6 +344,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
         'The whole team should practice, and players often slack. A median above the tournament games means the whole team practices, not only in tournament matches.',
     },
     summary: true,
+    emptyWhenZero: true,
     compare: (_, s) => s?.matches_median ?? null,
     better: 'higher',
     render: (_, s) => formatFixed(s?.matches_median, 2),

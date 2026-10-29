@@ -160,6 +160,19 @@ describe('ComparisonTable', () => {
     expect(cells[1]).toHaveStyle({ backgroundColor: '#6b9d7a' })
   })
 
+  it('hides match count rows that are 0 for both teams but keeps Low Rank Players at 0', () => {
+    const empty = summary({ rating_matches: 0, tournament_matches: 0, matches_avg: 0, matches_median: 0, avg_rank: 0, bad_rank_players: 0 })
+    const { rerender } = render(<ComparisonTable teams={[team({}), team({})]} summaries={[empty, empty]} showSummaryRows days={20} />)
+    for (const label of ['Rating Matches', 'Tournament + scrim matches', 'Other Matches', 'Average Matches Per Player', 'Median Matches Per Player', 'Average Player Rank']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
+    expect(rowCells(/^Low Rank Players$/).map((c) => c.textContent)).toEqual(['0', '0'])
+
+    // A row with data on one side stays, the other side shows its 0
+    rerender(<ComparisonTable teams={[team({}), team({})]} summaries={[summary({ rating_matches: 7 }), empty]} showSummaryRows days={20} />)
+    expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['7', '0'])
+  })
+
   it('hides rows that are empty for both teams and keeps rows with a value on one side', () => {
     // A snapshot saved before some fields existed: only the basic team fields are there
     const old = { team: 'Old', tag: 'OLD', players: [] } as unknown as TeamData
