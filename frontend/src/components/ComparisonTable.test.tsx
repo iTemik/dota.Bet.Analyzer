@@ -125,6 +125,7 @@ describe('ComparisonTable', () => {
     expect(tooltip).toHaveTextContent('Description: Median of the team’s highest experience per minute over its tournament games')
     expect(tooltip).not.toHaveTextContent(/GPM|OpenDota/)
     expect(tooltip).toHaveTextContent('Assumption: A team that farms on average 15% more')
+    expect(tooltip).toHaveTextContent('more for teams with a similar win rate')
   })
 
   it('colours GPM and XPM only when the teams differ by more than 15%', () => {

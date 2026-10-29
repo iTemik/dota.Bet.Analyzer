@@ -138,7 +138,7 @@ const farmRows = (): CompareRowConfig[] =>
         description: `Median of the team’s ${long} over its tournament games in the window.`,
         colors: `Higher is green, lower is red; no colour when they differ by ${FARM_THRESHOLD_PERCENT}% or less.`,
         assumption:
-          'A team that farms on average 15% more than the other has the advantage in long games. Usually it is a sign of better skills.',
+          'A team that farms on average 15% more than the other has the advantage in long games. Usually it is a sign of better skills. With a low win rate the numbers are lower, so the comparison means more for teams with a similar win rate.',
       },
       compare: value,
       better: 'higher',
