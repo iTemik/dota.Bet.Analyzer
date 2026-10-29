@@ -133,9 +133,10 @@ const farmRows = (): CompareRowConfig[] =>
     return {
       label: `${label} (median)`,
       info: {
-        description: `Median of the team’s ${long} in each tournament game of the window. GPM and XPM are ranked separately, so they can be different players. Games OpenDota has not parsed are skipped.`,
+        description: `Median of the team’s ${long} over its tournament games in the window.`,
         colors: `Higher is green, lower is red; no colour when they differ by ${FARM_THRESHOLD_PERCENT}% or less.`,
-        assumption: 'TBD',
+        assumption:
+          'A team that farms on average 15% more than the other has the advantage in long games. Usually it is a sign of better skills.',
       },
       compare: value,
       better: 'higher',

@@ -121,7 +121,10 @@ describe('ComparisonTable', () => {
     expect(top1[0].style.backgroundColor).toBe('transparent')
     expect(rowCells(/^Top 2 GPM \(median\)$/).map((c) => c.textContent)).toEqual(['601', '-'])
     expect(rowCells(/^Top 2 XPM \(median\)$/).map((c) => c.textContent)).toEqual(['700', '-'])
-    expect(within(screen.getByText(/^Top 1 XPM \(median\)$/)).getByRole('tooltip')).toHaveTextContent('ranked separately')
+    const tooltip = within(screen.getByText(/^Top 1 XPM \(median\)$/)).getByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Description: Median of the team’s highest experience per minute over its tournament games')
+    expect(tooltip).not.toHaveTextContent(/GPM|OpenDota/)
+    expect(tooltip).toHaveTextContent('Assumption: A team that farms on average 15% more')
   })
 
   it('colours GPM and XPM only when the teams differ by more than 15%', () => {
