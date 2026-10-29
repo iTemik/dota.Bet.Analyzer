@@ -172,7 +172,8 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       description:
         'Elo points from the team’s latest game (one game, not the series): a win gives 0 to +32, a loss 0 to -32. Even teams: ±16; beating a team 100 points stronger: +20.5, losing to it: -11.5.',
       colors: 'Above +15 is green (won against an equal or stronger team), below -15 is red (lost to an equal or weaker team), otherwise no colour.',
-      assumption: 'A big gain means a win over a strong team; a small one means an expected win over a weaker team. TBD',
+      assumption:
+        'A team whose rating changed a lot recently is in its prime or on a losing streak. A much better indicator than the team rating.',
     },
     color: (team) => getDeltaBackgroundColor(team?.delta),
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
