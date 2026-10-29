@@ -150,8 +150,6 @@ const farmRows = (): CompareRowConfig[] =>
 // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list.
 // `info` texts: "Players" means the 5 main roster players (most tournament games in the window).
 const compareRows = (teams: (TeamData | undefined)[], days: number, now: number): CompareRowConfig[] => [
-  { label: 'Team Tag', render: (team) => (team?.tag ? team.tag : '-') },
-  { label: 'Team ID', render: (team) => (team?.team_id ? team.team_id : '-') },
   {
     label: 'Rating',
     info: {

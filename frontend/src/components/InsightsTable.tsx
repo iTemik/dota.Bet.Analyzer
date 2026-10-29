@@ -65,6 +65,8 @@ const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
 
 // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
 const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+  { label: 'Team Tag', render: (team) => team?.tag || '-' },
+  { label: 'Team ID', render: (team) => team?.team_id || '-' },
   {
     label: 'Core Players',
     info: {

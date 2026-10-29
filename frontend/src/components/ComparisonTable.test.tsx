@@ -47,7 +47,10 @@ describe('ComparisonTable', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument()
     expect(screen.getByAltText('Team 1 Logo')).toHaveAttribute('src', 'a.png')
     expect(screen.queryByAltText('Team 2 Logo')).not.toBeInTheDocument()
-    expect(rowCells(/^Team Tag$/).map((c) => c.textContent)).toEqual(['ALP', 'BET'])
+    expect(rowCells(/^Rating$/).map((c) => c.textContent)).toEqual(['1500', '1300'])
+    // Team tag and ID are in Team Insights
+    expect(screen.queryByText('Team Tag')).not.toBeInTheDocument()
+    expect(screen.queryByText('Team ID')).not.toBeInTheDocument()
   })
 
   it('colours the better rating green and the worse red', () => {
@@ -181,7 +184,6 @@ describe('ComparisonTable', () => {
     render(<ComparisonTable teams={[old, undefined]} summaries={summaries} showSummaryRows days={20} />)
 
     expect(screen.getByText('Team #2')).toBeInTheDocument()
-    expect(rowCells(/^Team Tag$/).map((c) => c.textContent)).toEqual(['OLD', '-'])
     expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['5', '-'])
     for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating', 'Radiant Win %', 'Top 1 GPM (median)']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
@@ -192,8 +194,6 @@ describe('ComparisonTable', () => {
     const summaries = [summary({ bad_rank_players: 1 }), summary({ bad_rank_players: 2 })]
     render(<ComparisonTable teams={[team({ rating: 1500 }), team({ rating: 1300 })]} summaries={summaries} showSummaryRows days={20} />)
 
-    // Plain team fields have no info icon
-    expect(within(screen.getByText(/^Team Tag$/)).queryByRole('button', { name: 'Row info' })).not.toBeInTheDocument()
     const label = screen.getByText(/^Rating$/)
     const tooltip = within(label).getByRole('tooltip')
     expect(within(label).getByRole('button', { name: 'Row info' })).toHaveAttribute('tabindex', '0')
