@@ -99,7 +99,7 @@ describe('ComparisonTable', () => {
     expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
   })
 
-  it('shows the Radiant record and top 1 and top 2 GPM and XPM medians from the league form', () => {
+  it('shows top 1 and top 2 GPM and XPM medians from the league form', () => {
     const form = (radiant_wins: number, gpm_top1: number) => ({
       days: 20,
       matches: 6,
@@ -115,9 +115,8 @@ describe('ComparisonTable', () => {
     const teams = [team({ league_form: form(3, 750) }), team({ league_form: { ...form(1, 650), farm: null } })]
     render(<ComparisonTable teams={teams} summaries={[null, null]} showSummaryRows={false} days={20} />)
 
-    const radiant = rowCells(/^Radiant Win %$/)
-    expect(radiant.map((c) => c.textContent)).toEqual(['3-1 (75.0%)', '1-3 (25.0%)'])
-    expect(radiant[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    // Radiant Win % is in Team Insights
+    expect(screen.queryByText('Radiant Win %')).not.toBeInTheDocument()
     // A team without parsed games has "-" and no colours
     const top1 = rowCells(/^Top 1 GPM \(median\)$/)
     expect(top1.map((c) => c.textContent)).toEqual(['750', '-'])
@@ -185,7 +184,7 @@ describe('ComparisonTable', () => {
 
     expect(screen.getByText('Team #2')).toBeInTheDocument()
     expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['5', '-'])
-    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating', 'Radiant Win %', 'Top 1 GPM (median)']) {
+    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating', 'Top 1 GPM (median)']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
   })

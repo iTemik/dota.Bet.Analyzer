@@ -70,6 +70,25 @@ describe('InsightsTable', () => {
     expect(rowCells('Other Players').map((c) => c.textContent)).toEqual(['None', '-'])
     expect(rowCells('Last Tournament Match with core players').map((c) => c.textContent)).toEqual(['-', '-'])
     expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Radiant Win %').map((c) => c.textContent)).toEqual(['-', '-'])
+  })
+
+  it('shows the Radiant record without colours', () => {
+    const form = (radiant_wins: number) => ({
+      days: 20,
+      matches: 6,
+      wins: 4,
+      losses: 2,
+      win_percentage: 66.7,
+      last_match_time: null,
+      radiant_matches: 4,
+      radiant_wins,
+      radiant_win_percentage: (100 * radiant_wins) / 4,
+    })
+    render(<InsightsTable teams={[team({ league_form: form(3) }), team({ league_form: form(1) })]} ranks={[]} />)
+    const cells = rowCells('Radiant Win %')
+    expect(cells.map((c) => c.textContent)).toEqual(['3-1 (75.0%)', '1-3 (25.0%)'])
+    expect(cells[0].style.backgroundColor).toBe('')
   })
 
   it('shows the median match duration as minutes and seconds', () => {

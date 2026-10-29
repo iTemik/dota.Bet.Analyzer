@@ -110,12 +110,6 @@ const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
   return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
 }
 
-const formatRadiantRecord = (form: LeagueForm | null | undefined): string => {
-  if (!form?.radiant_matches) return '-'
-  const wins = form.radiant_wins ?? 0
-  return `${wins}-${form.radiant_matches - wins} (${(form.radiant_win_percentage ?? 0).toFixed(1)}%)`
-}
-
 const formatSigned = (value: number | null | undefined): string =>
   value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`
 
@@ -212,17 +206,6 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
     compare: (team) => team?.league_form?.win_percentage ?? null,
     better: 'higher',
     render: (team) => formatLeagueRecord(team?.league_form),
-  },
-  {
-    label: 'Radiant Win %',
-    info: {
-      description: 'Team wins-losses (win %) in tournament games of the window played on the Radiant side.',
-      colors: 'Higher win % is green, lower is red.',
-      assumption: 'TBD',
-    },
-    compare: (team) => team?.league_form?.radiant_win_percentage ?? null,
-    better: 'higher',
-    render: (team) => formatRadiantRecord(team?.league_form),
   },
   ...farmRows(),
   {

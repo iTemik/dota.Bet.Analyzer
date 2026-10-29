@@ -28,6 +28,13 @@ const formatDuration = (seconds: number | null | undefined): string => {
   return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`
 }
 
+const formatRadiantRecord = (team: TeamData | undefined): string => {
+  const form = team?.league_form
+  if (!form?.radiant_matches) return '-'
+  const wins = form.radiant_wins ?? 0
+  return `${wins}-${form.radiant_matches - wins} (${(form.radiant_win_percentage ?? 0).toFixed(1)}%)`
+}
+
 const renderPlayers = (players: Player[], team: TeamData, ranks: PlayerRanks) =>
   players.map((p) => (
     <div key={p.id}>
@@ -106,6 +113,14 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
       const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
       return `${formatDate(team.latest_match_time)}${suffix}`
     },
+  },
+  {
+    label: 'Radiant Win %',
+    info: {
+      description: 'Team wins-losses (win %) in tournament games of the window played on the Radiant side.',
+      assumption: 'TBD',
+    },
+    render: formatRadiantRecord,
   },
   {
     label: 'Median Match Duration',
