@@ -124,15 +124,15 @@ describe('ComparisonTable', () => {
     expect(within(screen.getByText(/^Top 1 XPM \(median\)$/)).getByRole('tooltip')).toHaveTextContent('ranked separately')
   })
 
-  it('colours GPM only when the teams differ by more than 15%', () => {
-    const farm = (gold_per_min_top1: number) => ({
+  it('colours GPM and XPM only when the teams differ by more than 15%', () => {
+    const farm = (gold_per_min_top1: number, xp_per_min_top1 = 800) => ({
       days: 20,
       matches: 3,
       wins: 2,
       losses: 1,
       win_percentage: 66.7,
       last_match_time: null,
-      farm: { games: 3, gold_per_min_top1, gold_per_min_top2: 500, xp_per_min_top1: 800, xp_per_min_top2: 700 },
+      farm: { games: 3, gold_per_min_top1, gold_per_min_top2: 500, xp_per_min_top1, xp_per_min_top2: 700 },
     })
     const props = { summaries: [null, null], showSummaryRows: false, days: 20 }
     const { rerender } = render(<ComparisonTable teams={[team({ league_form: farm(700) }), team({ league_form: farm(600) })]} {...props} />)
@@ -146,6 +146,15 @@ describe('ComparisonTable', () => {
     rerender(<ComparisonTable teams={[team({ league_form: farm(690) }), team({ league_form: farm(600) })]} {...props} />)
     cells = rowCells(/^Top 1 GPM \(median\)$/)
     expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+
+    // XPM: 800 vs 700 (14.3%) no colour, 800 vs 600 (33%) coloured
+    rerender(<ComparisonTable teams={[team({ league_form: farm(600, 800) }), team({ league_form: farm(600, 700) })]} {...props} />)
+    cells = rowCells(/^Top 1 XPM \(median\)$/)
+    expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    rerender(<ComparisonTable teams={[team({ league_form: farm(600, 600) }), team({ league_form: farm(600, 800) })]} {...props} />)
+    cells = rowCells(/^Top 1 XPM \(median\)$/)
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#6b9d7a' })
   })
 
   it('hides rows that are empty for both teams and keeps rows with a value on one side', () => {

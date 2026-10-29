@@ -117,29 +117,29 @@ const formatRadiantRecord = (form: LeagueForm | null | undefined): string => {
 const formatSigned = (value: number | null | undefined): string =>
   value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`
 
+const FARM_THRESHOLD_PERCENT = 15 // GPM and XPM differences up to this % are not coloured
+
 // Top 1 and top 2 GPM and XPM rows, all from league_form.farm
 const farmRows = (): CompareRowConfig[] =>
   (
     [
-      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute', 15],
-      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute', 15],
-      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute', 0],
-      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute', 0],
-    ] as [Exclude<keyof FarmStats, 'games'>, string, string, number][]
-  ).map(([key, label, long, thresholdPercent]) => {
+      ['gold_per_min_top1', 'Top 1 GPM', 'highest gold per minute'],
+      ['gold_per_min_top2', 'Top 2 GPM', 'second highest gold per minute'],
+      ['xp_per_min_top1', 'Top 1 XPM', 'highest experience per minute'],
+      ['xp_per_min_top2', 'Top 2 XPM', 'second highest experience per minute'],
+    ] as [Exclude<keyof FarmStats, 'games'>, string, string][]
+  ).map(([key, label, long]) => {
     const value = (team: TeamData | undefined) => team?.league_form?.farm?.[key] ?? null
     return {
       label: `${label} (median)`,
       info: {
         description: `Median of the team’s ${long} in each tournament game of the window. GPM and XPM are ranked separately, so they can be different players. Games OpenDota has not parsed are skipped.`,
-        colors: thresholdPercent
-          ? `Higher is green, lower is red; no colour when they differ by ${thresholdPercent}% or less.`
-          : 'Higher is green, lower is red.',
+        colors: `Higher is green, lower is red; no colour when they differ by ${FARM_THRESHOLD_PERCENT}% or less.`,
         assumption: 'TBD',
       },
       compare: value,
       better: 'higher',
-      thresholdPercent,
+      thresholdPercent: FARM_THRESHOLD_PERCENT,
       render: (team) => formatFixed(value(team), 0),
     }
   })
