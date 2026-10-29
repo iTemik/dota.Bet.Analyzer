@@ -43,6 +43,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     monkeypatch.setattr(
         "backend.stats._fetch_team_info", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
     )
+    monkeypatch.setattr("backend.stats._local_logo_url", lambda team_id: None)
     monkeypatch.setattr("backend.stats.time.time", fake_time)
     # Mock the import inside compute_statistics by patching dota_bet_analyzer module
     import sys

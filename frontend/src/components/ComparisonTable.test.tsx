@@ -82,6 +82,51 @@ describe('ComparisonTable', () => {
     expect(rowCells(/^Last match rating$/).map((c) => c.textContent)).toEqual(['+12.3', '-5.0'])
   })
 
+  it('shows the rating change over the window, coloured only beyond 16 points', () => {
+    const { rerender } = render(
+      <ComparisonTable teams={[team({ rating_change: 40.26 }), team({ rating_change: -3 })]} summaries={[null, null]} showSummaryRows={false} days={20} />,
+    )
+    let cells = rowCells(/^Rating change, last 20 days$/)
+    expect(cells.map((c) => c.textContent)).toEqual(['+40.3', '-3.0'])
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#9d6b6b' })
+
+    rerender(<ComparisonTable teams={[team({ rating_change: 10 }), team({ rating_change: -5 })]} summaries={[null, null]} showSummaryRows={false} days={20} />)
+    cells = rowCells(/^Rating change, last 20 days$/)
+    expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+  })
+
+  it('shows the Radiant record and carry and mid medians from the league form', () => {
+    const form = (radiant_wins: number, carry_gpm: number) => ({
+      days: 20,
+      matches: 6,
+      wins: 4,
+      losses: 2,
+      win_percentage: 66.7,
+      last_match_time: null,
+      radiant_matches: 4,
+      radiant_wins,
+      radiant_win_percentage: (100 * radiant_wins) / 4,
+      carry: { games: 6, gold_per_min: carry_gpm, xp_per_min: 800, last_hits: 400.5 },
+      mid: { games: 5, gold_per_min: 600, xp_per_min: 700, last_hits: 300 },
+    })
+    const teams = [team({ league_form: form(3, 750) }), team({ league_form: { ...form(1, 650), mid: null } })]
+    render(<ComparisonTable teams={teams} summaries={[null, null]} showSummaryRows={false} days={20} />)
+
+    const radiant = rowCells(/^Radiant Win %$/)
+    expect(radiant.map((c) => c.textContent)).toEqual(['3-1 (75.0%)', '1-3 (25.0%)'])
+    expect(radiant[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    const carryGpm = rowCells(/^Carry GPM \(median\)$/)
+    expect(carryGpm.map((c) => c.textContent)).toEqual(['750', '650'])
+    expect(carryGpm[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    expect(rowCells(/^Carry Last Hits \(median\)$/).map((c) => c.textContent)).toEqual(['401', '401'])
+    // A team without a mid found has "-" and no colours
+    const midXpm = rowCells(/^Mid XPM \(median\)$/)
+    expect(midXpm.map((c) => c.textContent)).toEqual(['700', '-'])
+    expect(midXpm[0].style.backgroundColor).toBe('transparent')
+    expect(within(screen.getByText(/^Mid GPM \(median\)$/)).getByRole('tooltip')).toHaveTextContent('only player in the mid lane')
+  })
+
   it('hides rows that are empty for both teams and keeps rows with a value on one side', () => {
     // A snapshot saved before some fields existed: only the basic team fields are there
     const old = { team: 'Old', tag: 'OLD', players: [] } as unknown as TeamData
@@ -91,7 +136,7 @@ describe('ComparisonTable', () => {
     expect(screen.getByText('Team #2')).toBeInTheDocument()
     expect(rowCells(/^Team Tag$/).map((c) => c.textContent)).toEqual(['OLD', '-'])
     expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['5', '-'])
-    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating']) {
+    for (const label of ['Roster Changes', 'Pub Win %', 'Last Match', 'Last match rating', 'Radiant Win %', 'Carry GPM (median)']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
   })

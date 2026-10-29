@@ -8,9 +8,11 @@ from backend.opendota import RATE_LIMIT_RETRIES, opendota_get
 from backend.pro_players import get_d2ba_db
 from backend.rosters import (
     TEAM_MATCHES_TTL,
+    LineupPlayer,
     TeamMatch,
     classify_roster,
     compute_league_form,
+    compute_role_stats,
     get_match_lineup,
     get_team_league_matches,
     resolve_roster,
@@ -303,7 +305,7 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
         lineup = get_match_lineup(42)
 
     assert len(lineup) == 10
-    assert (128, 1128) in lineup
+    assert (128, 1128) in [(p.player_slot, p.account_id) for p in lineup]
 
 
 def test_incomplete_lineup_is_not_cached(ctx):
@@ -324,6 +326,65 @@ def test_league_form_counts_wins_on_both_sides():
     assert (form.matches, form.wins, form.losses) == (3, 2, 1)
     assert form.win_percentage == pytest.approx(66.666, rel=1e-3)
     assert form.last_match_time == NOW - DAY
+
+
+def test_league_form_radiant_wins_and_duration_median():
+    matches = [
+        TeamMatch(match_id=1, start_time=NOW - DAY, radiant=True, radiant_win=True, duration=1800),
+        TeamMatch(match_id=2, start_time=NOW - 2 * DAY, radiant=True, radiant_win=False, duration=2400),
+        TeamMatch(match_id=3, start_time=NOW - 3 * DAY, radiant=False, radiant_win=False, duration=3000),
+        TeamMatch(match_id=4, start_time=NOW - 4 * DAY, radiant=True, radiant_win=True),
+    ]
+    form = compute_league_form(matches, days=20, now=NOW)
+    assert (form.radiant_matches, form.radiant_wins) == (3, 2)
+    assert form.radiant_win_percentage == pytest.approx(66.666, rel=1e-3)
+    assert form.duration_median == 2400  # the game without a duration is skipped
+    assert compute_league_form([], days=20, now=NOW).radiant_win_percentage is None
+
+
+def _side(slot: int, lane: int | None, lh: int, gpm: int = 500, xpm: int = 600) -> LineupPlayer:
+    return LineupPlayer(slot, 100 + slot, gpm, xpm, lh, lane)
+
+
+def test_role_stats_take_mid_lane_and_most_last_hits():
+    """Mid = the only player in the mid lane; carry = most last hits outside mid; unparsed games are skipped."""
+    matches = [TeamMatch(match_id=i, start_time=NOW, radiant=True, radiant_win=True) for i in (1, 2, 3)]
+    lineups = {
+        # The mid has the most last hits, but the carry is taken outside the mid lane
+        1: [_side(0, 1, 300, gpm=700), _side(1, 2, 400, gpm=650), _side(2, 3, 200), _side(3, 1, 40), _side(4, 3, 50)],
+        # Two players in mid: no mid this game
+        2: [_side(0, 1, 500, gpm=900), _side(1, 2, 100), _side(2, 2, 90), _side(3, 3, 30), _side(4, 3, 20)],
+        # Not parsed: no stats
+        3: [LineupPlayer(slot, 100 + slot) for slot in range(5)],
+    }
+    carry, mid = compute_role_stats(matches, lineups)
+    assert carry is not None and mid is not None
+    assert (carry.games, carry.last_hits, carry.gold_per_min) == (2, 400, 800)
+    assert (mid.games, mid.last_hits, mid.gold_per_min) == (1, 400, 650)
+    assert compute_role_stats(matches, {}) == (None, None)
+
+
+def test_lineup_stats_are_cached(ctx):
+    """Player match stats come with the lineup query and are read back from the cache."""
+    rows = [
+        {
+            "match_id": 42,
+            "player_slot": s,
+            "account_id": 1000 + s,
+            "gold_per_min": 600,
+            "xp_per_min": 700,
+            "last_hits": 250,
+            "lane": 2,
+        }
+        for s in [0, 1, 2, 3, 4, 128, 129, 130, 131, 132]
+    ]
+    with patch("backend.opendota.requests.get", return_value=_response({"rows": rows})) as mock_get:
+        first = get_match_lineup(42)
+        second = get_match_lineup(42)
+    assert mock_get.call_count == 1
+    assert "gold_per_min" in mock_get.call_args.kwargs["params"]["sql"]
+    assert first == second
+    assert second[0] == LineupPlayer(0, 1000, 600, 700, 250, 2)
 
 
 def test_create_team_stats_uses_recent_lineup(ctx):

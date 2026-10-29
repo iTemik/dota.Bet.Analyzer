@@ -268,10 +268,18 @@ class ExplorerTeam(BaseModel):
             raise ValueError(f"No rows in response. Response preview: {response_preview}")
         if len(response_json["rows"]) != 1:
             raise ValueError(f"Unexpected number of rows in response. Response preview: {response_preview}")
-        row = response_json["rows"][0]
+        return cls.from_row(response_json["rows"][0], response_preview)
 
+    @classmethod
+    def from_row(cls, row: Any, response_preview: str = "") -> "ExplorerTeam":
+        """Create from one team row: an explorer row, or a `/teams/{id}` answer (same keys).
+
+        Raises:
+            ValueError: If team_id, name or tag is missing
+        """
         if (
-            not isinstance(row.get("team_id"), int)
+            not isinstance(row, dict)
+            or not isinstance(row.get("team_id"), int)
             or not isinstance(row.get("name"), str)
             or not isinstance(row.get("tag"), str)
         ):

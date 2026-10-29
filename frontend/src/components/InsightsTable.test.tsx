@@ -69,11 +69,18 @@ describe('InsightsTable', () => {
     expect(rowCells('Stand-ins').map((c) => c.textContent)).toEqual(['-', '-'])
     expect(rowCells('Other Players').map((c) => c.textContent)).toEqual(['None', '-'])
     expect(rowCells('Last Tournament Match').map((c) => c.textContent)).toEqual(['-', '-'])
+    expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['-', '-'])
+  })
+
+  it('shows the median match duration as minutes and seconds', () => {
+    const form = (duration_median: number) => ({ days: 20, matches: 3, wins: 2, losses: 1, win_percentage: 66.7, last_match_time: null, duration_median })
+    render(<InsightsTable teams={[team({ league_form: form(2052.5) }), team({ league_form: form(1805) })]} ranks={[]} />)
+    expect(rowCells('Median Match Duration').map((c) => c.textContent)).toEqual(['34:13', '30:05'])
   })
 
   it('shows an info tooltip on each insight row', () => {
     render(<InsightsTable teams={[team({}), team({})]} ranks={[]} />)
-    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match']) {
+    for (const label of ['Core Players', 'Stand-ins', 'Other Players', 'Last Tournament Match', 'Median Match Duration']) {
       expect(within(screen.getByText(label)).getByRole('tooltip')).toHaveTextContent(/^Description: /)
     }
     expect(within(screen.getByText('Stand-ins')).getByRole('tooltip')).toHaveTextContent('outside the core who played')

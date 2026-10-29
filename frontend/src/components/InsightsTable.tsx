@@ -22,6 +22,12 @@ const formatPlayerStats = (player: Player, team: TeamData, ranks: PlayerRanks): 
   return text
 }
 
+const formatDuration = (seconds: number | null | undefined): string => {
+  if (!seconds) return '-'
+  const rounded = Math.round(seconds)
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`
+}
+
 const renderPlayers = (players: Player[], team: TeamData, ranks: PlayerRanks) =>
   players.map((p) => (
     <div key={p.id}>
@@ -98,6 +104,14 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
       const suffix = outside ? `, ${outside} player${outside === 1 ? '' : 's'} outside the core` : ''
       return `${formatDate(team.latest_match_time)}${suffix}`
     },
+  },
+  {
+    label: 'Median Match Duration',
+    info: {
+      description: 'Median length of the team’s tournament games in the window (minutes:seconds).',
+      assumption: 'Not used yet; kept for combined stats later.',
+    },
+    render: (team) => formatDuration(team?.league_form?.duration_median),
   },
 ]
 

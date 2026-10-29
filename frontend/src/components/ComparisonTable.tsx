@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
-import type { LeagueForm, MatchesSummary, TeamData } from '../types'
+import type { LeagueForm, MatchesSummary, RoleStats, TeamData } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 type Summary = MatchesSummary | null
@@ -97,6 +97,43 @@ const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
   return `${form.wins}-${form.losses} (${(form.win_percentage ?? 0).toFixed(1)}%)`
 }
 
+const formatRadiantRecord = (form: LeagueForm | null | undefined): string => {
+  if (!form?.radiant_matches) return '-'
+  const wins = form.radiant_wins ?? 0
+  return `${wins}-${form.radiant_matches - wins} (${(form.radiant_win_percentage ?? 0).toFixed(1)}%)`
+}
+
+const formatSigned = (value: number | null | undefined): string =>
+  value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`
+
+const ROLES = {
+  carry: 'the player with the most last hits outside the mid lane (usually the safe lane carry)',
+  mid: 'the team’s only player in the mid lane (games with two players there are skipped)',
+}
+
+// Carry and mid rows: one per stat, all from league_form.carry / league_form.mid
+const roleRows = (role: keyof typeof ROLES, name: string): CompareRowConfig[] =>
+  (
+    [
+      ['gold_per_min', 'GPM', 'gold per minute'],
+      ['xp_per_min', 'XPM', 'experience per minute'],
+      ['last_hits', 'Last Hits', 'last hits'],
+    ] as [keyof RoleStats, string, string][]
+  ).map(([key, short, long]) => {
+    const value = (team: TeamData | undefined) => team?.league_form?.[role]?.[key] ?? null
+    return {
+      label: `${name} ${short} (median)`,
+      info: {
+        description: `Median ${long} of the ${name.toLowerCase()} in the team’s tournament games of the window. ${name}: ${ROLES[role]}. Games OpenDota has not parsed are skipped.`,
+        colors: 'Higher is green, lower is red.',
+        assumption: 'TBD',
+      },
+      compare: value,
+      better: 'higher',
+      render: (team) => formatFixed(value(team), 0),
+    }
+  })
+
 // Team Comparison: one row per stat, Team #1 vs Team #2; add new stats to this list.
 // `info` texts: "Players" means the 5 main roster players (most tournament games in the window).
 const compareRows = (teams: (TeamData | undefined)[], days: number, now: number): CompareRowConfig[] => [
@@ -128,6 +165,19 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
   },
   {
+    label: `Rating change, last ${teams[0]?.league_form?.days ?? days} days`,
+    info: {
+      description:
+        'Estimated Elo change over the tournament games of the window, worked back from today’s rating with today’s opponent ratings (OpenDota keeps no rating history). Games against opponents of unknown rating are skipped.',
+      colors: 'Higher is green, lower is red; no colour when they differ by 16 or less (one game between equal teams).',
+      assumption: 'Rating trend: a team that gains points is in form. TBD',
+    },
+    compare: (team) => team?.rating_change ?? null,
+    better: 'higher',
+    threshold: 16,
+    render: (team) => formatSigned(team?.rating_change),
+  },
+  {
     label: 'Roster Changes',
     info: {
       description:
@@ -151,6 +201,19 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
     better: 'higher',
     render: (team) => formatLeagueRecord(team?.league_form),
   },
+  {
+    label: 'Radiant Win %',
+    info: {
+      description: 'Team wins-losses (win %) in tournament games of the window played on the Radiant side.',
+      colors: 'Higher win % is green, lower is red.',
+      assumption: 'TBD',
+    },
+    compare: (team) => team?.league_form?.radiant_win_percentage ?? null,
+    better: 'higher',
+    render: (team) => formatRadiantRecord(team?.league_form),
+  },
+  ...roleRows('carry', 'Carry'),
+  ...roleRows('mid', 'Mid'),
   {
     label: 'Last Match',
     info: {

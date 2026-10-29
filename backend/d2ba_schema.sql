@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS team_matches (
     radiant BOOLEAN NOT NULL,
     radiant_win BOOLEAN,
     opposing_team_id INTEGER,
+    duration INTEGER,              -- match length in seconds
     PRIMARY KEY (team_id, match_id)
 );
 
@@ -58,6 +59,10 @@ CREATE TABLE IF NOT EXISTS match_players (
     match_id INTEGER NOT NULL,
     player_slot INTEGER NOT NULL,
     account_id INTEGER,
+    gold_per_min INTEGER,          -- player match stats, NULL when the match is not parsed
+    xp_per_min INTEGER,
+    last_hits INTEGER,
+    lane INTEGER,                  -- OpenDota lane, 2 = mid
     PRIMARY KEY (match_id, player_slot)
 );
 

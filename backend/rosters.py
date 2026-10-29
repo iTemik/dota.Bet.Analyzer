@@ -12,9 +12,10 @@ Requests are kept low by caching in d2ba.sqlite:
 from __future__ import annotations
 
 import sqlite3
+import statistics
 import time
 from collections.abc import Iterable
-from typing import Any, List, Optional
+from typing import Any, List, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
@@ -35,8 +36,10 @@ CORE_GAME_SHARES = (0.75, 0.5)  # Core = players with at least this share of the
 ROSTER_STABLE = "stable"  # Only the core played
 ROSTER_STANDINS = "standins"  # A clear core, plus stand-ins in some games
 ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
+MID_LANE = 2  # OpenDota `lane` of the middle lane
 DAY_SECONDS = 24 * 60 * 60
 REQUEST_TIMEOUT = 30
+LINEUP_STATS = ("gold_per_min", "xp_per_min", "last_hits", "lane")  # Player match stats kept with a lineup
 
 
 def window_start(days: int, now: int) -> int:
@@ -54,6 +57,7 @@ class TeamMatch(BaseModel):
         radiant: Whether the team played on Radiant
         radiant_win: Whether Radiant won
         opposing_team_id: Opponent team identifier
+        duration: Match length in seconds
     """
 
     match_id: int
@@ -62,6 +66,7 @@ class TeamMatch(BaseModel):
     radiant: bool
     radiant_win: Optional[bool] = None
     opposing_team_id: Optional[int] = None
+    duration: Optional[int] = None
 
     @classmethod
     def from_api(cls, row: dict[str, Any]) -> TeamMatch:
@@ -77,6 +82,7 @@ class TeamMatch(BaseModel):
             radiant=bool(row["radiant"]),
             radiant_win=row.get("radiant_win"),
             opposing_team_id=row.get("opposing_team_id"),
+            duration=row.get("duration"),
         )
 
     @classmethod
@@ -89,6 +95,7 @@ class TeamMatch(BaseModel):
             radiant=bool(row["radiant"]),
             radiant_win=None if row["radiant_win"] is None else bool(row["radiant_win"]),
             opposing_team_id=row["opposing_team_id"],
+            duration=row["duration"],
         )
 
     @property
@@ -97,6 +104,33 @@ class TeamMatch(BaseModel):
         if self.radiant_win is None:
             return None
         return self.radiant == self.radiant_win
+
+
+class LineupPlayer(NamedTuple):
+    """One player of a match lineup, with the player's match stats (None when the match is not parsed)."""
+
+    player_slot: int
+    account_id: int
+    gold_per_min: Optional[int] = None
+    xp_per_min: Optional[int] = None
+    last_hits: Optional[int] = None
+    lane: Optional[int] = None
+
+
+class RoleStats(BaseModel):
+    """Median stats of one position over the team's league games.
+
+    Attributes:
+        games: Number of games the position was found in
+        gold_per_min: Median gold per minute
+        xp_per_min: Median experience per minute
+        last_hits: Median last hits
+    """
+
+    games: int
+    gold_per_min: float
+    xp_per_min: float
+    last_hits: float
 
 
 class LeagueForm(BaseModel):
@@ -109,6 +143,12 @@ class LeagueForm(BaseModel):
         losses: Number of league losses
         win_percentage: Wins share in percent (None when there are no matches)
         last_match_time: Start time of the latest league match (unix seconds)
+        radiant_matches: League matches played on Radiant
+        radiant_wins: League wins on Radiant
+        radiant_win_percentage: Radiant wins share in percent (None when the team never played on Radiant)
+        duration_median: Median match length in seconds (None when no duration is known)
+        carry: Median stats of the carry (most last hits outside the mid lane); None when no game was parsed
+        mid: Median stats of the mid player (the team's only player in the mid lane); None when never found
     """
 
     days: int
@@ -117,6 +157,12 @@ class LeagueForm(BaseModel):
     losses: int = 0
     win_percentage: Optional[float] = None
     last_match_time: Optional[int] = None
+    radiant_matches: int = 0
+    radiant_wins: int = 0
+    radiant_win_percentage: Optional[float] = None
+    duration_median: Optional[float] = None
+    carry: Optional[RoleStats] = None
+    mid: Optional[RoleStats] = None
 
 
 class TeamRoster(BaseModel):
@@ -184,7 +230,7 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
         if sync is None or now - int(sync["fetched_at"]) > TEAM_MATCHES_TTL:
             return None
         rows = db.execute(
-            "SELECT match_id, start_time, leagueid, radiant, radiant_win, opposing_team_id "
+            "SELECT match_id, start_time, leagueid, radiant, radiant_win, opposing_team_id, duration "
             "FROM team_matches WHERE team_id = ? ORDER BY start_time DESC",
             (team_id,),
         ).fetchall()
@@ -201,7 +247,7 @@ def _store_team_matches(team_id: int, matches: Iterable[TeamMatch], now: int) ->
         db.execute("DELETE FROM team_matches WHERE team_id = ?", (team_id,))
         db.executemany(
             "INSERT OR REPLACE INTO team_matches (team_id, match_id, start_time, leagueid, radiant, radiant_win, "
-            "opposing_team_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "opposing_team_id, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     team_id,
@@ -211,6 +257,7 @@ def _store_team_matches(team_id: int, matches: Iterable[TeamMatch], now: int) ->
                     m.radiant,
                     m.radiant_win,
                     m.opposing_team_id,
+                    m.duration,
                 )
                 for m in matches
             ],
@@ -251,13 +298,14 @@ def get_team_league_matches(team_id: int, now: Optional[int] = None) -> list[Tea
     return matches
 
 
-def _load_cached_lineup(match_id: int) -> Optional[list[tuple[int, int]]]:
-    """Return cached (player_slot, account_id) rows for a match, or None if not cached."""
+def _load_cached_lineup(match_id: int) -> Optional[list[LineupPlayer]]:
+    """Return the cached lineup of a match, or None if not cached."""
     try:
         rows = (
             get_d2ba_db()
             .execute(
-                "SELECT player_slot, account_id FROM match_players WHERE match_id = ? ORDER BY player_slot",
+                f"SELECT player_slot, account_id, {', '.join(LINEUP_STATS)} FROM match_players "
+                "WHERE match_id = ? ORDER BY player_slot",
                 (match_id,),
             )
             .fetchall()
@@ -267,25 +315,31 @@ def _load_cached_lineup(match_id: int) -> Optional[list[tuple[int, int]]]:
         return None
     if not rows:
         return None
-    return [(row["player_slot"], row["account_id"]) for row in rows]
+    return [LineupPlayer(*row) for row in rows]
 
 
-def _store_lineup(match_id: int, lineup: list[tuple[int, int]]) -> None:
+def _store_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
     """Cache a match lineup."""
     try:
         db = get_d2ba_db()
         db.executemany(
-            "INSERT OR REPLACE INTO match_players (match_id, player_slot, account_id) VALUES (?, ?, ?)",
-            [(match_id, slot, account_id) for slot, account_id in lineup],
+            f"INSERT OR REPLACE INTO match_players (match_id, player_slot, account_id, {', '.join(LINEUP_STATS)}) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(match_id, *player) for player in lineup],
         )
         db.commit()
     except sqlite3.Error as exc:
         logger.warning(f"Failed to cache lineup for match {match_id}: {exc}")
 
 
-def _rows_to_lineup(rows: Any) -> list[tuple[int, int]]:
-    """Extract (player_slot, account_id) pairs from explorer rows or /matches players."""
-    lineup: list[tuple[int, int]] = []
+def _optional_int(value: Any) -> Optional[int]:
+    """The value when it is an int, otherwise None."""
+    return value if isinstance(value, int) else None
+
+
+def _rows_to_lineup(rows: Any) -> list[LineupPlayer]:
+    """Extract lineup players from explorer rows or /matches players."""
+    lineup: list[LineupPlayer] = []
     if not isinstance(rows, list):
         return lineup
     for row in rows:
@@ -293,14 +347,15 @@ def _rows_to_lineup(rows: Any) -> list[tuple[int, int]]:
             continue
         slot, account_id = row.get("player_slot"), row.get("account_id")
         if isinstance(slot, int) and isinstance(account_id, int):
-            lineup.append((slot, account_id))
+            lineup.append(LineupPlayer(slot, account_id, *(_optional_int(row.get(name)) for name in LINEUP_STATS)))
     return lineup
 
 
 def _fetch_lineup_batch(match_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
     """Fetch explorer rows of several matches with one `match_id IN (...)` query, grouped by match."""
     ids = ",".join(str(int(match_id)) for match_id in match_ids)
-    sql = f"SELECT match_id, player_slot, account_id FROM player_matches WHERE match_id IN ({ids})"
+    columns = ", ".join(("match_id", "player_slot", "account_id", *LINEUP_STATS))
+    sql = f"SELECT {columns} FROM player_matches WHERE match_id IN ({ids})"
     payload = _get_json(f"{OPENDOTA_API}/explorer", params={"sql": sql})
     rows = payload.get("rows") if isinstance(payload, dict) else None
     grouped: dict[int, list[dict[str, Any]]] = {}
@@ -310,8 +365,8 @@ def _fetch_lineup_batch(match_ids: list[int]) -> dict[int, list[dict[str, Any]]]
     return grouped
 
 
-def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[tuple[int, int]]]:
-    """Get (player_slot, account_id) of all players of several matches (cached forever).
+def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[LineupPlayer]]:
+    """Get all players of several matches with their match stats (cached forever).
 
     Matches missing from the cache are fetched with one explorer query per LINEUP_BATCH_SIZE matches.
     A match the explorer returns incomplete falls back to /matches/{id}, which is much larger.
@@ -323,7 +378,7 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[tuple[int, int
     Returns:
         Lineup per match id (an empty or short list when unavailable)
     """
-    lineups: dict[int, list[tuple[int, int]]] = {}
+    lineups: dict[int, list[LineupPlayer]] = {}
     missing: list[int] = []
     for match_id in dict.fromkeys(match_ids):
         cached = _load_cached_lineup(match_id)
@@ -348,21 +403,21 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[tuple[int, int
     return lineups
 
 
-def get_match_lineup(match_id: int) -> list[tuple[int, int]]:
-    """Get (player_slot, account_id) of all players of one match (cached forever).
+def get_match_lineup(match_id: int) -> list[LineupPlayer]:
+    """Get all players of one match with their match stats (cached forever).
 
     Args:
         match_id: Match identifier
 
     Returns:
-        List of (player_slot, account_id) tuples (empty if unavailable)
+        Lineup players (empty if unavailable)
     """
     return get_match_lineups([match_id]).get(match_id, [])
 
 
-def _team_side_accounts(lineup: list[tuple[int, int]], radiant: bool) -> list[int]:
-    """Return account ids of the players on the given side, ordered by slot."""
-    return [account_id for slot, account_id in sorted(lineup) if is_radiant(slot) == radiant and account_id]
+def _team_side(lineup: list[LineupPlayer], radiant: bool) -> list[LineupPlayer]:
+    """Players on the given side with a known account, ordered by slot."""
+    return [p for p in sorted(lineup) if is_radiant(p.player_slot) == radiant and p.account_id]
 
 
 def _player_names(account_ids: list[int]) -> dict[int, str]:
@@ -408,6 +463,9 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
     min_time = window_start(days, now)
     recent = [m for m in matches if m.start_time >= min_time and m.won is not None]
     wins = sum(1 for m in recent if m.won)
+    radiant = [m for m in recent if m.radiant]
+    radiant_wins = sum(1 for m in radiant if m.won)
+    durations = [m.duration for m in recent if m.duration]
     return LeagueForm(
         days=days,
         matches=len(recent),
@@ -415,16 +473,64 @@ def compute_league_form(matches: list[TeamMatch], days: int, now: Optional[int] 
         losses=len(recent) - wins,
         win_percentage=100 * wins / len(recent) if recent else None,
         last_match_time=max((m.start_time for m in recent), default=None),
+        radiant_matches=len(radiant),
+        radiant_wins=radiant_wins,
+        radiant_win_percentage=100 * radiant_wins / len(radiant) if radiant else None,
+        duration_median=statistics.median(durations) if durations else None,
     )
 
 
+def _role_stats(players: list[LineupPlayer]) -> Optional[RoleStats]:
+    """Median stats of the players found in one position (None when there are none)."""
+    if not players:
+        return None
+    return RoleStats(
+        games=len(players),
+        gold_per_min=statistics.median(p.gold_per_min for p in players if p.gold_per_min is not None),
+        xp_per_min=statistics.median(p.xp_per_min for p in players if p.xp_per_min is not None),
+        last_hits=statistics.median(p.last_hits for p in players if p.last_hits is not None),
+    )
+
+
+def compute_role_stats(
+    matches: Iterable[TeamMatch], lineups: dict[int, list[LineupPlayer]]
+) -> tuple[Optional[RoleStats], Optional[RoleStats]]:
+    """Median carry and mid stats over the team's league games; games without parsed stats are skipped.
+
+    - Mid: the team's only player in the mid lane (no mid in a game with none or two of them there).
+    - Carry: the player with the most last hits outside the mid lane.
+
+    Args:
+        matches: Team league matches
+        lineups: Lineup per match id (from get_match_lineups)
+
+    Returns:
+        Tuple of (carry, mid) RoleStats, each None when it was never found
+    """
+    carries: list[LineupPlayer] = []
+    mids: list[LineupPlayer] = []
+    for match in matches:
+        side = [
+            p
+            for p in _team_side(lineups.get(match.match_id, []), match.radiant)
+            if None not in (p.gold_per_min, p.xp_per_min, p.last_hits, p.lane)
+        ]
+        in_mid = [p for p in side if p.lane == MID_LANE]
+        if len(in_mid) == 1:
+            mids.append(in_mid[0])
+        others = [p for p in side if p.lane != MID_LANE]
+        if others:
+            carries.append(max(others, key=lambda p: p.last_hits or 0))
+    return _role_stats(carries), _role_stats(mids)
+
+
 def _team_lineups(
-    matches: Iterable[TeamMatch], lineups: dict[int, list[tuple[int, int]]]
+    matches: Iterable[TeamMatch], lineups: dict[int, list[LineupPlayer]]
 ) -> list[tuple[TeamMatch, list[int]]]:
-    """The team's side of each match, skipping matches with an incomplete lineup."""
+    """The team's side accounts of each match, skipping matches with an incomplete lineup."""
     result = []
     for match in matches:
-        accounts = _team_side_accounts(lineups.get(match.match_id, []), match.radiant)
+        accounts = [p.account_id for p in _team_side(lineups.get(match.match_id, []), match.radiant)]
         if len(accounts) >= 5:
             result.append((match, accounts))
     return result
@@ -469,6 +575,7 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     - `players` are the ROSTER_SIZE players with the most of those games (ties: who played more recently),
       whether or not they played the latest game. Everyone else who played in the window goes to `other_players`.
     - Core players and the roster state come from classify_roster.
+    - Carry and mid medians in `league_form` come from the same lineups (compute_role_stats).
 
     Cost: 1 request for the team's matches (cached for TEAM_MATCHES_TTL) plus one explorer request per
     LINEUP_BATCH_SIZE games not cached yet; lineups are cached forever.
@@ -483,10 +590,12 @@ def resolve_roster(team_id: int, days: int = ROSTER_DAYS, now: Optional[int] = N
     """
     now = now if now is not None else int(time.time())
     matches = get_team_league_matches(team_id, now=now)
-    roster = TeamRoster(league_form=compute_league_form(matches, days, now=now))
+    form = compute_league_form(matches, days, now=now)
+    roster = TeamRoster(league_form=form)
 
     recent = [m for m in matches if m.start_time >= window_start(days, now)][:ROSTER_MAX_GAMES]
     lineups = get_match_lineups(m.match_id for m in recent) if recent else {}
+    form.carry, form.mid = compute_role_stats(recent, lineups)
     window = _team_lineups(recent, lineups)
     if not window:
         return roster

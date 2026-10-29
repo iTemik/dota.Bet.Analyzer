@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import statistics
 import time
 from typing import Any, List, Optional
@@ -16,7 +17,8 @@ from backend.opendota import (
     get_json,
     is_radiant,
 )
-from backend.pro_players import Player, get_players_by_team
+from backend.pro_players import Player, get_d2ba_db, get_players_by_team
+from backend.ratings import window_rating_change
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
 LOBBY_TYPE_RATING = [0, 4, 5, 6, 7, 9, 22]
@@ -37,6 +39,7 @@ class TeamStats(BaseModel):
         tag: Team tag/abbreviation
         rating: Team's Elo ranking
         delta: Recent rating change
+        rating_change: Estimated rating change over the `days` window (see backend.ratings)
         logo_url: URL to team's logo image
         players: Main roster; player statistics are calculated from it
         other_players: Everyone else: players who played league games for the team in the window (with `games`),
@@ -61,6 +64,7 @@ class TeamStats(BaseModel):
     tag: Optional[str] = None
     rating: Optional[float] = None
     delta: Optional[float] = None
+    rating_change: Optional[float] = None
     logo_url: Optional[str] = None
     players: List[Player] = Field(default_factory=list)
     other_players: List[Player] = Field(default_factory=list)
@@ -242,11 +246,34 @@ def _team_error(team_str: Optional[str], team_id: Optional[int], error: ApiError
     return TeamStats(team=team_str, team_id=team_id, error=error)
 
 
-def _fetch_team_from_explorer_api(
+def _parse_error(team_str: Optional[str], team_id: Optional[int], url: str, exc: ValueError) -> TeamStats:
+    """TeamStats for an OpenDota answer that has no valid team."""
+    return _team_error(
+        team_str,
+        team_id,
+        ApiError(status=502, code="RESPONSE_PARSE_ERROR", message=f"Malformed response: {exc}", details={"url": url}),
+    )
+
+
+def _local_logo_url(team_id: int) -> Optional[str]:
+    """Logo URL of a team from the local `teams` table (None when the team or its logo is not stored)."""
+    try:
+        row = get_d2ba_db().execute("SELECT logo_url FROM teams WHERE team_id = ?", (team_id,)).fetchone()
+    except sqlite3.Error as exc:
+        logger.warning(f"Teams table unavailable: {exc}")
+        return None
+    return row["logo_url"] if row and row["logo_url"] else None
+
+
+def _fetch_team(
     team_str: str | None = None,
     team_id: int | None = None,
 ) -> TeamStats:
-    """Fetch team info including rating, delta, and logo from OpenDota APIs.
+    """Fetch team info including rating, delta, and logo with one OpenDota request.
+
+    - By team ID: `/teams/{id}`, which has the name, tag, rating, delta and logo.
+    - By name or tag: an explorer query (teams with ratings); the logo comes from the local `teams` table,
+      or from `/teams/{id}` when it is not stored there.
 
     Args:
         team_str: Team name or tag to search for (mutually exclusive with team_id)
@@ -282,8 +309,10 @@ def _fetch_team_from_explorer_api(
             ),
         )
 
-    team_request = get_percent_encoded_str(sql)
-    explore_team_url = f"{OPENDOTA_API}/explorer?sql={team_request}"
+    if team_id is not None:
+        return _fetch_team_by_id(team_id)
+
+    explore_team_url = f"{OPENDOTA_API}/explorer?sql={get_percent_encoded_str(sql)}"
 
     payload, error = _safe_get_json(explore_team_url)
     if error:
@@ -295,27 +324,48 @@ def _fetch_team_from_explorer_api(
     try:
         found = ExplorerTeam.from_response(payload)
     except ValueError as exc:
-        return _team_error(
-            team_str,
-            team_id,
-            ApiError(
-                status=502,
-                code="RESPONSE_PARSE_ERROR",
-                message=f"Malformed response: {exc}",
-                details={"url": explore_team_url},
-            ),
-        )
+        return _parse_error(team_str, team_id, explore_team_url, exc)
 
-    # Fetch team logo URL
-    team_info, error = _fetch_team_info(found.team_id)
     team_stats = TeamStats(
         team_id=found.team_id, team=found.name, tag=found.tag, rating=found.rating, delta=found.delta
     )
-    if error:
-        team_stats.error = error
-    else:
-        team_stats.logo_url = team_info.get("logo_url") if team_info else None
+    team_stats.logo_url = _local_logo_url(found.team_id)
+    if team_stats.logo_url is None:
+        team_info, error = _fetch_team_info(found.team_id)
+        if error:
+            team_stats.error = error
+        else:
+            team_stats.logo_url = team_info.get("logo_url") if team_info else None
     return team_stats
+
+
+def _fetch_team_by_id(team_id: int) -> TeamStats:
+    """Fetch team info by ID from `/teams/{id}`, which has the name, tag, rating, delta and logo.
+
+    Args:
+        team_id: Team ID
+
+    Returns:
+        TeamStats with empty players lists (or error if fetch failed)
+    """
+    from backend.helpers import ExplorerTeam
+
+    team_info, error = _fetch_team_info(team_id)
+    if error:
+        return _team_error(None, team_id, error)
+    try:
+        found = ExplorerTeam.from_row(team_info, str(team_info)[:300])
+    except ValueError as exc:
+        return _parse_error(None, team_id, f"{OPENDOTA_API}/teams/{team_id}", exc)
+    assert team_info is not None
+    return TeamStats(
+        team_id=found.team_id,
+        team=found.name,
+        tag=found.tag,
+        rating=found.rating,
+        delta=found.delta,
+        logo_url=team_info.get("logo_url"),
+    )
 
 
 def _fetch_team_info(team_id: int) -> tuple[Optional[dict], Optional[ApiError]]:
@@ -391,6 +441,8 @@ def _create_team_stats(
         team_stats.other_players = other_players
         team_stats.roster_source = "pro_players"
     team_stats.league_form = roster.league_form
+    if team_stats.team_id:
+        team_stats.rating_change = window_rating_change(team_stats.team_id, team_stats.rating, days)
 
     # Initiate Celery task for player match statistics if players exist
     task_id = None
@@ -428,7 +480,7 @@ def _process_single_team(
         TeamStats object with all data populated, or error if fetch failed
     """
     try:
-        team_stats = _fetch_team_from_explorer_api(team_str=team_str, team_id=team_id)
+        team_stats = _fetch_team(team_str=team_str, team_id=team_id)
         if team_stats.error:
             return team_stats
 
