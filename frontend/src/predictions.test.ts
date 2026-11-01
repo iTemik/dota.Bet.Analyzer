@@ -37,7 +37,7 @@ describe('predictions helpers', () => {
     expect(possibleLoss(prediction({ bet_team: null, stake: null }))).toBeNull()
   })
 
-  it('totals profit over won and pending bets and loss over lost and pending bets', () => {
+  it('totals won profit, lost stakes, net and the possible amounts of pending bets', () => {
     const totals = betTotals([
       prediction({}),
       prediction({ team1_maps_won: 2, team2_maps_won: 0, bet_won: true }),
@@ -45,8 +45,10 @@ describe('predictions helpers', () => {
       prediction({ bet_team: null, stake: null }),
     ])
     expect(totals.net).toBeCloseTo(85 - 40)
-    expect(totals.profit).toBeCloseTo(170)
-    expect(totals.loss).toBe(140)
+    expect(totals.won).toBeCloseTo(85)
+    expect(totals.lost).toBe(40)
+    expect(totals.pendingProfit).toBeCloseTo(85)
+    expect(totals.pendingLoss).toBe(100)
     expect(betTotals([prediction({ team1_maps_won: 0, team2_maps_won: 2, bet_won: false })]).net).toBe(-100)
     expect(formatMoney(100 * 0.85)).toBe('85')
     expect(formatMoney(92.456)).toBe('92.46')
