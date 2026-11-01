@@ -62,6 +62,19 @@ def no_opendota_retry_wait():
         yield mock_sleep
 
 
+@pytest.fixture(autouse=True)
+def no_rate_limit_wait(request):
+    """Requests never wait for the shared OpenDota and Liquipedia limiters (tested in test_rate_limit itself)."""
+    if request.module.__name__.endswith("test_rate_limit"):
+        yield None
+        return
+    with (
+        patch("backend.opendota.OPENDOTA_LIMITER.acquire") as mock_opendota,
+        patch("backend.matches.LIQUIPEDIA_LIMITER.acquire"),
+    ):
+        yield mock_opendota
+
+
 @pytest.fixture
 def app():
     """Create application for testing with isolated test database.

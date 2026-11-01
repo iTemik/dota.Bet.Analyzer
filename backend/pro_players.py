@@ -48,8 +48,11 @@ def close_d2ba_db(e=None):
         db.close()
 
 
-def fetch_pro_players_from_api() -> list[dict[str, Any]]:
+def fetch_pro_players_from_api(background: bool = False) -> list[dict[str, Any]]:
     """Fetch pro players data from OpenDota API.
+
+    Args:
+        background: True for the startup sync (goes after user requests, stops at the daily OpenDota budget)
 
     Returns:
         List of pro player dictionaries.
@@ -59,7 +62,7 @@ def fetch_pro_players_from_api() -> list[dict[str, Any]]:
         ValueError: If API response is invalid or not a list.
     """
     try:
-        data = get_json("/proPlayers", timeout=30)
+        data = get_json("/proPlayers", timeout=30, background=background)
     except OpenDotaError as e:
         if e.code == "JSON_DECODE_ERROR":
             raise ValueError(f"Unexpected error parsing pro players response: {e}") from e
@@ -147,7 +150,7 @@ def sync_pro_players_on_startup(app):
     try:
         with app.app_context():
             logger.info("Fetching pro players from OpenDota API...")
-            players_data = fetch_pro_players_from_api()
+            players_data = fetch_pro_players_from_api(background=True)
 
             if players_data is None:
                 logger.warning("Failed to fetch pro players from OpenDota API")
@@ -281,7 +284,7 @@ def fetch_teams_from_api() -> list[dict[str, Any]]:
     try:
         while page < MAX_PAGES:
             try:
-                data = get_json("/teams", params={"page": page}, timeout=30)
+                data = get_json("/teams", params={"page": page}, timeout=30, background=True)
 
                 if not isinstance(data, list):
                     error_msg = f"Page {page}: Expected list from API, got {type(data).__name__}"

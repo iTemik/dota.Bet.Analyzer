@@ -12,6 +12,7 @@ from backend.opendota import (
     opendota_get,
     opendota_url,
 )
+from backend.rate_limit import DailyLimitReached
 
 
 def _response(payload, status: int = 200) -> MagicMock:
@@ -77,3 +78,21 @@ def test_forbidden_after_last_repeat_is_an_http_error():
             get_json("/teams/1")
     assert (exc_info.value.status, exc_info.value.code) == (403, "HTTP_ERROR")
     assert mock_get.call_count == RATE_LIMIT_RETRIES + 1
+
+
+def test_every_attempt_takes_a_limiter_slot(no_rate_limit_wait):
+    waits = []
+    side_effect = [_response(None, status=429), _response([3])]
+    with patch("backend.opendota.requests.get", side_effect=side_effect):
+        assert get_json("/teams/1", on_wait=waits.append, background=True) == [3]
+    assert no_rate_limit_wait.call_count == 2
+    no_rate_limit_wait.assert_called_with(background=True, on_wait=waits.append)
+
+
+def test_daily_limit_is_an_opendota_error(no_rate_limit_wait):
+    no_rate_limit_wait.side_effect = DailyLimitReached("opendota daily limit of 5 requests reached")
+    with patch("backend.opendota.requests.get") as mock_get:
+        with pytest.raises(OpenDotaError) as exc_info:
+            get_json("/teams", background=True)
+    assert (exc_info.value.status, exc_info.value.code) == (429, "DAILY_LIMIT")
+    mock_get.assert_not_called()

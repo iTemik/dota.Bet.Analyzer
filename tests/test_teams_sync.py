@@ -41,8 +41,9 @@ def mock_fetch():
         yield mock
 
 
-def explorer_answer(url, params=None, timeout=30):
+def explorer_answer(url, params=None, timeout=30, background=False):
     """Explorer answers: team 2 played again, team 3 is new, team 4 has no name row."""
+    assert background, "teams sync requests are background requests"
     sql = params["sql"]
     if "FROM team_rating" in sql:
         return {

@@ -16,8 +16,11 @@ logger = setup_logging(__name__)
 HERO_IMAGE_HOST = "https://cdn.cloudflare.steamstatic.com"  # OpenDota icon paths are relative to the Steam CDN
 
 
-def fetch_heroes_from_api() -> list[dict[str, Any]]:
+def fetch_heroes_from_api(background: bool = False) -> list[dict[str, Any]]:
     """Fetch the hero list from OpenDota /constants/heroes.
+
+    Args:
+        background: True for the startup sync (goes after user requests, stops at the daily OpenDota budget)
 
     Returns:
         Heroes with hero_id, name, localized_name and full icon URL; malformed entries are skipped
@@ -27,7 +30,7 @@ def fetch_heroes_from_api() -> list[dict[str, Any]]:
         ValueError: If the answer is not a JSON object keyed by hero id
     """
     try:
-        data = get_json("/constants/heroes", timeout=30)
+        data = get_json("/constants/heroes", timeout=30, background=background)
     except OpenDotaError as e:
         if e.code == "JSON_DECODE_ERROR":
             raise ValueError(f"Unexpected error parsing heroes response: {e}") from e
@@ -97,7 +100,7 @@ def sync_heroes_if_empty() -> int:
     """
     if get_d2ba_db().execute("SELECT 1 FROM heroes LIMIT 1").fetchone() is not None:
         return 0
-    return store_heroes(fetch_heroes_from_api())
+    return store_heroes(fetch_heroes_from_api(background=True))
 
 
 def sync_heroes_on_startup(app) -> None:
