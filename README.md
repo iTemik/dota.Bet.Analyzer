@@ -684,10 +684,10 @@ Async task for comprehensive player analysis:
 - Main page "Data" line under the tabs: "Data up to date" (hover for each job's last update), the running job or a wait for the request limit, a failed job in red with Retry, and "OpenDota today: 340 / 1800" with a bar that turns red near the limit; Details lists the jobs with a Run button
 
 #### OpenDota and Liquipedia Rate Limits
-- Every OpenDota request waits for a slot of one limiter shared through Redis by Flask and the Celery workers: 1 request per 1.2 s (`OPENDOTA_MIN_INTERVAL`)
+- Every OpenDota request waits for a slot of one limiter shared through Redis by Flask and the Celery workers: at most 50 requests in any 60 s (`OPENDOTA_RATE_LIMIT`, `OPENDOTA_RATE_WINDOW`); requests go out at once, even in a burst, and only wait when the window is full
 - Compare and other user requests go first; background cache jobs wait until no user request is queued
 - Daily budget (`OPENDOTA_DAILY_LIMIT`, default 1800, 0 = none) counts requests per UTC day; when it is used up cache jobs stop and Compare still works
-- Liquipedia: 1 parse request per 30 s (`LIQUIPEDIA_MIN_INTERVAL`, their API terms)
+- Liquipedia: 1 parse request per 30 s (`LIQUIPEDIA_RATE_WINDOW`, their API terms)
 - Without Redis requests are not paced; the retry on HTTP 429/403 stays as the safety net
 
 #### Pro Players Database (`/ProPlayers`)

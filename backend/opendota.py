@@ -6,8 +6,9 @@ the connection dropped when requests come too often in a short time window. In a
 postponed and repeated a few times instead of failing right away.
 
 To stay under those limits, every request first takes a slot from one rate limiter shared by all processes
-(backend.rate_limit): by default one request per 1.2 s and a daily budget, set in Config. Background requests
-(cache syncs) pass `background=True`: they go after user requests and stop when the daily budget is used up.
+(backend.rate_limit): by default at most 50 requests in any 60 s (bursts allowed) and a daily budget, set in
+Config. Background requests (cache syncs) pass `background=True`: they go after user requests and stop when the
+daily budget is used up.
 """
 
 from __future__ import annotations
@@ -35,7 +36,9 @@ RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 
 WaitCallback = Callable[[int], None]
 
-OPENDOTA_LIMITER = RateLimiter("opendota", Config.OPENDOTA_MIN_INTERVAL, Config.OPENDOTA_DAILY_LIMIT)
+OPENDOTA_LIMITER = RateLimiter(
+    "opendota", Config.OPENDOTA_RATE_LIMIT, Config.OPENDOTA_RATE_WINDOW, Config.OPENDOTA_DAILY_LIMIT
+)
 
 
 def is_radiant(player_slot: int) -> bool:

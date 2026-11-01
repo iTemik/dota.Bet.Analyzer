@@ -26,7 +26,7 @@ LIQUIPEDIA_API = "https://liquipedia.net/dota2/api.php"
 MATCHES_PAGE = "Liquipedia:Matches"
 # Liquipedia asks for a custom User-Agent that names the project and blocks generic ones; no link or contact sent
 USER_AGENT = f"DotaBetAnalyzer/{__version__}"
-LIQUIPEDIA_LIMITER = RateLimiter("liquipedia", Config.LIQUIPEDIA_MIN_INTERVAL)  # their terms: 1 parse per 30 s
+LIQUIPEDIA_LIMITER = RateLimiter("liquipedia", 1, Config.LIQUIPEDIA_RATE_WINDOW)  # their terms: 1 parse per 30 s
 CACHE_KEY = "liquipedia:matches"
 CACHE_TTL = 30 * 60  # seconds; longer than the 10-minute `matches` cache job, which refreshes it before it expires
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner, to stay inside Liquipedia's limits
