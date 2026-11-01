@@ -1177,6 +1177,23 @@ describe('App Component', () => {
             expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
         })
 
+        it('shows the Data status line under the tabs on every tab', async () => {
+            const defaultFetch = (globalThis.fetch as any).getMockImplementation()
+            ; (globalThis.fetch as any).mockImplementation((url: string, init?: RequestInit) =>
+                url === '/api/jobs/stream'
+                    ? Promise.resolve(createMockResponse({ jobs: [], budget: { used: 12, limit: 1800 } }))
+                    : defaultFetch(url, init)
+            )
+            render(<App />)
+            const line = await screen.findByRole('region', { name: 'Data status' })
+            expect(line.previousElementSibling).toHaveClass('tab-row')
+            expect(screen.getByText('OpenDota today: 12 / 1800')).toBeVisible()
+
+            await userEvent.click(screen.getByRole('link', { name: 'Predictions' }))
+            await waitFor(() => expect(window.location.hash).toBe('#predictions'))
+            expect(screen.getByText('Data up to date')).toBeVisible()
+        })
+
         it('switches to the Meta tab and loads the meta heroes', async () => {
             render(<App />)
             await userEvent.click(screen.getByRole('link', { name: 'Meta' }))
@@ -1426,6 +1443,8 @@ describe('App Component', () => {
                         json: () => Promise.resolve({ backend: '0.4.DEV' }),
                     })
                 }
+
+                if (url === '/api/jobs/stream') return Promise.resolve({ ok: false, status: 503 })
 
                 callCount++
                 // First call returns Team A vs B, second call returns Team C vs D

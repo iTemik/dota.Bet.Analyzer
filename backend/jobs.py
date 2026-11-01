@@ -10,7 +10,8 @@ task on the `background` queue, served by its own worker, so Compare never waits
 State in Redis (db 1):
 - `job:<name>:lock`: held from queueing until the job ends, so a job never runs twice at once; it expires after
   LOCK_TTL_SECONDS in case a worker dies or is not running
-- `job:<name>`: JSON with state (idle, queued, running, failed), progress, message, last error and its time
+- `job:<name>`: JSON with state (idle, queued, running, failed), progress, message, last error and its time;
+  while a running job waits for the request limiter longer than the normal pace, its message says so
 
 The time of the last success is kept in the `sync_state` table, so a Redis restart does not resync everything.
 A failed job is not queued again on its own for RETRY_AFTER_FAILURE_SECONDS. Jobs request OpenDota as background
@@ -36,6 +37,7 @@ from backend.celery_app import BACKGROUND_QUEUE, celery
 from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import get_d2ba_db
+from backend.rate_limit import report_waits
 
 logger = setup_logging(__name__)
 
@@ -209,6 +211,10 @@ def _write_status(name: str, **fields: Any) -> None:
         logger.warning(f"Could not save the status of job {name}: {e}")
 
 
+def _running_message(job: Job) -> str:
+    return f"Updating {job.title.lower()}"
+
+
 def job_status(job: Job, now: Optional[float] = None) -> dict[str, Any]:
     """Status of one job, as returned by GET /api/jobs.
 
@@ -229,12 +235,15 @@ def job_status(job: Job, now: Optional[float] = None) -> dict[str, Any]:
         next_run = max(next_run or 0, last_error_at + RETRY_AFTER_FAILURE_SECONDS)
     if next_run is not None and next_run <= current:
         next_run = None
+    message = status.get("message")
+    if status.get("state") == RUNNING and (status.get("wait_until") or current) < current:
+        message = _running_message(job)  # The wait for the request limit is over
     return {
         "name": job.name,
         "title": job.title,
         "state": status.get("state", IDLE),
         "progress": status.get("progress", 0),
-        "message": status.get("message"),
+        "message": message,
         "last_success": last_success,
         "last_error": status.get("last_error"),
         "last_error_at": last_error_at,
@@ -245,6 +254,22 @@ def job_status(job: Job, now: Optional[float] = None) -> dict[str, Any]:
 def list_job_statuses() -> list[dict[str, Any]]:
     """Status of every job, in JOBS order (see job_status)."""
     return [job_status(job) for job in JOBS.values()]
+
+
+def data_status() -> dict[str, Any]:
+    """Status of every job and today's OpenDota request budget, as sent by GET /api/jobs/stream. No OpenDota request.
+
+    Returns:
+        jobs: list_job_statuses()
+        budget: used (OpenDota requests today, UTC, by every process; None when Redis cannot be reached) and limit
+            (daily budget of background requests; 0 = no budget)
+    """
+    from backend.opendota import OPENDOTA_LIMITER
+
+    return {
+        "jobs": list_job_statuses(),
+        "budget": {"used": OPENDOTA_LIMITER.used_today(), "limit": OPENDOTA_LIMITER.daily_limit},
+    }
 
 
 def is_due(job: Job, now: Optional[float] = None) -> bool:
@@ -363,10 +388,19 @@ def run_job(name: str, token: str) -> Optional[str]:
             return None
     except redis.RedisError as e:
         logger.warning(f"Could not check the lock of job {name}, running it anyway: {e}")
-    _write_status(name, state=RUNNING, progress=0, message=f"Updating {job.title.lower()}")
+    _write_status(name, state=RUNNING, progress=0, message=_running_message(job), wait_until=None)
     message: Optional[str] = None
+
+    def report_wait(seconds: int) -> None:
+        _write_status(
+            name,
+            message=f"Updating {job.title.lower()}: waiting for the request limit, {seconds} s",
+            wait_until=int(time.time()) + seconds,
+        )
+
     try:
-        message = job.run()
+        with report_waits(report_wait):
+            message = job.run()
         _set_synced_at(name, int(time.time()))
     except Exception as e:
         logger.error(f"Job {name} failed: {e}")

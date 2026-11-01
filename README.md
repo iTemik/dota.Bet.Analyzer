@@ -677,6 +677,8 @@ Async task for comprehensive player analysis:
 - One run of a job at a time (Redis lock); the time of the last success is kept in `sync_state`, so a Redis restart causes no resync
 - `GET /jobs` lists each job's state (idle, queued, running, failed), progress, message, last success, last error and next run
 - `POST /jobs/<name>/run` queues a job now (409 when it is already queued or running)
+- `GET /jobs/stream` streams the jobs and today's OpenDota request count as JSON lines, on every change
+- Main page "Data" line under the tabs: "Data up to date" (hover for each job's last update), the running job or a wait for the request limit, a failed job in red with Retry, and "OpenDota today: 340 / 1800" with a bar that turns red near the limit; Details lists the jobs with a Run button
 
 #### OpenDota and Liquipedia Rate Limits
 - Every OpenDota request waits for a slot of one limiter shared through Redis by Flask and the Celery workers: 1 request per 1.2 s (`OPENDOTA_MIN_INTERVAL`)

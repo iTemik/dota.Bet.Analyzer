@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import redis
 
-from backend.rate_limit import DailyLimitReached, RateLimiter
+from backend.rate_limit import DailyLimitReached, RateLimiter, report_waits
 
 START = 1_793_000_000.0  # 2026-10-26 (UTC), far from midnight
 
@@ -163,3 +163,29 @@ def test_liquipedia_fetch_waits_for_its_limiter():
     ):
         assert fetch_matches_from_liquipedia() == []
     acquire.assert_called_once_with(background=False)
+
+
+def test_used_today_counts_every_request_of_the_day(clock):
+    lim = limiter(clock, daily_limit=5)
+    assert lim.used_today() == 0
+    lim.acquire()
+    lim.acquire(background=True)
+    assert lim.used_today() == 2
+    clock.now += 86400
+    assert lim.used_today() == 0
+
+
+def test_used_today_is_none_when_redis_is_down(clock):
+    client = MagicMock()
+    client.get.side_effect = redis.ConnectionError("down")
+    assert limiter(clock, client).used_today() is None
+
+
+def test_report_waits_is_the_default_on_wait(clock):
+    shared = FakeRedis()
+    shared.data["ratelimit:test:next"] = START + 10
+    waits: list[int] = []
+    with report_waits(waits.append):
+        limiter(clock, shared).acquire()
+    limiter(clock, shared).acquire()  # outside the block: nothing reported
+    assert waits == [10]

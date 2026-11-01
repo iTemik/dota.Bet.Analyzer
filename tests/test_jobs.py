@@ -1,8 +1,9 @@
-"""Tests for the background cache jobs (backend.jobs) and GET /api/jobs, POST /api/jobs/{name}/run.
+"""Tests for the background cache jobs (backend.jobs) and the /api/jobs endpoints (list, stream, run).
 
 Redis is an in-memory fake and Celery is never reached (apply_async is mocked); jobs never request OpenDota.
 """
 
+import json
 import time
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
@@ -304,3 +305,64 @@ def test_run_endpoint_errors(client, mock_apply_async):
     rv = client.post("/api/jobs/teams/run")
     assert rv.status_code == 503
     assert rv.get_json()["code"] == "FAILED_TO_QUEUE_JOB"
+
+
+def test_running_job_reports_limiter_waits(app, test_job, fake_redis):
+    seen: list[str] = []
+
+    def run() -> str:
+        from backend.rate_limit import wait_reporter
+
+        report = wait_reporter()
+        assert report is not None
+        report(12)
+        seen.append(job_status(jobs.JOBS["teams"])["message"])
+        seen.append(job_status(jobs.JOBS["teams"], time.time() + 13)["message"])
+        return "Stored 2 teams"
+
+    test_job.side_effect = run
+    with app.app_context():
+        queue_job("teams")
+        run_job("teams", lock_token(fake_redis, "teams"))
+    assert seen == ["Updating teams list: waiting for the request limit, 12 s", "Updating teams list"]
+
+
+def test_data_status_has_jobs_and_budget(app):
+    from backend.opendota import OPENDOTA_LIMITER
+
+    with app.app_context(), patch.object(OPENDOTA_LIMITER, "used_today", return_value=340):
+        status = jobs.data_status()
+    assert [job["name"] for job in status["jobs"]] == ["pro_players", "heroes", "teams", "hero_meta", "matches"]
+    assert status["budget"] == {"used": 340, "limit": OPENDOTA_LIMITER.daily_limit}
+
+
+def test_jobs_stream_sends_status_lines(app):
+    from backend.dota_bet_analyzer import _generate_jobs_stream
+
+    statuses = [{"jobs": [], "budget": {"used": 1, "limit": 10}}] * 2 + [
+        {"jobs": [], "budget": {"used": 2, "limit": 10}}
+    ]
+    with (
+        app.app_context(),
+        patch("backend.dota_bet_analyzer.data_status", side_effect=statuses),
+        patch("backend.dota_bet_analyzer.time.sleep"),
+        patch("backend.dota_bet_analyzer.time.monotonic", side_effect=[0, 0, 1, 2.5]),
+    ):
+        lines = list(_generate_jobs_stream(max_runtime=3, interval=1))
+    assert [json.loads(line)["budget"]["used"] for line in lines] == [1, 2]  # unchanged status not sent again
+
+
+def test_jobs_stream_error_line(app):
+    from backend.dota_bet_analyzer import _generate_jobs_stream
+
+    with app.app_context(), patch("backend.dota_bet_analyzer.data_status", side_effect=RuntimeError("disk")):
+        lines = list(_generate_jobs_stream())
+    assert json.loads(lines[0]) == {"error": "disk"}
+
+
+def test_jobs_stream_endpoint(client):
+    with patch("backend.dota_bet_analyzer._generate_jobs_stream", return_value=iter(['{"jobs": []}\n'])):
+        rv = client.get("/api/jobs/stream")
+    assert rv.status_code == 200
+    assert rv.mimetype == "text/event-stream"
+    assert rv.get_data(as_text=True) == '{"jobs": []}\n'
