@@ -18,7 +18,8 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `opendota.py` | ONLY OpenDota HTTP: `get_json(path, params, timeout, on_wait, background)` → JSON or raises `OpenDotaError(status, code, message)`; `opendota_get` raw; retry 403/429/timeouts; `OPENDOTA_LIMITER`; `is_radiant(slot)` |
 | `rate_limit.py` | `RateLimiter` (Redis slot+lock+UTC day counter, shared by all processes), `DailyLimitReached`, `report_waits(cb)` ctx |
 | `jobs.py` | Cache job registry `JOBS` (pro_players 24h, heroes 7d, teams 24h, hero_meta 1h, matches 10min), `queue_job`, `queue_job_if_due`, `run_job`, status in Redis, last success in `sync_state` |
-| `task_store.py` | Redis db1 client `redis_client`, `update_progress`, `ProgressReporter`, `store_results`/`get_results`, `get_matches_cached` (1h), `get_rank_cached` (1d), progress pub/sub |
+| `cache.py` | The app's ONE Redis db1 client `redis_client` (jobs, meta, matches, task_store, RateLimiter default use it); `cache_get`, `cache_set`, `cached_json(key, ttl, fetch, error_ttl=None, use=None)`: with error_ttl a ConnectionError/ValueError from fetch is cached as `{"error": msg}` and raised again as ConnectionError; `use(value)` False refetches |
+| `task_store.py` | (uses cache.redis_client) `update_progress`, `ProgressReporter`, `store_results`/`get_results`, `get_matches_cached` (1h), `get_rank_cached` (1d), progress pub/sub |
 | `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; models TeamStats, MatchStats, MatchesSummary, StatsResponse, RankTally; `get_matches`, `get_rank`, `get_team_matches_summary` |
 | `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
@@ -39,7 +40,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 2. 1-3 requests the user waits for → call in the route (user priority). Examples: /statistics team lookup, head-to-head.
 3. Many requests / per-player loops → Celery task on default queue with `ProgressReporter`; route writes `update_progress(task_id, 0, "Queued", 0)` then `.delay(...)`; client follows `/stream-progress/<id>` then `/results/<id>`. Example: players_statistics_task.
 4. Data stale by clock → a `Job` in `jobs.JOBS` with `run` calling fetch with `background=True`; routes read the cache, fetch only on a cold cache; trigger with `queue_job_if_due(name)` (skip when TESTING).
-- Cache TTL rule: Redis TTL for volatile data (key prefix `opendota:` / `liquipedia:`), SQLite for finished matches/immutable data. Cache TTL > job interval so the job refreshes before expiry. Cache errors 60 s (`{"error": ...}` value) to avoid request storms.
+- Cache TTL rule: Redis TTL for volatile data (key prefix `opendota:` / `liquipedia:`), SQLite for finished matches/immutable data. Cache TTL > job interval so the job refreshes before expiry. Cache errors 60 s (`{"error": ...}` value) to avoid request storms. New Redis cache → `cache.cached_json`, never a new Redis client.
 
 ## Redis (db 0 = Celery broker/results; db 1 = everything else)
 `progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `liquipedia:matches` 30min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
@@ -68,7 +69,7 @@ GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?
 
 ## Tests (`tests/`, pytest)
 - `conftest.py` autouse: resets app singleton; patches `backend.stats.resolve_roster` + `window_rating_change` (except test_rosters); patches `backend.jobs.queue_due_jobs_on_startup` (except test_jobs); no retry sleep; limiter `acquire` patched (except test_rate_limit). Fixtures `app` (temp instance with both DBs migrated), `client`.
-- Mock HTTP at `backend.opendota.requests.get` or the module function (`backend.<module>.get_json`); mock Celery with `patch("backend.dota_bet_analyzer.players_statistics_task")`; Redis via `patch("backend.task_store.redis_client")` (also `backend.meta.`/`backend.matches.redis_client`, which are the same object imported).
+- Mock HTTP at `backend.opendota.requests.get` or the module function (`backend.<module>.get_json`); mock Celery with `patch("backend.dota_bet_analyzer.players_statistics_task")`; Redis only via `patch("backend.cache.redis_client")`.
 
 ## PR rules (from Artem)
 Small PRs; plan first for big ones. Template `.github/pull_request_template.md`: Before/After, API (by endpoint + JSON path, one field per bullet), Backend, Frontend, DB, Other; empty section = "None."; no "no change" bullets; no player names. UI change → vitest tests in same PR. README Core Features for new features.
