@@ -48,6 +48,9 @@
   --tooltip-bg: #1e1e1e;
   --tooltip-text: #f0f0f0;
 
+  /* Dropdown menus (team search) */
+  --menu-bg: #2b2346;
+
   /* Page base */
   --page-bg: #242424;
   --page-text: rgba(255, 255, 255, 0.87);
