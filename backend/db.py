@@ -6,6 +6,8 @@
 Both files live in the Flask instance folder. Their tables come from the migrations that `npm run migrate`
 (scripts/init_d2ba_db.py) applies; scripts/migrate.py names each file `<DATABASES key>.sqlite`, matching the names
 below.
+
+d2ba.sqlite runs in WAL mode, so `d2ba.sqlite-wal` and `d2ba.sqlite-shm` sit next to it; delete all three together.
 """
 
 import os
@@ -16,6 +18,8 @@ from flask import Flask, current_app, g
 
 CACHE_DB_FILENAME = "d2ba.sqlite"
 USER_DB_FILENAME = "predictions.sqlite"
+# Seconds a connection waits for another process's write lock before "database is locked"
+BUSY_TIMEOUT_SECONDS = 15
 
 
 def get_cache_db() -> sqlite3.Connection:
@@ -26,8 +30,11 @@ def get_cache_db() -> sqlite3.Connection:
     """
     if "cache_db" not in g:
         db_path = os.path.join(current_app.instance_path, CACHE_DB_FILENAME)
-        g.cache_db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        g.cache_db = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_SECONDS, detect_types=sqlite3.PARSE_DECLTYPES)
         g.cache_db.row_factory = sqlite3.Row
+        # Flask, both Celery workers and Beat write here: WAL lets reads go on during a write.
+        # The mode is stored in the file, so after the first switch this is a no-op.
+        g.cache_db.execute("PRAGMA journal_mode=WAL")
     return cast(sqlite3.Connection, g.cache_db)
 
 
@@ -39,7 +46,8 @@ def get_user_db() -> sqlite3.Connection:
     """
     if "user_db" not in g:
         db_path = os.path.join(current_app.instance_path, USER_DB_FILENAME)
-        g.user_db = sqlite3.connect(db_path)
+        # Default rollback journal (no WAL): only Flask writes here, and the file stays a plain copy to back up
+        g.user_db = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_SECONDS)
         g.user_db.row_factory = sqlite3.Row
         g.user_db.execute("PRAGMA foreign_keys = ON")
     return cast(sqlite3.Connection, g.user_db)

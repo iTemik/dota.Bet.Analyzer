@@ -4,7 +4,13 @@ import sqlite3
 
 import pytest
 
-from backend.db import CACHE_DB_FILENAME, USER_DB_FILENAME, get_cache_db, get_user_db
+from backend.db import (
+    BUSY_TIMEOUT_SECONDS,
+    CACHE_DB_FILENAME,
+    USER_DB_FILENAME,
+    get_cache_db,
+    get_user_db,
+)
 from scripts.migrate import DATABASES
 
 
@@ -24,3 +30,17 @@ def test_connections_open_migrated_files_once_per_context(app) -> None:
         assert isinstance(cache.execute("SELECT 1 AS one").fetchone(), sqlite3.Row)
     with pytest.raises(sqlite3.ProgrammingError):
         cache.execute("SELECT 1")
+
+
+def test_cache_db_uses_wal_and_user_db_keeps_rollback_journal(app) -> None:
+    """d2ba.sqlite switches to WAL (many writers); predictions.sqlite stays a single file to back up."""
+    with app.app_context():
+        assert get_cache_db().execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert get_user_db().execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+
+
+def test_connections_wait_for_locks(app) -> None:
+    """Both connections wait BUSY_TIMEOUT_SECONDS for another process's write lock."""
+    with app.app_context():
+        for db in (get_cache_db(), get_user_db()):
+            assert db.execute("PRAGMA busy_timeout").fetchone()[0] == BUSY_TIMEOUT_SECONDS * 1000

@@ -56,7 +56,7 @@ class MigrationRunner:
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 

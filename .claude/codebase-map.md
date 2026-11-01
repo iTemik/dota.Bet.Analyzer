@@ -23,7 +23,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; models TeamStats, MatchStats, MatchesSummary, StatsResponse, RankTally; `get_matches`, `get_rank` (both raise OpenDotaError on a failed request, so errors are never cached), `get_team_matches_summary` |
 | `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
-| `db.py` | The ONLY SQLite connections: `get_cache_db()` (instance/d2ba.sqlite), `get_user_db()` (instance/predictions.sqlite, foreign keys on), per app context, closed on teardown |
+| `db.py` | The ONLY SQLite connections: `get_cache_db()` (instance/d2ba.sqlite, WAL mode), `get_user_db()` (instance/predictions.sqlite, foreign keys on, rollback journal), both 15 s busy timeout, per app context, closed on teardown |
 | `pro_players.py` | `Player`, pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
 | `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages; only the `teams` job calls it |
 | `heroes.py` | /constants/heroes → `heroes` table, `list_heroes` |
@@ -46,7 +46,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 `progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `liquipedia:matches` 30min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
 
 ## SQLite (`instance/`)
-- `d2ba.sqlite` = cache, deletable. Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm), heroes, sync_state(name, synced_at).
+- `d2ba.sqlite` = cache, deletable (WAL: delete with its -wal/-shm files). Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm), heroes, sync_state(name, synced_at).
 - `predictions.sqlite` = user data, back up. Migrations `backend/migrations/predictions/`. Tables: team_snapshots (JSON `data`, UNIQUE team+date+days+last_match_time), predictions.
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 
