@@ -43,9 +43,7 @@ def describe_schema(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             name: (unique, tuple(col[2] for col in conn.execute(f"PRAGMA index_info({name})")))
             for _seq, name, unique, _origin, _partial in conn.execute(f"PRAGMA index_list({table})")
         }
-        foreign_keys = sorted(
-            (row[3], row[2], row[4]) for row in conn.execute(f"PRAGMA foreign_key_list({table})")
-        )
+        foreign_keys = sorted((row[3], row[2], row[4]) for row in conn.execute(f"PRAGMA foreign_key_list({table})"))
         schema[table] = {"columns": columns, "indexes": indexes, "foreign_keys": foreign_keys}
     return schema
 
