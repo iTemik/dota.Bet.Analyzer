@@ -302,7 +302,7 @@ function MetaTab() {
           <p className="prediction-hint meta-updated">
             OpenDota hero stats for about the last 7 days: {count(data.pro_matches)} pro matches,{' '}
             {formatShortCount(data.pub_matches)} Immortal, Divine and Ancient matches. Updated{' '}
-            {formatDateTime(data.fetched_at)}. Click a column to sort, hover a number for details.
+            {formatDateTime(data.fetched_at)}.
           </p>
           <MetaTable data={data} />
         </>
