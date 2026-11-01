@@ -22,8 +22,8 @@ const STATS_DAYS = 20
 type Tab = 'compare' | 'meta' | 'predictions'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'compare', label: 'Compare' },
-  { id: 'meta', label: 'Meta' },
   { id: 'predictions', label: 'Predictions' },
+  { id: 'meta', label: 'Meta' },
 ]
 const tabFromHash = (hash: string): Tab =>
   hash.startsWith('#predictions') ? 'predictions' : hash === '#meta' ? 'meta' : 'compare'

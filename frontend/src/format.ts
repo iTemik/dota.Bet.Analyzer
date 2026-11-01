@@ -33,3 +33,11 @@ export const formatShortDateTime = (unixTime: number | null | undefined): string
     minute: '2-digit',
   })
 }
+
+// Short count like OpenDota: 950, 1.2k, 164k, 1.2M
+export const formatShortCount = (value: number): string => {
+  const short = (n: number, suffix: string) => `${n < 10 ? n.toFixed(1).replace(/\.0$/, '') : Math.round(n)}${suffix}`
+  if (value >= 1_000_000) return short(value / 1_000_000, 'M')
+  if (value >= 1000) return short(value / 1000, 'k')
+  return String(value)
+}

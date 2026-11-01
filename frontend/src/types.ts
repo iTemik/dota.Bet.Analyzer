@@ -198,27 +198,24 @@ export interface Matches {
   finished: Match[]
 }
 
-// GET /api/heroes/meta: pro_meta[] and ultra_meta[]
-export interface ProMetaHero {
-  hero_id: number
-  localized_name: string
-  icon: string
-  picks: number
-  bans: number
-  wins: number
-  pick_ban_rate: number
-  win_rate: number | null
-}
+// Meta a hero is in; an ultra meta hero is pro meta too
+export type MetaKind = 'ultra' | 'pro' | 'pub'
 
-// GET /api/heroes/meta: pub_meta[]
-export interface PubMetaHero {
+// GET /api/heroes/meta: heroes[], every hero in at least one meta with its pro and pub stats
+export interface MetaHero {
   hero_id: number
   localized_name: string
   icon: string
-  picks: number
-  wins: number
-  pick_rate: number
-  win_rate: number
+  meta: MetaKind[]
+  pro_picks: number
+  pro_bans: number
+  pro_wins: number
+  pro_pick_ban_rate: number | null
+  pro_win_rate: number | null
+  pub_picks: number
+  pub_wins: number
+  pub_pick_rate: number | null
+  pub_win_rate: number | null
 }
 
 // GET /api/heroes/meta query parameters (thresholds) and `params` in the answer
@@ -236,7 +233,5 @@ export interface Meta {
   params: MetaParams
   pro_matches: number
   pub_matches: number
-  pro_meta: ProMetaHero[]
-  ultra_meta: ProMetaHero[]
-  pub_meta: PubMetaHero[]
+  heroes: MetaHero[]
 }

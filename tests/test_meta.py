@@ -77,42 +77,51 @@ def heroes():
 def test_compute_meta_defaults():
     meta = compute_meta(heroes(), MetaParams())
     assert meta["pro_matches"] == 10
-    assert [h["localized_name"] for h in meta["pro_meta"]] == ["Delta", "Alpha", "Beta"]
-    assert meta["pro_meta"][1] == {
+    # Immortal + Divine + Ancient together (Legend games of Delta are left out): pub_matches = 330 picks / 10
+    assert meta["pub_matches"] == 33
+    # Ultra first, then pro, then pub only; Gamma is only pub meta (pro P+B exactly 30%), Beta (45.8%) and Delta
+    # (exactly 52%) are not pub meta
+    assert [(h["localized_name"], h["meta"]) for h in meta["heroes"]] == [
+        ("Delta", ["ultra", "pro"]),
+        ("Alpha", ["ultra", "pro", "pub"]),
+        ("Beta", ["pro"]),
+        ("Gamma", ["pub"]),
+    ]
+    assert meta["heroes"][1] == {
         "hero_id": 1,
         "localized_name": "Alpha",
         "icon": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/icons/alpha.png",
-        "picks": 5,
-        "bans": 0,
-        "wins": 4,
-        "pick_ban_rate": 50.0,
-        "win_rate": 80.0,
+        "meta": ["ultra", "pro", "pub"],
+        "pro_picks": 5,
+        "pro_bans": 0,
+        "pro_wins": 4,
+        "pro_pick_ban_rate": 50.0,
+        "pro_win_rate": 80.0,
+        "pub_picks": 100,
+        "pub_wins": 60,
+        "pub_pick_rate": pytest.approx(303.0),
+        "pub_win_rate": 60.0,
     }
-    assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Alpha", "Delta"]
-    # Immortal + Divine + Ancient together (Legend games of Delta are left out), most picked first, win rate above 52%:
-    # Beta (120 picks) has 45.8% and Delta exactly 52%
-    assert meta["pub_matches"] == 33
-    assert [(h["localized_name"], h["picks"], h["win_rate"]) for h in meta["pub_meta"]] == [
-        ("Alpha", 100, 60.0),
-        ("Gamma", 60, 65.0),
-    ]
-    assert meta["pub_meta"][0]["pick_rate"] == pytest.approx(303.0)
+    # Pub only hero keeps its pro stats
+    assert meta["heroes"][3]["pro_pick_ban_rate"] == 30.0
+    assert meta["heroes"][3]["pub_win_rate"] == 65.0
 
 
 def test_compute_meta_custom_params():
     params = MetaParams(pro_min_pick_ban=20, ultra_min_win=50, ultra_min_picks=1, pub_top=2, pub_min_win=40)
     meta = compute_meta(heroes(), params)
-    assert [h["localized_name"] for h in meta["pro_meta"]] == ["Delta", "Alpha", "Beta", "Gamma"]
-    assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Beta", "Alpha", "Delta"]
-    # Only the 2 most picked count, so Gamma (65%) is left out
-    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Beta", "Alpha"]
+    # Only the 2 most picked count for pub meta, so Gamma (65%) is not pub meta
+    assert [(h["localized_name"], h["meta"]) for h in meta["heroes"]] == [
+        ("Delta", ["ultra", "pro"]),
+        ("Alpha", ["ultra", "pro", "pub"]),
+        ("Beta", ["ultra", "pro", "pub"]),
+        ("Gamma", ["pro"]),
+    ]
 
 
 def test_compute_meta_empty():
     meta = compute_meta([], MetaParams())
-    assert meta["pro_matches"] == 0
-    assert meta["pro_meta"] == meta["ultra_meta"] == meta["pub_meta"] == []
-    assert meta["pub_matches"] == 0
+    assert meta == {"pro_matches": 0, "pub_matches": 0, "heroes": []}
 
 
 class FakeRedis:
@@ -152,12 +161,13 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
         "pub_top": 30,
         "pub_min_win": 52.0,
     }
-    assert [h["hero_id"] for h in data["pro_meta"]] == [4, 1, 2]
+    assert [h["hero_id"] for h in data["heroes"]] == [4, 1, 2, 3]
     assert data["pub_matches"] == 33
     assert isinstance(data["fetched_at"], int)
     again_data = again.get_json()
-    assert [h["hero_id"] for h in again_data["pro_meta"]] == [4, 1, 2, 3]
-    assert [h["hero_id"] for h in again_data["pub_meta"]] == [1]  # of Beta and Alpha, only Alpha is above 52%
+    assert [h["hero_id"] for h in again_data["heroes"] if "pro" in h["meta"]] == [4, 1, 2, 3]
+    # of Beta and Alpha, only Alpha is above 52%
+    assert [h["hero_id"] for h in again_data["heroes"] if "pub" in h["meta"]] == [1]
 
 
 def test_endpoint_rejects_invalid_params(client, fake_redis):
