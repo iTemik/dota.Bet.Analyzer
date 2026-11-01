@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import Bar from './Bar'
 import { formatDateTime, formatPercent, formatShortCount } from '../format'
 import { requestJson } from '../api'
 import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
@@ -49,14 +50,11 @@ function BarCell({
   title: string
   win?: boolean
 }) {
-  const width = value !== null && max > 0 ? Math.min(100, (100 * value) / max) : 0
-  const tone = win && value !== null ? (value >= 50 ? 'good' : 'bad') : 'plain'
+  const tone = win && value !== null ? (value >= 50 ? 'good' : 'bad') : 'neutral'
   return (
     <td className="meta-bar-cell" title={title}>
       <span>{text}</span>
-      <span className="meta-bar">
-        <span className={`meta-bar-fill ${tone}`} style={{ width: `${width}%` }} />
-      </span>
+      <Bar value={value ?? 0} max={max} tone={tone} size="thin" />
     </td>
   )
 }

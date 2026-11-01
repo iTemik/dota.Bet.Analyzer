@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
+import Bar from './components/Bar'
 import DataStatus from './components/DataStatus'
 import MatchesTables from './components/MatchesTables'
 import MetaTab from './components/MetaTab'
@@ -329,9 +330,7 @@ function App() {
           <div className="progress-section">
             <h2>Task Progress</h2>
             <p>{progress.message}</p>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${progress.progress}%` }} />
-            </div>
+            <Bar value={progress.progress} size="large" />
             <p>{progress.progress}% complete</p>
           </div>
         )}

@@ -44,10 +44,9 @@
   --border: rgba(255, 255, 255, 0.35);
   --border-strong: rgba(255, 255, 255, 0.6);
 
-  /* Tooltip and light progress track */
+  /* Tooltip */
   --tooltip-bg: #1e1e1e;
   --tooltip-text: #f0f0f0;
-  --track-light: #e0e0e0;
 
   /* Page base */
   --page-bg: #242424;

@@ -498,28 +498,9 @@ pre {
   gap: 0.5rem;
 }
 
-.data-bar {
-  display: inline-block;
-  width: 80px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--surface-4);
-  overflow: hidden;
-}
-
-.data-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--pos-text);
-}
-
 .data-budget-warn {
   color: var(--neg-text);
   font-weight: 600;
-}
-
-.data-budget-warn .data-bar-fill {
-  background: var(--error);
 }
 
 .data-jobs {
@@ -955,27 +936,6 @@ pre {
   cursor: help;
 }
 
-.meta-bar {
-  display: block;
-  height: 3px;
-  margin-top: 1px;
-  background: var(--surface-2);
-}
-
-.meta-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--fill-neutral);
-}
-
-.meta-bar-fill.good {
-  background: var(--pos);
-}
-
-.meta-bar-fill.bad {
-  background: var(--neg-bright);
-}
-
 .meta-settings input[type='number'] {
   width: 7rem;
   padding: 0.6rem;
@@ -1003,17 +963,50 @@ pre {
   background-color: var(--neg);
 }
 
-/* Compare task progress bar */
-.progress-track {
-  width: 100%;
-  height: 20px;
-  background-color: var(--track-light);
-  border-radius: 4px;
+/* Bar component (components/Bar.tsx): size bar-thin|small|large, tone bar-neutral|progress|good|bad */
+.bar {
+  display: block;
   overflow: hidden;
+  background: var(--surface-4);
 }
 
-.progress-fill {
+.bar-thin {
+  height: 3px;
+  margin-top: 1px;
+  background: var(--surface-2);
+}
+
+.bar-small {
+  display: inline-block;
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.bar-large {
+  width: 100%;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.bar-fill {
+  display: block;
   height: 100%;
-  background-color: var(--pos);
   transition: width 0.3s ease;
+}
+
+.bar-neutral {
+  background: var(--fill-neutral);
+}
+
+.bar-progress {
+  background: var(--pos-text);
+}
+
+.bar-good {
+  background: var(--pos);
+}
+
+.bar-bad {
+  background: var(--neg-bright);
 }
