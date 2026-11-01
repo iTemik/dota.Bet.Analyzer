@@ -15,22 +15,13 @@
     width: 100%;
     padding: 0.75rem;
     font-size: 1rem;
-    border: 2px solid #ddd;
-    border-radius: 4px;
     box-sizing: border-box;
     font-family: inherit;
-    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.autocomplete-input:focus {
-    outline: none;
-    border-color: #4a90e2;
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-}
-
+/* Border, background and focus come from the global input style in App.css */
 .autocomplete-input:disabled {
-    background-color: #f5f5f5;
-    color: #999;
+    opacity: 0.6;
     cursor: not-allowed;
 }
 
@@ -40,8 +31,8 @@
     right: 12px;
     width: 18px;
     height: 18px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #4a90e2;
+    border: 2px solid var(--shade-2);
+    border-top: 2px solid var(--accent);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -58,11 +49,11 @@
 
 /* Error message */
 .autocomplete-error {
-    color: #d32f2f;
+    color: var(--text);
     font-size: 0.875rem;
     margin-top: 4px;
     padding: 4px 8px;
-    background-color: #ffebee;
+    background-color: var(--error);
     border-radius: 4px;
 }
 
@@ -75,11 +66,10 @@
     margin: 4px 0 0 0;
     padding: 0;
     list-style: none;
-    background-color: white;
-    border: 1px solid #ddd;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    background-color: var(--menu-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px var(--shadow);
     max-height: 300px;
     overflow-y: auto;
     z-index: 10000;
@@ -90,7 +80,7 @@
     padding: 8px 12px;
     cursor: pointer;
     transition: background-color 0.15s;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--line);
 }
 
 .autocomplete-option:last-child {
@@ -98,15 +88,15 @@
 }
 
 .autocomplete-option:hover {
-    background-color: #f5f5f5;
+    background-color: var(--surface-2);
 }
 
 .autocomplete-option.highlighted {
-    background-color: #e3f2fd;
+    background-color: var(--surface-3);
 }
 
 .autocomplete-option:active {
-    background-color: #e0e0e0;
+    background-color: var(--surface-4);
 }
 
 /* Option content */
@@ -133,7 +123,7 @@
 
 .option-name {
     font-weight: 500;
-    color: #333;
+    color: var(--text);
     word-wrap: break-word;
     word-break: break-word;
 }
@@ -147,19 +137,19 @@
 
 .option-tag {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-muted);
     font-style: italic;
 }
 
 .option-last-match {
     font-size: 0.8rem;
-    color: #999;
+    color: var(--text-faint);
     font-weight: 400;
 }
 
 .option-rating {
     font-size: 0.9rem;
-    color: #999;
+    color: var(--text-faint);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -168,7 +158,7 @@
 .autocomplete-empty {
     padding: 12px;
     text-align: center;
-    color: #999;
+    color: var(--text-faint);
     font-size: 0.95rem;
     list-style: none;
 }
@@ -179,17 +169,17 @@
 }
 
 .autocomplete-dropdown::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: var(--shade-2);
     border-radius: 4px;
 }
 
 .autocomplete-dropdown::-webkit-scrollbar-thumb {
-    background: #888;
+    background: var(--border);
     border-radius: 4px;
 }
 
 .autocomplete-dropdown::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: var(--border-strong);
 }
 
 /* Responsive design */
