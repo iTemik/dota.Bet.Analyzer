@@ -88,23 +88,23 @@ def test_compute_meta_defaults():
         "win_rate": 80.0,
     }
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Alpha", "Delta"]
-    # Immortal + Divine + Ancient together (Legend games of Delta are left out), highest win rate first
+    # Immortal + Divine + Ancient together (Legend games of Delta are left out), most picked first, win rate above 52%:
+    # Beta (120 picks) has 45.8% and Delta exactly 52%
     assert meta["pub_matches"] == 33
     assert [(h["localized_name"], h["picks"], h["win_rate"]) for h in meta["pub_meta"]] == [
-        ("Gamma", 60, 65.0),
         ("Alpha", 100, 60.0),
-        ("Delta", 50, 52.0),
-        ("Beta", 120, 45.8),
+        ("Gamma", 60, 65.0),
     ]
-    assert meta["pub_meta"][0]["pick_rate"] == pytest.approx(181.8)
+    assert meta["pub_meta"][0]["pick_rate"] == pytest.approx(303.0)
 
 
 def test_compute_meta_custom_params():
-    params = MetaParams(pro_min_pick_ban=20, ultra_min_win=50, ultra_min_picks=1, pub_top=1)
+    params = MetaParams(pro_min_pick_ban=20, ultra_min_win=50, ultra_min_picks=1, pub_top=2, pub_min_win=40)
     meta = compute_meta(heroes(), params)
     assert [h["localized_name"] for h in meta["pro_meta"]] == ["Delta", "Alpha", "Beta", "Gamma"]
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Beta", "Alpha", "Delta"]
-    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Gamma"]
+    # Only the 2 most picked count, so Gamma (65%) is left out
+    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Beta", "Alpha"]
 
 
 def test_compute_meta_empty():
@@ -149,17 +149,25 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
         "ultra_min_win": 55.0,
         "ultra_min_picks": 5,
         "pub_top": 30,
+        "pub_min_win": 52.0,
     }
     assert [h["hero_id"] for h in data["pro_meta"]] == [4, 1, 2]
     assert data["pub_matches"] == 33
     assert isinstance(data["fetched_at"], int)
     again_data = again.get_json()
     assert [h["hero_id"] for h in again_data["pro_meta"]] == [4, 1, 2, 3]
-    assert len(again_data["pub_meta"]) == 2
+    assert [h["hero_id"] for h in again_data["pub_meta"]] == [1]  # of Beta and Alpha, only Alpha is above 52%
 
 
 def test_endpoint_rejects_invalid_params(client, fake_redis):
-    for query in ("pro_min_pick_ban=101", "pro_min_pick_ban=-1", "pub_top=0", "ultra_min_picks=0", "ultra_min_win=abc"):
+    for query in (
+        "pro_min_pick_ban=101",
+        "pro_min_pick_ban=-1",
+        "pub_top=0",
+        "ultra_min_picks=0",
+        "ultra_min_win=abc",
+        "pub_min_win=101",
+    ):
         assert client.get(f"/api/heroes/meta?{query}").status_code == 422, query
 
 

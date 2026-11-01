@@ -7,6 +7,7 @@ export const DEFAULT_META_PARAMS: MetaParams = {
   ultra_min_win: 55,
   ultra_min_picks: 5,
   pub_top: 30,
+  pub_min_win: 52,
 }
 // The thresholds are kept in the browser, so they survive a reload
 export const META_PARAMS_KEY = 'metaParams'

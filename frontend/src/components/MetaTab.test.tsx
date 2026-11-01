@@ -37,7 +37,7 @@ const rows = (label: string) =>
     .map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))
 
 const DEFAULT_URL =
-  '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30'
+  '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
 
 describe('MetaTab', () => {
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe('MetaTab', () => {
       ['Alpha', '39.5%', '0', '30', '-'],
     ])
     expect(rows('Ultra meta')).toEqual([['Delta', '78.9%', '40', '20', '62.5%']])
-    expect(rows('Pub meta')).toEqual([['Beta', '58.0%', '50.0%', '500']])
+    expect(rows('Pub meta')).toEqual([['Beta', '50.0%', '58.0%', '500']])
     expect(within(screen.getByRole('table', { name: 'Pub meta' })).getByRole('img', { name: 'Beta icon' })).toHaveAttribute(
       'src',
       'https://cdn/Beta.png',
@@ -68,7 +68,7 @@ describe('MetaTab', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Top 30 heroes by win rate in Immortal, Divine and Ancient games (1000 matches), like OpenDota's Imm/Div/Anc W%.",
+        "Of the 30 most picked heroes in Immortal, Divine and Ancient games (1000 matches, like OpenDota's Imm/Div/Anc), those with a win rate above 52%.",
       ),
     ).toBeInTheDocument()
   })
@@ -84,7 +84,7 @@ describe('MetaTab', () => {
     await user.type(pickBan, '20')
     await user.click(screen.getByRole('button', { name: 'Apply' }))
 
-    const url = '/api/heroes/meta?pro_min_pick_ban=20&ultra_min_win=55&ultra_min_picks=5&pub_top=30'
+    const url = '/api/heroes/meta?pro_min_pick_ban=20&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
     expect(fetchMock).toHaveBeenLastCalledWith(url, undefined)
     expect(JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')).toMatchObject({
       pro_min_pick_ban: 20,
@@ -117,17 +117,16 @@ describe('MetaTab', () => {
     render(<MetaTab />)
     await screen.findByRole('heading', { name: 'Pro Meta' })
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=10',
+      '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=10&pub_min_win=52',
       undefined,
     )
-    expect(screen.getByLabelText('Pub meta: top heroes')).toHaveValue(10)
+    expect(screen.getByLabelText('Pub meta: most picked heroes')).toHaveValue(10)
   })
 
   it('shows empty lists and errors', async () => {
     mockFetch({ ...meta, pro_meta: [], ultra_meta: [], pub_meta: [] })
     const { unmount } = render(<MetaTab />)
-    expect(await screen.findAllByText('No heroes match these thresholds.')).toHaveLength(2)
-    expect(screen.getByText('No pub games in this bracket.')).toBeInTheDocument()
+    expect(await screen.findAllByText('No heroes match these thresholds.')).toHaveLength(3)
     unmount()
 
     mockFetch({ message: 'Failed to fetch hero stats from OpenDota' }, false, 503)

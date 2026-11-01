@@ -7,8 +7,8 @@ CACHE_TTL, so the thresholds (query parameters) can be changed without a new req
 - Pro meta: heroes whose pick + ban rate in pro matches is above `pro_min_pick_ban` percent. The rate is
   (picks + bans) / pro matches, where pro matches = all pro picks / 10, the same as OpenDota's Pro P+B%.
 - Ultra meta: pro meta heroes with a pro win rate above `ultra_min_win` percent and at least `ultra_min_picks` picks.
-- Pub meta: the `pub_top` heroes with the highest win rate in Immortal, Divine and Ancient games together, the same
-  as OpenDota's "Imm/Div/Anc W%" column on its public heroes page.
+- Pub meta: of the `pub_top` most picked heroes in Immortal, Divine and Ancient games together (OpenDota's
+  "Imm/Div/Anc" columns on its public heroes page), those with a win rate above `pub_min_win` percent.
 """
 
 import json
@@ -39,7 +39,8 @@ class MetaParams:
     pro_min_pick_ban: float = 30.0  # percent of pro matches
     ultra_min_win: float = 55.0  # percent
     ultra_min_picks: int = 5  # so a hero with 2 wins in 2 picks is not ultra meta
-    pub_top: int = 30
+    pub_top: int = 30  # most picked heroes
+    pub_min_win: float = 52.0  # percent
 
 
 def _hero_stat(entry: dict[str, Any]) -> dict[str, Any]:
@@ -141,7 +142,7 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
 
     Returns:
         pro_matches, pub_matches, and the lists pro_meta (pick + ban rate,
-        highest first), ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (highest win rate first)
+        highest first), ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (most picked first)
     """
     pro_matches = round(sum(h["pro_pick"] for h in heroes) / PICKS_PER_MATCH)
 
@@ -185,14 +186,15 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
         for h in heroes
         if h["pub_pick"]
     ]
-    pub.sort(key=lambda h: (-h["win_rate"], h["localized_name"]))
+    pub.sort(key=lambda h: (-h["picks"], h["localized_name"]))
+    pub = [h for h in pub[: params.pub_top] if h["win_rate"] > params.pub_min_win]
 
     return {
         "pro_matches": pro_matches,
         "pub_matches": pub_matches,
         "pro_meta": pro_meta,
         "ultra_meta": ultra_meta,
-        "pub_meta": pub[: params.pub_top],
+        "pub_meta": pub,
     }
 
 

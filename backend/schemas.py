@@ -708,7 +708,12 @@ class MetaQuerySchema(Schema):
     pub_top = fields.Int(
         load_default=MetaParams.pub_top,
         validate=validate.Range(min=1, max=200),
-        metadata={"description": "Pub meta: number of heroes with the highest Immortal + Divine + Ancient win rate"},
+        metadata={"description": "Pub meta: number of most picked Immortal + Divine + Ancient heroes"},
+    )
+    pub_min_win = fields.Float(
+        load_default=MetaParams.pub_min_win,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Pub meta: minimum win rate of those heroes, percent"},
     )
     refresh = fields.Bool(
         load_default=False,
@@ -769,4 +774,8 @@ class MetaSchema(Schema):
     )
     pro_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
     ultra_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
-    pub_meta = fields.List(fields.Nested(PubMetaHeroSchema), required=True)
+    pub_meta = fields.List(
+        fields.Nested(PubMetaHeroSchema),
+        required=True,
+        metadata={"description": "Most picked heroes above the win rate, most picked first"},
+    )

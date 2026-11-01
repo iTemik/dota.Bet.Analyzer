@@ -227,6 +227,7 @@ export interface MetaParams {
   ultra_min_win: number
   ultra_min_picks: number
   pub_top: number
+  pub_min_win: number
 }
 
 // GET /api/heroes/meta
