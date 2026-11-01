@@ -351,6 +351,8 @@ This runs:
 - Backend tests: `pytest tests/ -v`
 - Frontend tests: `vitest`
 
+Tests do not need Redis running: every test gets an empty in-memory Redis (`fakeredis`).
+
 **Using pytest directly (backend only):**
 ```bash
 python -m pytest -q

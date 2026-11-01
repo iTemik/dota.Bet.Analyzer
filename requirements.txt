@@ -12,6 +12,7 @@ python-dotenv
 
 # Test / development dependencies
 pytest>=7.0.0
+fakeredis>=2.20.0  # in-memory Redis for tests
 
 pre-commit
 ruff>=0.14.0
