@@ -21,25 +21,17 @@ class Errors:
     COMPUTATION_ERROR = ErrorDefinition(
         "COMPUTATION_ERROR", "An unexpected error occurred during statistics computation"
     )
-    FAILED_TO_FETCH_HEROES = ErrorDefinition("FAILED_TO_FETCH_HEROES", "Failed to fetch heroes from API")
     FAILED_TO_FETCH_HERO_STATS = ErrorDefinition(
         "FAILED_TO_FETCH_HERO_STATS", "Failed to fetch hero stats from OpenDota"
     )
     FAILED_TO_FETCH_MATCHES = ErrorDefinition("FAILED_TO_FETCH_MATCHES", "Failed to fetch matches from Liquipedia")
-    FAILED_TO_FETCH_PRO_PLAYERS = ErrorDefinition("FAILED_TO_FETCH_PRO_PLAYERS", "Failed to fetch pro players from API")
-    FAILED_TO_FETCH_TEAMS = ErrorDefinition("FAILED_TO_FETCH_TEAMS", "Failed to fetch teams from API")
     FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
     FAILED_TO_START_TASK = ErrorDefinition("FAILED_TO_START_TASK", "Failed to start background task")
-    FAILED_TO_STORE_PRO_PLAYERS = ErrorDefinition(
-        "FAILED_TO_STORE_PRO_PLAYERS", "Failed to store pro players to database"
-    )
-    FAILED_TO_STORE_TEAMS = ErrorDefinition("FAILED_TO_STORE_TEAMS", "Failed to store teams to database")
     FAILED_TO_READ_HEROES = ErrorDefinition("FAILED_TO_READ_HEROES", "Failed to read heroes from database")
     FAILED_TO_READ_PREDICTIONS = ErrorDefinition(
         "FAILED_TO_READ_PREDICTIONS", "Failed to read predictions from database"
     )
     FAILED_TO_READ_SNAPSHOTS = ErrorDefinition("FAILED_TO_READ_SNAPSHOTS", "Failed to read snapshots from database")
-    FAILED_TO_STORE_HEROES = ErrorDefinition("FAILED_TO_STORE_HEROES", "Failed to store heroes to database")
     FAILED_TO_STORE_PREDICTION = ErrorDefinition("FAILED_TO_STORE_PREDICTION", "Failed to store prediction to database")
     FAILED_TO_STORE_SNAPSHOT = ErrorDefinition("FAILED_TO_STORE_SNAPSHOT", "Failed to store snapshot to database")
     FAILED_TO_QUEUE_JOB = ErrorDefinition("FAILED_TO_QUEUE_JOB", "Failed to queue the job (is Redis running?)")
@@ -49,6 +41,7 @@ class Errors:
     INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
     INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
     INVALID_TEAM_ID = ErrorDefinition("INVALID_TEAM_ID", "Team ID must be a non-negative integer")
+    JOB_FULL_NOT_SUPPORTED = ErrorDefinition("JOB_FULL_NOT_SUPPORTED", "This job has no full run")
     JOB_NOT_FOUND = ErrorDefinition("JOB_NOT_FOUND", "Job not found")
     JOB_RUNNING = ErrorDefinition("JOB_RUNNING", "Job is already queued or running")
     MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
@@ -58,7 +51,6 @@ class Errors:
     RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
     SNAPSHOT_NOT_FOUND = ErrorDefinition("SNAPSHOT_NOT_FOUND", "Snapshot not found")
-    TEAMS_SYNC_RUNNING = ErrorDefinition("TEAMS_SYNC_RUNNING", "Teams sync is already running")
     TEAM_ID_MISMATCH = ErrorDefinition("TEAM_ID_MISMATCH", "team_id does not match team.team_id")
     TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")

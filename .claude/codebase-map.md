@@ -17,14 +17,14 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `celery_app.py` | `celery`, BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
 | `opendota.py` | ONLY OpenDota HTTP: `get_json(path, params, timeout, on_wait, background)` → JSON or raises `OpenDotaError(status, code, message)`; `opendota_get` raw; retry 403/429/timeouts; `OPENDOTA_LIMITER`; `is_radiant(slot)` |
 | `rate_limit.py` | `RateLimiter` (Redis slot+lock+UTC day counter, shared by all processes), `DailyLimitReached`, `report_waits(cb)` ctx |
-| `jobs.py` | Cache job registry `JOBS` (pro_players 24h, heroes 7d, teams 24h, hero_meta 1h, matches 10min), `queue_job`, `queue_job_if_due`, `run_job`, status in Redis, last success in `sync_state` |
+| `jobs.py` | Cache job registry `JOBS` (pro_players 24h, heroes 7d, teams 24h, hero_meta 1h, matches 10min), `queue_job(name, full)`, `queue_job_if_due`, `run_job`, optional `Job.run_full` (teams), status in Redis, last success in `sync_state` |
 | `cache.py` | The app's ONE Redis db1 client `redis_client` (jobs, meta, matches, task_store, RateLimiter default use it); `cache_get`, `cache_set`, `cached_json(key, ttl, fetch, error_ttl=None, use=None)`: with error_ttl a ConnectionError/ValueError from fetch is cached as `{"error": msg}` and raised again as ConnectionError; `use(value)` False refetches |
 | `task_store.py` | (uses cache.redis_client) `update_progress`, `start_task(task, team_id=None, **kwargs)` → (task_id, celery_id) with ids `task_<team_id>_<uuid hex>` / `task_<uuid hex>`, `ProgressReporter`, `store_results`/`get_results`, `get_matches_cached` (1h), `get_rank_cached` (1d), progress pub/sub |
 | `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; models TeamStats, MatchStats, MatchesSummary, StatsResponse, RankTally; `get_matches`, `get_rank`, `get_team_matches_summary` |
 | `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
 | `pro_players.py` | `get_d2ba_db()` (cache DB connection lives HERE), `Player`, pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
-| `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages |
+| `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages; only the `teams` job calls it |
 | `heroes.py` | /constants/heroes → `heroes` table, `list_heroes` |
 | `meta.py` | /heroStats → Redis `opendota:hero_stats:v2` (2h, errors 60s), `MetaParams`, `compute_meta`, `get_meta` |
 | `matches.py` | Liquipedia parse → Redis `liquipedia:matches` (30min, errors 60s), `LIQUIPEDIA_LIMITER`, `TeamMatcher` (name → teams table), own `requests.get` (only allowed exception) |
@@ -51,7 +51,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 
 ## API (all in dota_bet_analyzer.py)
-GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run · POST /pro-players/sync, /teams/sync, /heroes/sync (legacy, unused by UI) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head. Swagger: /api/swagger-ui.
+GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run (`?full=true` teams only) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head. Swagger: /api/swagger-ui.
 
 ## Recipes
 - New endpoint: route in dota_bet_analyzer.py with `@bp.arguments(QuerySchema, location="query")`, `@bp.response(200, Schema)`, `@bp.alt_response(code, schema=ErrorSchema, description=...)`; body returns `jsonify(data), 200` (jsonify bypasses the schema, so the schema is docs only: keep fields in sync by hand); errors `return api_error(status, Errors.X, e, **details)`, add the code to `Errors` in helpers.py; validation errors are 422. Add `frontend/src/types.ts` shape, README Core Features line, tests for 200 + each error status.

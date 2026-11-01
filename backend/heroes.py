@@ -1,7 +1,7 @@
 """Hero list from OpenDota, cached in d2ba.sqlite.
 
 One request to /constants/heroes fills the table. The `heroes` cache job (backend.jobs) refreshes it weekly, and
-POST /api/heroes/sync on demand.
+POST /api/jobs/heroes/run on demand.
 """
 
 from typing import Any

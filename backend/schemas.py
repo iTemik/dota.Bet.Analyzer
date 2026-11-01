@@ -315,27 +315,14 @@ class TeamSearchQuerySchema(Schema):
     )
 
 
-class SyncResponseSchema(Schema):
-    """Sync operation response schema."""
-
-    synced_count = fields.Int(required=True, metadata={"description": "Number of records synced"})
-    message = fields.Str(required=True, metadata={"description": "Operation result message"})
-
-
-class TeamsSyncResponseSchema(SyncResponseSchema):
-    """Teams sync response: the sync result and when it finished."""
-
-    synced_at = fields.Int(
-        required=True, allow_none=True, metadata={"description": "Unix time of the last successful teams sync"}
-    )
-
-
-class TeamsSyncQuerySchema(Schema):
-    """Query parameters of POST /teams/sync."""
+class JobRunQuerySchema(Schema):
+    """Query parameters of POST /jobs/{name}/run."""
 
     full = fields.Bool(
         load_default=False,
-        metadata={"description": "Fetch every OpenDota /teams page instead of only teams with new league games"},
+        metadata={
+            "description": "Teams job only: fetch every OpenDota /teams page, not only teams with new league games"
+        },
     )
 
 

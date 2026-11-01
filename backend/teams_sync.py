@@ -1,15 +1,14 @@
 """Teams list sync from OpenDota into d2ba.sqlite (used by team search and the Matches tab).
 
-The list is updated on its own by the `teams` cache job (backend.jobs) when the last sync is 24+ hours old, or on
-demand by POST /api/teams/sync. One sync runs at a time in a process.
+The list is updated only by the `teams` cache job (backend.jobs): on its own when the last sync is 24+ hours old, or
+on demand by POST /api/jobs/teams/run. The job lock keeps one sync running at a time across all processes.
 
-- Full sync (teams table empty, or POST /api/teams/sync?full=1): every `/teams` page, about 22 requests.
+- Full sync (teams table empty, or POST /api/jobs/teams/run?full=true): every `/teams` page, about 22 requests.
 - Incremental sync (otherwise): two explorer queries, teams with a league game since the newest stored
   `last_match_time` (team_rating) and then their names, tags and logos (teams, TEAM_IDS_PER_QUERY ids per query).
   A team renamed without playing a league game keeps its old name until it plays.
 """
 
-import threading
 import time
 from typing import Any, Optional
 
@@ -18,22 +17,6 @@ from backend.pro_players import fetch_teams_from_api, get_d2ba_db, store_teams
 
 TEAMS_SYNC_NAME = "teams"  # sync_state.name of the teams list
 TEAM_IDS_PER_QUERY = 200  # Team ids in one explorer `team_id IN (...)` query
-
-_sync_lock = threading.Lock()
-
-
-class TeamsSyncRunningError(Exception):
-    """A teams sync is already running in this process."""
-
-
-def get_teams_synced_at() -> Optional[int]:
-    """Time of the last successful teams sync.
-
-    Returns:
-        Unix seconds, or None when the teams list was never synced
-    """
-    row = get_d2ba_db().execute("SELECT synced_at FROM sync_state WHERE name = ?", (TEAMS_SYNC_NAME,)).fetchone()
-    return row["synced_at"] if row else None
 
 
 def _newest_match_time() -> Optional[int]:
@@ -104,29 +87,23 @@ def run_teams_sync(full: bool = False) -> int:
         Number of teams stored
 
     Raises:
-        TeamsSyncRunningError: If another sync is running
         ConnectionError: If OpenDota could not be reached
         ValueError: If the OpenDota answer is invalid
     """
-    if not _sync_lock.acquire(blocking=False):
-        raise TeamsSyncRunningError("Teams sync is already running")
-    try:
-        since = None if full else _newest_match_time()
-        if since is None:
-            count = store_teams(fetch_teams_from_api())
-            if not count:
-                return 0
-        else:
-            count = store_teams(fetch_recent_teams(since))
-        db = get_d2ba_db()
-        db.execute(
-            """
-            INSERT INTO sync_state (name, synced_at) VALUES (?, ?)
-            ON CONFLICT(name) DO UPDATE SET synced_at = excluded.synced_at
-            """,
-            (TEAMS_SYNC_NAME, int(time.time())),
-        )
-        db.commit()
-        return count
-    finally:
-        _sync_lock.release()
+    since = None if full else _newest_match_time()
+    if since is None:
+        count = store_teams(fetch_teams_from_api())
+        if not count:
+            return 0
+    else:
+        count = store_teams(fetch_recent_teams(since))
+    db = get_d2ba_db()
+    db.execute(
+        """
+        INSERT INTO sync_state (name, synced_at) VALUES (?, ?)
+        ON CONFLICT(name) DO UPDATE SET synced_at = excluded.synced_at
+        """,
+        (TEAMS_SYNC_NAME, int(time.time())),
+    )
+    db.commit()
+    return count
