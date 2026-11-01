@@ -506,6 +506,7 @@ This starts all services in one terminal using `concurrently`:
 - **Frontend** (Vite + React) → http://localhost:5173
 - **Celery Worker** → processes async tasks (Compare)
 - **Celery Background Worker** → runs the cache jobs (queue `background`), so Compare never waits behind them
+- **Celery Beat** → queues due cache jobs every minute
 
 **Note:** npm scripts automatically use the virtual environment's Python (via `scripts/run-with-venv.js`). No manual venv activation needed.
 
@@ -559,6 +560,7 @@ Frontend runs at `http://localhost:5173`
 # Using npm:
 npm run celery              # Compare tasks
 npm run celery:background   # Cache jobs (queue background)
+npm run celery:beat         # Queues due cache jobs every minute
 
 # Or direct celery command:
 # Development (Windows-compatible solo pool):
@@ -657,11 +659,11 @@ Async task for comprehensive player analysis:
 - Ultra meta: pro meta heroes with a win rate above a threshold and a minimum number of picks
 - Pub meta: of the N most picked heroes in Immortal, Divine and Ancient games together (OpenDota's Imm/Div/Anc), those with a win rate above a threshold
 - All thresholds are query parameters, set on the Meta tab and kept in the browser; defaults in `backend/meta.py` `MetaParams`
-- One `/heroStats` request (OpenDota's window, about the last 7 days), cached in Redis for 1 hour; `refresh=true` (Refresh data button) fetches again, at most once a minute
+- One `/heroStats` request (OpenDota's window, about the last 7 days), refreshed hourly by the `hero_meta` cache job (Redis, 2 hours); `refresh=true` (Refresh data button) fetches again, at most once a minute
 
 #### Matches (`/matches`)
 - `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, tournament (name, Liquipedia link, icon), Bo, teams, score
-- Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache); credited under the tables as its CC-BY-SA license requires
+- Source: Liquipedia's free API (OpenDota has no schedule), refreshed every 10 minutes by the `matches` cache job (Redis, 30 minutes); credited under the tables as its CC-BY-SA license requires
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
 #### Teams List (`/teams/sync`)
@@ -670,8 +672,8 @@ Async task for comprehensive player analysis:
 - Full update (empty teams table or `POST /api/teams/sync?full=true`): every `/teams` page, ~22 requests
 
 #### Cache Jobs (`/jobs`)
-- Pro players (daily), heroes (weekly) and the teams list (daily) are kept up to date by background jobs on the Celery `background` queue
-- A due job (never run, or its last success is older than its limit) is queued at startup; a failed one is retried after 10 minutes
+- Pro players (daily), heroes (weekly), the teams list (daily), hero meta (hourly) and Liquipedia matches (every 10 minutes) are kept up to date by background jobs on the Celery `background` queue
+- A due job (never run, or its last success is older than its limit) is queued by Celery Beat (checks every minute) and at startup; a failed one is retried after 10 minutes
 - One run of a job at a time (Redis lock); the time of the last success is kept in `sync_state`, so a Redis restart causes no resync
 - `GET /jobs` lists each job's state (idle, queued, running, failed), progress, message, last success, last error and next run
 - `POST /jobs/<name>/run` queues a job now (409 when it is already queued or running)

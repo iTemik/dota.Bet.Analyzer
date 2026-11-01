@@ -2,7 +2,8 @@
 
 OpenDota has no schedule, so both lists come from one Liquipedia MediaWiki API request (`action=parse` of the Dota 2
 matches page). Liquipedia allows one parse request per 30 seconds, so the parsed series are cached in Redis for
-CACHE_TTL. Teams are matched by name to the d2ba.sqlite `teams` table for their OpenDota id and logo (no request).
+CACHE_TTL; the `matches` cache job (backend.jobs) refreshes them every 10 minutes. Teams are matched by name to
+the d2ba.sqlite `teams` table for their OpenDota id and logo (no request).
 """
 
 import json
@@ -28,7 +29,7 @@ MATCHES_PAGE = "Liquipedia:Matches"
 USER_AGENT = f"DotaBetAnalyzer/{__version__}"
 LIQUIPEDIA_LIMITER = RateLimiter("liquipedia", Config.LIQUIPEDIA_MIN_INTERVAL)  # their terms: 1 parse per 30 s
 CACHE_KEY = "liquipedia:matches"
-CACHE_TTL = 600  # seconds
+CACHE_TTL = 30 * 60  # seconds; longer than the 10-minute `matches` cache job, which refreshes it before it expires
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner, to stay inside Liquipedia's limits
 
 LIQUIPEDIA_HOST = "https://liquipedia.net"  # team icon paths on the page are relative to it
@@ -200,8 +201,11 @@ def parse_matches(html: str) -> list[dict[str, Any]]:
     return [m for m in matches if m is not None]
 
 
-def fetch_matches_from_liquipedia() -> list[dict[str, Any]]:
+def fetch_matches_from_liquipedia(background: bool = False) -> list[dict[str, Any]]:
     """Fetch and parse the Liquipedia matches page (one request, after the shared Liquipedia limiter allows it).
+
+    Args:
+        background: True for the cache job: page loads waiting for the limiter go first
 
     Returns:
         Series as returned by parse_matches
@@ -212,7 +216,7 @@ def fetch_matches_from_liquipedia() -> list[dict[str, Any]]:
     """
     params = {"action": "parse", "page": MATCHES_PAGE, "prop": "text", "format": "json", "formatversion": "2"}
     headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
-    LIQUIPEDIA_LIMITER.acquire()
+    LIQUIPEDIA_LIMITER.acquire(background=background)
     try:
         resp = requests.get(LIQUIPEDIA_API, params=params, headers=headers, timeout=30)
     except requests.RequestException as e:
@@ -226,6 +230,23 @@ def fetch_matches_from_liquipedia() -> list[dict[str, Any]]:
     if isinstance(html, dict):  # formatversion 1 shape
         html = html.get("*", "")
     return parse_matches(str(html))
+
+
+def refresh_matches(background: bool = False) -> list[dict[str, Any]]:
+    """Fetch the Liquipedia matches page and cache the parsed series for CACHE_TTL.
+
+    Args:
+        background: True for the cache job (see fetch_matches_from_liquipedia)
+
+    Returns:
+        Series as returned by parse_matches
+
+    Raises:
+        ConnectionError, ValueError: As fetch_matches_from_liquipedia
+    """
+    matches = fetch_matches_from_liquipedia(background)
+    _cache_put({"matches": matches}, CACHE_TTL)
+    return matches
 
 
 def _cached_matches() -> list[dict[str, Any]]:
@@ -247,12 +268,10 @@ def _cached_matches() -> list[dict[str, Any]]:
         return matches
 
     try:
-        matches = fetch_matches_from_liquipedia()
+        return refresh_matches()
     except (ConnectionError, ValueError) as e:
         _cache_put({"error": str(e)}, ERROR_CACHE_TTL)
         raise ConnectionError(str(e)) from e
-    _cache_put({"matches": matches}, CACHE_TTL)
-    return matches
 
 
 def _cache_put(data: dict[str, Any], ttl: int) -> None:

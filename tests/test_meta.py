@@ -12,6 +12,7 @@ from backend.meta import (
     MetaParams,
     compute_meta,
     fetch_hero_stats,
+    refresh_hero_stats,
 )
 from backend.opendota import OpenDotaError
 
@@ -206,3 +207,11 @@ def test_endpoint_refresh_fetches_again_at_most_once_a_minute(client, fake_redis
         assert get.call_count == 2
     assert response.get_json()["fetched_at"] == 1_000_000 + MIN_REFRESH_INTERVAL
     assert "refresh" not in response.get_json()["params"]
+
+
+def test_refresh_hero_stats_caches_a_background_fetch(fake_redis):
+    with patch("backend.meta.get_json", return_value=HERO_STATS) as get:
+        heroes, _ = refresh_hero_stats(background=True)
+    assert len(heroes) == len(HERO_STATS)
+    assert get.call_args.kwargs["background"] is True
+    assert fake_redis.ttls[CACHE_KEY] == CACHE_TTL

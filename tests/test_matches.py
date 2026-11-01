@@ -9,10 +9,12 @@ import requests
 
 from backend.matches import (
     CACHE_KEY,
+    CACHE_TTL,
     ERROR_CACHE_TTL,
     TeamMatcher,
     normalize_team_name,
     parse_matches,
+    refresh_matches,
 )
 
 NOW = 1_800_000_000
@@ -352,3 +354,14 @@ def test_series_cached_without_tournament(client, fake_redis):
     response, _ = get_matches(client, liquipedia_response(""))
 
     assert response.get_json()["upcoming"][0]["tournament"] is None
+
+
+def test_refresh_matches_caches_a_background_fetch(fake_redis):
+    with (
+        patch("backend.matches.requests.get", return_value=liquipedia_response(PAGE)),
+        patch("backend.matches.LIQUIPEDIA_LIMITER.acquire") as acquire,
+    ):
+        matches = refresh_matches(background=True)
+    assert matches == parse_matches(PAGE)
+    acquire.assert_called_once_with(background=True)
+    assert fake_redis.ttls[CACHE_KEY] == CACHE_TTL

@@ -162,4 +162,4 @@ def test_liquipedia_fetch_waits_for_its_limiter():
         patch("backend.matches.requests.get", return_value=resp),
     ):
         assert fetch_matches_from_liquipedia() == []
-    acquire.assert_called_once_with()
+    acquire.assert_called_once_with(background=False)

@@ -844,7 +844,7 @@ def sync_teams(args: dict) -> tuple[Response, int]:
 @bp.response(200, JobSchema(many=True))
 @bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
 def get_jobs() -> tuple[Response, int]:
-    """List the background cache jobs (pro players, heroes, teams list) with their state and last run.
+    """List the background cache jobs with their state and last run.
 
     No OpenDota request. A job is due when it never succeeded or its last success is older than its limit
     (`next_run` is null then); a failed job is retried on its own after 10 minutes.

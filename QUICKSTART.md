@@ -44,6 +44,7 @@ npm test
 npm run backend      # Flask only
 npm run celery       # Celery worker only
 npm run celery:background  # Celery worker for cache jobs only
+npm run celery:beat        # Celery Beat: queues due cache jobs every minute
 npm run frontend     # React dev server
 npm run test:backend # Backend tests
 npm run test:frontend # Frontend tests

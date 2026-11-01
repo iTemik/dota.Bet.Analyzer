@@ -218,7 +218,7 @@ def _init_extensions(app):
     api.register_blueprint(dota_bp)
     celery_app.conf.update(app.config or {})
 
-    # Queue the due cache jobs (pro players, heroes, teams list) on the background worker; not in tests
+    # Queue the due cache jobs on the background worker; not in tests
     if app.config.get("TESTING") is not True:
         from .jobs import queue_due_jobs_on_startup
 

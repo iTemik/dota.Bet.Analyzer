@@ -1,7 +1,8 @@
-"""Background jobs that keep the OpenDota caches (pro players, heroes, teams list) up to date.
+"""Background jobs that keep the caches (pro players, heroes, teams list, hero meta, Liquipedia matches) up to date.
 
 Each job is declared once in JOBS with how old its data may get (`stale_after`). A due job is queued as a Celery
 task on the `background` queue, served by its own worker, so Compare never waits behind it. Jobs are queued:
+- every minute by Celery Beat (check_due_jobs_task) for every due job
 - at startup (Flask server only) for every due job
 - on team search and matches requests for the teams list
 - by POST /api/jobs/{name}/run
@@ -81,6 +82,21 @@ def _run_heroes() -> str:
     return f"Stored {store_heroes(heroes)} heroes"
 
 
+def _run_hero_meta() -> str:
+    from backend.meta import refresh_hero_stats
+
+    heroes, _ = refresh_hero_stats(background=True)
+    if not heroes:
+        raise ValueError("OpenDota returned no hero stats")
+    return f"Cached stats of {len(heroes)} heroes"
+
+
+def _run_matches() -> str:
+    from backend.matches import refresh_matches
+
+    return f"Cached {len(refresh_matches(background=True))} series"
+
+
 def _run_teams() -> str:
     from backend.teams_sync import run_teams_sync
 
@@ -116,6 +132,10 @@ JOBS: dict[str, Job] = {
         Job(name="heroes", title="Heroes", run=_run_heroes, stale_after=7 * 86400),
         # Incremental: 2 explorer requests (full ~22 only when the table is empty)
         Job(name="teams", title="Teams list", run=_run_teams, stale_after=24 * 3600),
+        # One /heroStats request; OpenDota recomputes it a few times a day (Meta tab)
+        Job(name="hero_meta", title="Hero meta", run=_run_hero_meta, stale_after=3600),
+        # One Liquipedia parse (their limit: 1 per 30 s); upcoming and finished series of the main page
+        Job(name="matches", title="Matches", run=_run_matches, stale_after=10 * 60),
     )
 }
 
@@ -365,6 +385,19 @@ def run_job(name: str, token: str) -> Optional[str]:
     finally:
         _release(name, token)
     return message
+
+
+@celery.task(name="backend.jobs.check_due_jobs_task", ignore_result=True)
+def check_due_jobs_task() -> list[str]:
+    """Celery task sent every minute by Celery Beat (see CHECK_DUE_JOBS_SCHEDULE): queue every due job.
+
+    Returns:
+        Names of the queued jobs
+    """
+    from backend import create_app
+
+    with create_app().app_context():
+        return queue_due_jobs()
 
 
 @celery.task(name="backend.jobs.run_job_task")
