@@ -33,7 +33,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `snapshots.py`, `predictions.py` | user data in predictions.sqlite via `db.get_user_db()` |
 | `helpers.py` | `Errors` registry (ErrorDefinition code+message), `ApiError`, `api_error(status, Errors.X, exc=None, **details)` → (Response, status), explorer SQL builder, `ExplorerTeam` |
 | `schemas.py` | marshmallow schemas; `pydantic_to_marshmallow` derives ErrorSchema/TeamStatsSchema/StatsResponseSchema/PlayerSchema from pydantic |
-| `d2ba_schema.sql`, `predictions_schema.sql` | docs only, not applied; keep in sync with migrations |
+| `d2ba_schema.sql`, `predictions_schema.sql` | docs only, not applied; `tests/test_migrations_match_schema.py` fails when they differ from the migrations |
 
 ## Request paths (queueing rules; pick one for new work)
 1. Every HTTP call → `opendota.get_json` (Liquipedia: `matches.fetch_matches_from_liquipedia`). Never `requests.get` elsewhere (`tests/test_network_guard.py` fails if another backend module imports an HTTP library). The limiter orders all processes; user calls (default) go before `background=True`.
