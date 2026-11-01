@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { formatDateTime, formatPercent } from '../format'
 import { requestJson } from '../predictions'
-import { BRACKETS, DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
+import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
 import type { Meta, MetaParams, ProMetaHero, PubMetaHero } from '../types'
 
+// Saved thresholds over the defaults; keys no longer used (e.g. from an older version) are dropped
 const loadParams = (): MetaParams => {
   try {
-    return { ...DEFAULT_META_PARAMS, ...JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}') }
+    const saved = JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')
+    const keys = Object.keys(DEFAULT_META_PARAMS) as (keyof MetaParams)[]
+    return Object.fromEntries(keys.map((k) => [k, saved[k] ?? DEFAULT_META_PARAMS[k]])) as unknown as MetaParams
   } catch {
     return DEFAULT_META_PARAMS
   }
@@ -83,7 +86,7 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
   { key: 'pro_min_pick_ban', label: 'Pro meta: Pick + Ban % above', min: 0, max: 100, step: 0.1 },
   { key: 'ultra_min_win', label: 'Ultra meta: Win % above', min: 0, max: 100, step: 0.1 },
   { key: 'ultra_min_picks', label: 'Ultra meta: at least picks', min: 1 },
-  { key: 'pub_top', label: 'Pub meta: top heroes', min: 1, max: 200 },
+  { key: 'pub_top', label: 'Pub meta: top Immortal heroes', min: 1, max: 200 },
 ]
 
 /** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats, with adjustable thresholds. */
@@ -149,16 +152,6 @@ function MetaTab() {
               />
             </label>
           ))}
-          <label className="prediction-field">
-            <span>Pub meta: bracket</span>
-            <select value={form.pub_bracket} onChange={(e) => setField('pub_bracket', e.target.value)}>
-              {BRACKETS.map((name, i) => (
-                <option key={name} value={i + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
         <div className="meta-buttons">
           <button type="submit">Apply</button>
@@ -194,10 +187,8 @@ function MetaTab() {
           <ProMetaTable label="Ultra meta" heroes={data.ultra_meta} />
           <h2>Pub Meta</h2>
           <p className="prediction-hint">
-            Top {data.params.pub_top} heroes by win rate in {data.pub_bracket_name} games ({data.pub_matches}{' '}
-            matches).
-            {data.pub_bracket !== data.params.pub_bracket &&
-              ` OpenDota has no ${BRACKETS[data.params.pub_bracket - 1]} games, so ${data.pub_bracket_name} is shown.`}
+            Top {data.params.pub_top} heroes by win rate in {data.pub_bracket} games ({data.pub_matches} matches).
+            {data.pub_bracket !== 'Immortal' && ` OpenDota has no Immortal games, so ${data.pub_bracket} is shown.`}
           </p>
           <PubMetaTable heroes={data.pub_meta} />
           <p className="prediction-hint">

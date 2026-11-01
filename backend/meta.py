@@ -7,8 +7,8 @@ CACHE_TTL, so the thresholds (query parameters) can be changed without a new req
 - Pro meta: heroes whose pick + ban rate in pro matches is above `pro_min_pick_ban` percent. The rate is
   (picks + bans) / pro matches, where pro matches = all pro picks / 10, the same as OpenDota's Pro P+B%.
 - Ultra meta: pro meta heroes with a pro win rate above `ultra_min_win` percent and at least `ultra_min_picks` picks.
-- Pub meta: the `pub_top` heroes with the highest win rate in rank bracket `pub_bracket` (8 = Immortal). OpenDota
-  currently has no Immortal games, so an empty bracket falls back to the highest lower bracket with games.
+- Pub meta: the `pub_top` heroes with the highest win rate in Immortal games. OpenDota currently has no Immortal
+  games, so the highest lower bracket with games is used instead (Divine).
 """
 
 import json
@@ -48,7 +48,6 @@ class MetaParams:
     pro_min_pick_ban: float = 30.0  # percent of pro matches
     ultra_min_win: float = 55.0  # percent
     ultra_min_picks: int = 5  # so a hero with 2 wins in 2 picks is not ultra meta
-    pub_bracket: int = 8  # Immortal
     pub_top: int = 30
 
 
@@ -141,9 +140,9 @@ def _percent(part: int, whole: int) -> Optional[float]:
     return round(100 * part / whole, 1) if whole else None
 
 
-def _pub_bracket(heroes: list[dict[str, Any]], requested: int) -> int:
-    """The requested bracket, or the highest lower bracket with games when it has none (1 when all are empty)."""
-    for bracket in range(requested, 0, -1):
+def _pub_bracket(heroes: list[dict[str, Any]]) -> int:
+    """Immortal, or the highest lower bracket with games when it has none (1 when all are empty)."""
+    for bracket in range(max(BRACKETS), 0, -1):
         if any(h["pub"][str(bracket)][0] for h in heroes):
             return bracket
     return 1
@@ -157,8 +156,8 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
         params: Thresholds
 
     Returns:
-        pro_matches, pub_bracket (used), pub_matches, and the lists pro_meta (pick + ban rate, highest first),
-        ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (highest win rate first)
+        pro_matches, pub_bracket (name of the bracket used), pub_matches, and the lists pro_meta (pick + ban rate,
+        highest first), ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (highest win rate first)
     """
     pro_matches = round(sum(h["pro_pick"] for h in heroes) / PICKS_PER_MATCH)
 
@@ -188,7 +187,7 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
     ]
     ultra_meta = sorted(ultra_meta, key=lambda h: (-h["win_rate"], h["localized_name"]))
 
-    bracket = _pub_bracket(heroes, params.pub_bracket)
+    bracket = _pub_bracket(heroes)
     key = str(bracket)
     pub_matches = round(sum(h["pub"][key][0] for h in heroes) / PICKS_PER_MATCH)
     pub = [
@@ -208,8 +207,7 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
 
     return {
         "pro_matches": pro_matches,
-        "pub_bracket": bracket,
-        "pub_bracket_name": BRACKETS[bracket],
+        "pub_bracket": BRACKETS[bracket],
         "pub_matches": pub_matches,
         "pro_meta": pro_meta,
         "ultra_meta": ultra_meta,

@@ -705,15 +705,10 @@ class MetaQuerySchema(Schema):
         validate=validate.Range(min=1),
         metadata={"description": "Ultra meta: minimum pro picks"},
     )
-    pub_bracket = fields.Int(
-        load_default=MetaParams.pub_bracket,
-        validate=validate.Range(min=1, max=8),
-        metadata={"description": "Pub meta: rank bracket, 1 = Herald ... 8 = Immortal"},
-    )
     pub_top = fields.Int(
         load_default=MetaParams.pub_top,
         validate=validate.Range(min=1, max=200),
-        metadata={"description": "Pub meta: number of heroes with the highest win rate"},
+        metadata={"description": "Pub meta: number of Immortal heroes with the highest win rate"},
     )
     refresh = fields.Bool(
         load_default=False,
@@ -769,10 +764,9 @@ class MetaSchema(Schema):
     fetched_at = fields.Int(required=True, metadata={"description": "When the hero stats were fetched (unix seconds)"})
     params = fields.Dict(required=True, metadata={"description": "Thresholds used"})
     pro_matches = fields.Int(required=True, metadata={"description": "Pro matches in the window (pro picks / 10)"})
-    pub_bracket = fields.Int(
-        required=True, metadata={"description": "Bracket used; lower than requested when it had no games"}
+    pub_bracket = fields.Str(
+        required=True, metadata={"description": "Bracket used: Immortal, or the highest bracket with games (Divine)"}
     )
-    pub_bracket_name = fields.Str(required=True, metadata={"description": "Bracket name, e.g. Divine"})
     pub_matches = fields.Int(required=True, metadata={"description": "Matches in the bracket (picks / 10)"})
     pro_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
     ultra_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)

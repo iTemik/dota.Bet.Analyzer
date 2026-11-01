@@ -15,8 +15,7 @@ const meta: Meta = {
   fetched_at: 1_800_000_000,
   params: DEFAULT_META_PARAMS,
   pro_matches: 76,
-  pub_bracket: 7,
-  pub_bracket_name: 'Divine',
+  pub_bracket: 'Divine',
   pub_matches: 1000,
   pro_meta: [
     { ...hero(4, 'Delta'), picks: 40, bans: 20, wins: 25, pick_ban_rate: 78.9, win_rate: 62.5 },
@@ -39,7 +38,7 @@ const rows = (label: string) =>
     .map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))
 
 const DEFAULT_URL =
-  '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_bracket=8&pub_top=30'
+  '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30'
 
 describe('MetaTab', () => {
   beforeEach(() => {
@@ -84,14 +83,12 @@ describe('MetaTab', () => {
     const pickBan = screen.getByLabelText('Pro meta: Pick + Ban % above')
     await user.clear(pickBan)
     await user.type(pickBan, '20')
-    await user.selectOptions(screen.getByLabelText('Pub meta: bracket'), 'Divine')
     await user.click(screen.getByRole('button', { name: 'Apply' }))
 
-    const url = '/api/heroes/meta?pro_min_pick_ban=20&ultra_min_win=55&ultra_min_picks=5&pub_bracket=7&pub_top=30'
+    const url = '/api/heroes/meta?pro_min_pick_ban=20&ultra_min_win=55&ultra_min_picks=5&pub_top=30'
     expect(fetchMock).toHaveBeenLastCalledWith(url, undefined)
     expect(JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')).toMatchObject({
       pro_min_pick_ban: 20,
-      pub_bracket: 7,
     })
 
     await user.click(screen.getByRole('button', { name: 'Defaults' }))
@@ -116,19 +113,19 @@ describe('MetaTab', () => {
   })
 
   it('loads saved thresholds', async () => {
-    localStorage.setItem(META_PARAMS_KEY, JSON.stringify({ pub_top: 10 }))
+    localStorage.setItem(META_PARAMS_KEY, JSON.stringify({ pub_top: 10, pub_bracket: 7 }))
     const fetchMock = mockFetch(meta)
     render(<MetaTab />)
     await screen.findByRole('heading', { name: 'Pro Meta' })
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_bracket=8&pub_top=10',
+      '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=10',
       undefined,
     )
-    expect(screen.getByLabelText('Pub meta: top heroes')).toHaveValue(10)
+    expect(screen.getByLabelText('Pub meta: top Immortal heroes')).toHaveValue(10)
   })
 
   it('shows empty lists and errors', async () => {
-    mockFetch({ ...meta, pub_bracket: 8, pro_meta: [], ultra_meta: [], pub_meta: [] })
+    mockFetch({ ...meta, pub_bracket: 'Immortal', pro_meta: [], ultra_meta: [], pub_meta: [] })
     const { unmount } = render(<MetaTab />)
     expect(await screen.findAllByText('No heroes match these thresholds.')).toHaveLength(2)
     expect(screen.getByText('No pub games in this bracket.')).toBeInTheDocument()

@@ -226,7 +226,6 @@ export interface MetaParams {
   pro_min_pick_ban: number
   ultra_min_win: number
   ultra_min_picks: number
-  pub_bracket: number
   pub_top: number
 }
 
@@ -235,8 +234,7 @@ export interface Meta {
   fetched_at: number
   params: MetaParams
   pro_matches: number
-  pub_bracket: number
-  pub_bracket_name: string
+  pub_bracket: string // Immortal, or the highest bracket with games
   pub_matches: number
   pro_meta: ProMetaHero[]
   ultra_meta: ProMetaHero[]

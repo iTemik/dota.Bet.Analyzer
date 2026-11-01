@@ -88,7 +88,7 @@ def test_compute_meta_defaults():
     }
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Alpha", "Delta"]
     # Immortal is empty, so Divine is used; sorted by win rate
-    assert (meta["pub_bracket"], meta["pub_bracket_name"], meta["pub_matches"]) == (7, "Divine", 30)
+    assert (meta["pub_bracket"], meta["pub_matches"]) == ("Divine", 30)
     assert [(h["localized_name"], h["win_rate"]) for h in meta["pub_meta"]] == [
         ("Alpha", 60.0),
         ("Gamma", 60.0),
@@ -99,19 +99,26 @@ def test_compute_meta_defaults():
 
 
 def test_compute_meta_custom_params():
-    params = MetaParams(pro_min_pick_ban=20, ultra_min_win=50, ultra_min_picks=1, pub_bracket=6, pub_top=1)
+    params = MetaParams(pro_min_pick_ban=20, ultra_min_win=50, ultra_min_picks=1, pub_top=1)
     meta = compute_meta(heroes(), params)
     assert [h["localized_name"] for h in meta["pro_meta"]] == ["Delta", "Alpha", "Beta", "Gamma"]
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Beta", "Alpha", "Delta"]
-    assert meta["pub_bracket"] == 6
-    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Gamma"]
+    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Alpha"]
+
+
+def test_compute_meta_uses_immortal_when_it_has_games():
+    stats = [*HERO_STATS, hero_stats_entry(5, "Epsilon", (0, 0, 0), {8: (20, 11), 7: (10, 1)})]
+    with patch("backend.meta.get_json", return_value=stats):
+        meta = compute_meta(fetch_hero_stats(), MetaParams())
+    assert (meta["pub_bracket"], meta["pub_matches"]) == ("Immortal", 2)
+    assert [(h["localized_name"], h["win_rate"]) for h in meta["pub_meta"]] == [("Epsilon", 55.0)]
 
 
 def test_compute_meta_empty():
     meta = compute_meta([], MetaParams())
     assert meta["pro_matches"] == 0
     assert meta["pro_meta"] == meta["ultra_meta"] == meta["pub_meta"] == []
-    assert meta["pub_bracket"] == 1
+    assert meta["pub_bracket"] == "Herald"
 
 
 class FakeRedis:
@@ -148,11 +155,10 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
         "pro_min_pick_ban": 30.0,
         "ultra_min_win": 55.0,
         "ultra_min_picks": 5,
-        "pub_bracket": 8,
         "pub_top": 30,
     }
     assert [h["hero_id"] for h in data["pro_meta"]] == [4, 1, 2]
-    assert data["pub_bracket_name"] == "Divine"
+    assert data["pub_bracket"] == "Divine"
     assert isinstance(data["fetched_at"], int)
     again_data = again.get_json()
     assert [h["hero_id"] for h in again_data["pro_meta"]] == [4, 1, 2, 3]
@@ -160,7 +166,7 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
 
 
 def test_endpoint_rejects_invalid_params(client, fake_redis):
-    for query in ("pub_bracket=9", "pro_min_pick_ban=-1", "pub_top=0", "ultra_min_picks=0", "ultra_min_win=abc"):
+    for query in ("pro_min_pick_ban=101", "pro_min_pick_ban=-1", "pub_top=0", "ultra_min_picks=0", "ultra_min_win=abc"):
         assert client.get(f"/api/heroes/meta?{query}").status_code == 422, query
 
 
