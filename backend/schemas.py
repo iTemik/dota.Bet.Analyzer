@@ -715,6 +715,12 @@ class MetaQuerySchema(Schema):
         validate=validate.Range(min=1, max=200),
         metadata={"description": "Pub meta: number of heroes with the highest win rate"},
     )
+    refresh = fields.Bool(
+        load_default=False,
+        metadata={
+            "description": "Fetch new hero stats from OpenDota instead of the 1 hour cache (at most once a minute)"
+        },
+    )
 
 
 class ProMetaHeroSchema(Schema):

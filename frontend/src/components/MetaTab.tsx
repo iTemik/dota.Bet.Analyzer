@@ -92,6 +92,7 @@ function MetaTab() {
   const [form, setForm] = useState<MetaParams>(params)
   const [data, setData] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -116,6 +117,17 @@ function MetaTab() {
     localStorage.removeItem(META_PARAMS_KEY)
     setForm(DEFAULT_META_PARAMS)
     setParams(DEFAULT_META_PARAMS)
+  }
+  // New hero stats from OpenDota instead of the backend's 1 hour cache
+  const refresh = () => {
+    setRefreshing(true)
+    requestJson<Meta>(`${metaUrl(params)}&refresh=true`)
+      .then((result) => {
+        setData(result)
+        setError(null)
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setRefreshing(false))
   }
   const setField = (key: keyof MetaParams, value: string) => setForm({ ...form, [key]: Number(value) })
 
@@ -160,10 +172,15 @@ function MetaTab() {
       {!data && !error && <p>Loading meta...</p>}
       {data && (
         <>
-          <p className="prediction-hint">
-            OpenDota hero stats for about the last 7 days: {data.pro_matches} pro matches. Updated{' '}
-            {formatDateTime(data.fetched_at)}.
-          </p>
+          <div className="meta-updated">
+            <p className="prediction-hint">
+              OpenDota hero stats for about the last 7 days: {data.pro_matches} pro matches. Updated{' '}
+              {formatDateTime(data.fetched_at)}.
+            </p>
+            <button type="button" onClick={refresh} disabled={refreshing}>
+              {refreshing ? 'Refreshing...' : 'Refresh data'}
+            </button>
+          </div>
           <h2>Pro Meta</h2>
           <p className="prediction-hint">
             Pick + Ban rate in pro matches above {data.params.pro_min_pick_ban}%.

@@ -8,6 +8,7 @@ from backend.meta import (
     CACHE_KEY,
     CACHE_TTL,
     ERROR_CACHE_TTL,
+    MIN_REFRESH_INTERVAL,
     MetaParams,
     compute_meta,
     fetch_hero_stats,
@@ -185,3 +186,16 @@ def test_endpoint_works_without_redis(client):
     with patch("backend.meta.redis_client", Broken()), patch("backend.meta.get_json", return_value=HERO_STATS):
         response = client.get("/api/heroes/meta")
     assert response.status_code == 200
+
+
+def test_endpoint_refresh_fetches_again_at_most_once_a_minute(client, fake_redis):
+    with patch("backend.meta.get_json", return_value=HERO_STATS) as get, patch("backend.meta.time.time") as now:
+        now.return_value = 1_000_000
+        client.get("/api/heroes/meta")
+        assert client.get("/api/heroes/meta?refresh=true").status_code == 200
+        assert get.call_count == 1  # cached stats are newer than MIN_REFRESH_INTERVAL
+        now.return_value = 1_000_000 + MIN_REFRESH_INTERVAL
+        response = client.get("/api/heroes/meta?refresh=true")
+        assert get.call_count == 2
+    assert response.get_json()["fetched_at"] == 1_000_000 + MIN_REFRESH_INTERVAL
+    assert "refresh" not in response.get_json()["params"]

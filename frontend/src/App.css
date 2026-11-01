@@ -814,3 +814,15 @@ pre {
   vertical-align: middle;
   margin-right: 0.5rem;
 }
+
+.meta-updated {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+  margin-bottom: 1rem;
+}
+
+.meta-updated .prediction-hint {
+  margin: 0;
+}

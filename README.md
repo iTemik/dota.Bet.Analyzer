@@ -653,7 +653,7 @@ Async task for comprehensive player analysis:
 #### Hero Meta (`/heroes/meta`)
 - Pro meta: heroes with Pick + Ban rate in pro matches above 30%; ultra meta: those with win rate above 55% (5+ picks)
 - Pub meta: top 30 heroes by win rate in the Immortal bracket (Divine when OpenDota has no Immortal games)
-- One `/heroStats` request (OpenDota's window, about the last 7 days), cached in Redis for 1 hour
+- One `/heroStats` request (OpenDota's window, about the last 7 days), cached in Redis for 1 hour; `refresh=true` (Refresh data button) fetches again, at most once a minute
 - Thresholds are query parameters, adjustable on the Meta tab and kept in the browser
 
 #### Matches (`/matches`)

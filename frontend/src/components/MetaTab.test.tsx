@@ -100,6 +100,21 @@ describe('MetaTab', () => {
     expect(screen.getByLabelText('Pro meta: Pick + Ban % above')).toHaveValue(30)
   })
 
+  it('refreshes the hero stats from OpenDota with the current thresholds', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockFetch(meta)
+    render(<MetaTab />)
+    await screen.findByRole('heading', { name: 'Pro Meta' })
+
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ...meta, pro_matches: 80 }) }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Refresh data' }))
+    expect(fetchMock).toHaveBeenLastCalledWith(`${DEFAULT_URL}&refresh=true`, undefined)
+    expect(await screen.findByText(/80 pro matches/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh data' })).toBeEnabled()
+  })
+
   it('loads saved thresholds', async () => {
     localStorage.setItem(META_PARAMS_KEY, JSON.stringify({ pub_top: 10 }))
     const fetchMock = mockFetch(meta)

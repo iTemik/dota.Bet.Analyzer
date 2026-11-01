@@ -26,6 +26,7 @@ logger = setup_logging(__name__)
 CACHE_KEY = "opendota:hero_stats"
 CACHE_TTL = 3600  # seconds; OpenDota recomputes hero stats a few times a day
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner
+MIN_REFRESH_INTERVAL = 60  # seconds; a forced refresh of newer stats uses the cache
 
 BRACKETS = {
     1: "Herald",
@@ -100,10 +101,13 @@ def _cache_put(data: dict[str, Any], ttl: int) -> None:
         logger.warning(f"Failed to cache hero stats: {e}")
 
 
-def cached_hero_stats() -> tuple[list[dict[str, Any]], int]:
+def cached_hero_stats(refresh: bool = False) -> tuple[list[dict[str, Any]], int]:
     """Hero stats from Redis, fetched from OpenDota when the cache is empty.
 
     A failure is cached for ERROR_CACHE_TTL and raised again from the cache.
+
+    Args:
+        refresh: Fetch again even when cached, unless the cached stats are newer than MIN_REFRESH_INTERVAL
 
     Returns:
         Hero stats as returned by fetch_hero_stats, and the fetch time (unix seconds)
@@ -120,7 +124,8 @@ def cached_hero_stats() -> tuple[list[dict[str, Any]], int]:
         data: dict[str, Any] = json.loads(cached)
         if "error" in data:
             raise ConnectionError(data["error"])
-        return data["heroes"], int(data["fetched_at"])
+        if not refresh or time.time() - int(data["fetched_at"]) < MIN_REFRESH_INTERVAL:
+            return data["heroes"], int(data["fetched_at"])
 
     try:
         heroes = fetch_hero_stats()
@@ -212,11 +217,12 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
     }
 
 
-def get_meta(params: MetaParams) -> dict[str, Any]:
+def get_meta(params: MetaParams, refresh: bool = False) -> dict[str, Any]:
     """Meta lists for GET /api/heroes/meta: at most one /heroStats request per CACHE_TTL.
 
     Args:
         params: Thresholds
+        refresh: Fetch the hero stats again instead of using the cache (see cached_hero_stats)
 
     Returns:
         compute_meta output plus fetched_at (when the hero stats were fetched) and the params used
@@ -224,5 +230,5 @@ def get_meta(params: MetaParams) -> dict[str, Any]:
     Raises:
         ConnectionError: If the hero stats could not be fetched
     """
-    heroes, fetched_at = cached_hero_stats()
+    heroes, fetched_at = cached_hero_stats(refresh)
     return {"fetched_at": fetched_at, "params": params.__dict__, **compute_meta(heroes, params)}

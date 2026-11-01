@@ -888,11 +888,12 @@ def sync_heroes() -> tuple[Response, int]:
 def get_hero_meta(args: dict) -> tuple[Response, int]:
     """Pro meta, ultra meta and pub meta heroes from OpenDota /heroStats (about the last 7 days).
 
-    At most one OpenDota request per hour (cached in Redis); the thresholds are query parameters, so changing
-    them needs no new request.
+    At most one OpenDota request per hour (cached in Redis), or per minute with `refresh=true`; the thresholds
+    are query parameters, so changing them needs no new request.
     """
     try:
-        return jsonify(get_meta(MetaParams(**args))), 200
+        refresh = args.pop("refresh", False)
+        return jsonify(get_meta(MetaParams(**args), refresh)), 200
     except ConnectionError as e:
         return api_error(503, Errors.FAILED_TO_FETCH_HERO_STATS, e)
 
