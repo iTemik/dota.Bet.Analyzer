@@ -81,4 +81,4 @@ def test_rate_limiter_uses_shared_client_by_default():
 
     shared = MagicMock()
     with patch.object(cache, "redis_client", shared):
-        assert RateLimiter("x", 1).client is shared
+        assert RateLimiter("x", 1, 60).client is shared
