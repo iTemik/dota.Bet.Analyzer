@@ -6,7 +6,6 @@ CACHE_TTL; the `matches` cache job (backend.jobs) refreshes them every 10 minute
 the d2ba.sqlite `teams` table for their OpenDota id and logo (no request).
 """
 
-import json
 import re
 import time
 from html.parser import HTMLParser
@@ -15,11 +14,11 @@ from typing import Any, ClassVar, Optional
 import requests
 
 from backend import __version__
+from backend.cache import cache_set, cached_json
 from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import get_d2ba_db
 from backend.rate_limit import RateLimiter
-from backend.task_store import redis_client
 
 logger = setup_logging(__name__)
 
@@ -245,7 +244,7 @@ def refresh_matches(background: bool = False) -> list[dict[str, Any]]:
         ConnectionError, ValueError: As fetch_matches_from_liquipedia
     """
     matches = fetch_matches_from_liquipedia(background)
-    _cache_put({"matches": matches}, CACHE_TTL)
+    cache_set(CACHE_KEY, CACHE_TTL, {"matches": matches})
     return matches
 
 
@@ -255,30 +254,9 @@ def _cached_matches() -> list[dict[str, Any]]:
     A failure is cached for ERROR_CACHE_TTL and raised again from the cache, so a broken page or network
     does not turn every page load into a new Liquipedia request.
     """
-    try:
-        cached = redis_client.get(CACHE_KEY)
-    except Exception as e:
-        logger.warning(f"Redis unavailable for matches cache: {e}")
-        cached = None
-    if cached is not None:
-        data: dict[str, Any] = json.loads(cached)
-        if "error" in data:
-            raise ConnectionError(data["error"])
-        matches: list[dict[str, Any]] = data["matches"]
-        return matches
-
-    try:
-        return refresh_matches()
-    except (ConnectionError, ValueError) as e:
-        _cache_put({"error": str(e)}, ERROR_CACHE_TTL)
-        raise ConnectionError(str(e)) from e
-
-
-def _cache_put(data: dict[str, Any], ttl: int) -> None:
-    try:
-        redis_client.setex(CACHE_KEY, ttl, json.dumps(data))
-    except Exception as e:
-        logger.warning(f"Failed to cache matches: {e}")
+    data = cached_json(CACHE_KEY, CACHE_TTL, lambda: {"matches": fetch_matches_from_liquipedia()}, ERROR_CACHE_TTL)
+    matches: list[dict[str, Any]] = data["matches"]
+    return matches
 
 
 def normalize_team_name(name: str) -> str:

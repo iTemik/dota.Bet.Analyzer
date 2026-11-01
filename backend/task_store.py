@@ -3,18 +3,15 @@
 import json
 import time
 
-import redis
 from redis.client import PubSub
 
-from backend.config import Config
+from backend import cache
+from backend.cache import cached_json
 from backend.logging_config import setup_logging
 from backend.opendota import WaitCallback
 from backend.stats import MatchStats, get_matches, get_rank
 
 logger = setup_logging(__name__)
-
-# Redis for progress, results and the player cache
-redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
 
 
 def _progress_channel(task_id: str) -> str:
@@ -41,9 +38,9 @@ def update_progress(task_id: str, step: int, message: str, progress: float, data
             "data": data or {},
             "timestamp": time.time(),
         }
-        redis_client.setex(f"progress:{task_id}", 3600, json.dumps(progress_data))  # Expire after 1 hour
+        cache.redis_client.setex(f"progress:{task_id}", 3600, json.dumps(progress_data))  # Expire after 1 hour
         # Wake open progress streams; they read the snapshot above, so the message carries no data
-        redis_client.publish(_progress_channel(task_id), str(step))
+        cache.redis_client.publish(_progress_channel(task_id), str(step))
         logger.debug(f"Progress updated for task {task_id}: {message} ({progress}%)")
     except Exception as e:
         # Log error but don't fail the task if Redis is unavailable
@@ -122,7 +119,7 @@ def store_results(task_id: str, results_data: dict) -> None:
         results_data: Heavy results data (will be stored separately)
     """
     try:
-        redis_client.setex(f"results:{task_id}", 3600, json.dumps(results_data))  # Expire after 1 hour
+        cache.redis_client.setex(f"results:{task_id}", 3600, json.dumps(results_data))  # Expire after 1 hour
         logger.debug(f"Results stored for task {task_id}")
     except Exception as e:
         logger.warning(f"Failed to store results for task {task_id}: {e}")
@@ -140,7 +137,7 @@ def progress_exists(task_id: str) -> bool:
     Raises:
         Exception: If Redis is unavailable
     """
-    return redis_client.get(f"progress:{task_id}") is not None
+    return cache.redis_client.get(f"progress:{task_id}") is not None
 
 
 def load_results(task_id: str) -> dict | None:
@@ -155,7 +152,7 @@ def load_results(task_id: str) -> dict | None:
     Raises:
         Exception: If Redis is unavailable or the stored value is not valid JSON
     """
-    results_data = redis_client.get(f"results:{task_id}")
+    results_data = cache.redis_client.get(f"results:{task_id}")
     if not results_data:
         return None
     results: dict = json.loads(results_data)
@@ -166,37 +163,13 @@ PLAYER_MATCHES_CACHE_TTL = 60 * 60  # 1 hour
 PLAYER_RANK_CACHE_TTL = 24 * 60 * 60  # 1 day
 
 
-def _cache_get(key: str) -> object | None:
-    """Read a JSON value from the Redis cache (None if missing or Redis is unavailable).
-
-    Args:
-        key: Cache key
-
-    Returns:
-        Decoded JSON value or None
-    """
+def _valid_matches(value: object) -> bool:
+    """True when a cached value can be read back as a list of MatchStats."""
     try:
-        raw = redis_client.get(key)
-        if isinstance(raw, (bytes, str)):
-            value: object = json.loads(raw)
-            return value
+        return isinstance(value, list) and all(isinstance(MatchStats(**item), MatchStats) for item in value)
     except Exception as e:
-        logger.debug(f"Cache read failed for {key}: {e}")
-    return None
-
-
-def _cache_set(key: str, ttl: int, value: object) -> None:
-    """Write a JSON value to the Redis cache, ignoring errors.
-
-    Args:
-        key: Cache key
-        ttl: Time to live in seconds
-        value: JSON-serializable value
-    """
-    try:
-        redis_client.setex(key, ttl, json.dumps(value))
-    except Exception as e:
-        logger.debug(f"Cache write failed for {key}: {e}")
+        logger.debug(f"Ignoring malformed cached matches: {e}")
+        return False
 
 
 def get_matches_cached(account_id: int, days: int, on_wait: WaitCallback | None = None) -> list[MatchStats]:
@@ -210,16 +183,13 @@ def get_matches_cached(account_id: int, days: int, on_wait: WaitCallback | None 
     Returns:
         List of MatchStats
     """
-    key = f"opendota:matches:{account_id}:{days}"
-    cached = _cache_get(key)
-    if isinstance(cached, list):
-        try:
-            return [MatchStats(**item) for item in cached]
-        except Exception as e:
-            logger.debug(f"Ignoring malformed cached matches for {account_id}: {e}")
-    matches = get_matches(account_id=account_id, days=days, on_wait=on_wait)
-    _cache_set(key, PLAYER_MATCHES_CACHE_TTL, [m.model_dump() for m in matches])
-    return matches
+    items = cached_json(
+        f"opendota:matches:{account_id}:{days}",
+        PLAYER_MATCHES_CACHE_TTL,
+        lambda: [m.model_dump() for m in get_matches(account_id=account_id, days=days, on_wait=on_wait)],
+        use=_valid_matches,
+    )
+    return [MatchStats(**item) for item in items]
 
 
 def get_rank_cached(account_id: int, on_wait: WaitCallback | None = None) -> int | None:
@@ -232,14 +202,14 @@ def get_rank_cached(account_id: int, on_wait: WaitCallback | None = None) -> int
     Returns:
         Leaderboard rank or None
     """
-    key = f"opendota:rank:{account_id}"
-    cached = _cache_get(key)
-    if isinstance(cached, dict) and "rank" in cached:
-        rank = cached["rank"]
-        return rank if isinstance(rank, int) else None
-    rank = get_rank(account_id, on_wait=on_wait)
-    _cache_set(key, PLAYER_RANK_CACHE_TTL, {"rank": rank})
-    return rank
+    data = cached_json(
+        f"opendota:rank:{account_id}",
+        PLAYER_RANK_CACHE_TTL,
+        lambda: {"rank": get_rank(account_id, on_wait=on_wait)},
+        use=lambda value: isinstance(value, dict) and "rank" in value,
+    )
+    rank = data["rank"]
+    return rank if isinstance(rank, int) else None
 
 
 def subscribe_progress(task_id: str) -> PubSub:
@@ -254,7 +224,7 @@ def subscribe_progress(task_id: str) -> PubSub:
     Raises:
         Exception: If Redis is unavailable
     """
-    subscription = redis_client.pubsub(ignore_subscribe_messages=True)
+    subscription = cache.redis_client.pubsub(ignore_subscribe_messages=True)
     subscription.subscribe(_progress_channel(task_id))
     return subscription
 
@@ -284,5 +254,5 @@ def read_progress(task_id: str) -> bytes | None:
     Raises:
         Exception: If Redis is unavailable
     """
-    progress: bytes | None = redis_client.get(f"progress:{task_id}")
+    progress: bytes | None = cache.redis_client.get(f"progress:{task_id}")
     return progress

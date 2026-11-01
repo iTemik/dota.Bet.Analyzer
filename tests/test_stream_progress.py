@@ -58,7 +58,7 @@ class FakeProgress:
 def fake_progress():
     """Patch Redis and the stream clock; call the result with the snapshots to serve."""
     with (
-        patch("backend.task_store.redis_client") as mock_redis,
+        patch("backend.cache.redis_client") as mock_redis,
         patch("backend.dota_bet_analyzer.time.monotonic") as mock_monotonic,
     ):
         yield lambda snapshots, **kwargs: FakeProgress(mock_redis, mock_monotonic, snapshots, **kwargs)
@@ -72,7 +72,7 @@ def stream_lines(rv) -> list[dict]:
 class TestStreamProgressEndpoint:
     """Test suite for /stream-progress/<task_id> endpoint."""
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_stream_progress_task_not_found_returns_404(self, mock_redis, client):
         """Test that stream_progress returns 404 when task doesn't exist."""
         mock_redis.get.return_value = None
@@ -85,7 +85,7 @@ class TestStreamProgressEndpoint:
         assert data["code"] == "RESULTS_NOT_FOUND"
         assert "nonexistent_task" in data["details"]["task_id"]
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_stream_progress_redis_error_returns_500(self, mock_redis, client):
         """Test that stream_progress returns 500 when Redis connection fails."""
         mock_redis.get.side_effect = ConnectionError("Redis connection failed")
@@ -206,9 +206,9 @@ class TestStreamProgressEndpoint:
 
 
 def test_progress_is_rounded_to_one_decimal():
-    from backend import task_store
+    from backend import cache, task_store
 
-    with patch.object(task_store, "redis_client") as redis:
+    with patch.object(cache, "redis_client") as redis:
         task_store.update_progress("task_1", 5, "Got Player rank", 100 * 5 / 12)
 
     stored = json.loads(redis.setex.call_args.args[2])
@@ -217,9 +217,9 @@ def test_progress_is_rounded_to_one_decimal():
 
 def test_update_progress_signals_open_streams_after_storing():
     """The progress signal goes out after the snapshot is stored, so a woken stream reads the new one."""
-    from backend import task_store
+    from backend import cache, task_store
 
-    with patch.object(task_store, "redis_client") as redis:
+    with patch.object(cache, "redis_client") as redis:
         task_store.update_progress("task_1", 2, "Got matches", 50)
 
     assert [call[0] for call in redis.method_calls] == ["setex", "publish"]

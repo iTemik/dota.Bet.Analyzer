@@ -23,7 +23,7 @@ def client(app):
 class TestGetResultsEndpoint:
     """Test suite for /results/<task_id> endpoint."""
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_returns_200_with_valid_results(self, mock_redis, client):
         """Test that get_results returns 200 with valid results data."""
         # Mock Redis returning valid results
@@ -49,7 +49,7 @@ class TestGetResultsEndpoint:
         assert data["results"][1]["rank"] is None
         assert data["summary"]["avg_rank"] == 500
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_returns_404_when_not_found(self, mock_redis, client):
         """Test that get_results returns 404 when results don't exist."""
         # Mock Redis returning None (no results found)
@@ -63,7 +63,7 @@ class TestGetResultsEndpoint:
         assert data["code"] == "RESULTS_NOT_FOUND"
         assert "nonexistent_task" in data["details"]["task_id"]
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_returns_500_on_redis_error(self, mock_redis, client):
         """Test that get_results returns 500 when Redis connection fails."""
         # Mock Redis raising exception
@@ -77,7 +77,7 @@ class TestGetResultsEndpoint:
         assert data["code"] == "FAILED_TO_RETRIEVE_RESULTS"
         assert "exception" in data["details"]
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_returns_500_on_json_decode_error(self, mock_redis, client):
         """Test that get_results returns 500 when Redis contains invalid JSON."""
         # Mock Redis returning invalid JSON
@@ -90,7 +90,7 @@ class TestGetResultsEndpoint:
         assert data["status"] == 500
         assert data["code"] == "FAILED_TO_RETRIEVE_RESULTS"
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_includes_task_id_in_response(self, mock_redis, client):
         """Test that get_results includes task_id in error details."""
         mock_redis.get.return_value = None
@@ -101,7 +101,7 @@ class TestGetResultsEndpoint:
         data = rv.get_json()
         assert data["details"]["task_id"] == "my_custom_task_id"
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_with_empty_results(self, mock_redis, client):
         """Test that get_results handles empty results correctly."""
         # Mock Redis returning empty but valid results
@@ -121,7 +121,7 @@ class TestGetResultsEndpoint:
         assert data["total"] == 0
         assert data["results"] == []
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_with_partial_failures(self, mock_redis, client):
         """Test that get_results returns results with some failed player fetches."""
         # Mock results with some errors
@@ -148,7 +148,7 @@ class TestGetResultsEndpoint:
         assert "error" in data["results"][1]
         assert data["results"][1]["error"] == "API rate limit exceeded"
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_preserves_all_summary_fields(self, mock_redis, client):
         """Test that get_results preserves all summary fields from the task."""
         # Mock comprehensive summary data
@@ -177,7 +177,7 @@ class TestGetResultsEndpoint:
         assert summary["win_rate"] == 0.55
         assert "Invoker" in summary["common_heroes"]
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_different_task_ids(self, mock_redis, client):
         """Test that different task_ids are handled independently."""
 
@@ -208,7 +208,7 @@ class TestGetResultsEndpoint:
         rv3 = client.get("/api/results/task_3")
         assert rv3.status_code == 404
 
-    @patch("backend.task_store.redis_client")
+    @patch("backend.cache.redis_client")
     def test_get_results_url_in_error_details(self, mock_redis, client):
         """Test that error responses include the request URL in details."""
         mock_redis.get.return_value = None

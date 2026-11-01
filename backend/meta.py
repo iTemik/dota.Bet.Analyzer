@@ -12,15 +12,14 @@ CACHE_TTL, so the thresholds (query parameters) can be changed without a new req
   "Imm/Div/Anc" columns on its public heroes page), those with a win rate above `pub_min_win` percent.
 """
 
-import json
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from backend.cache import cache_set, cached_json
 from backend.heroes import HERO_IMAGE_HOST
 from backend.logging_config import setup_logging
 from backend.opendota import OpenDotaError, get_json
-from backend.task_store import redis_client
 
 logger = setup_logging(__name__)
 
@@ -90,11 +89,9 @@ def fetch_hero_stats(background: bool = False) -> list[dict[str, Any]]:
     return heroes
 
 
-def _cache_put(data: dict[str, Any], ttl: int) -> None:
-    try:
-        redis_client.setex(CACHE_KEY, ttl, json.dumps(data))
-    except Exception as e:
-        logger.warning(f"Failed to cache hero stats: {e}")
+def _fetch_entry(background: bool = False) -> dict[str, Any]:
+    """Cache entry for fetched hero stats: {"heroes": [...], "fetched_at": unix seconds}."""
+    return {"heroes": fetch_hero_stats(background), "fetched_at": int(time.time())}
 
 
 def refresh_hero_stats(background: bool = False) -> tuple[list[dict[str, Any]], int]:
@@ -110,10 +107,9 @@ def refresh_hero_stats(background: bool = False) -> tuple[list[dict[str, Any]], 
         ConnectionError, ValueError: As fetch_hero_stats
         DailyLimitReached: For a background fetch when the daily budget is used up
     """
-    heroes = fetch_hero_stats(background)
-    fetched_at = int(time.time())
-    _cache_put({"heroes": heroes, "fetched_at": fetched_at}, CACHE_TTL)
-    return heroes, fetched_at
+    data = _fetch_entry(background)
+    cache_set(CACHE_KEY, CACHE_TTL, data)
+    return data["heroes"], data["fetched_at"]
 
 
 def cached_hero_stats(refresh: bool = False) -> tuple[list[dict[str, Any]], int]:
@@ -130,23 +126,14 @@ def cached_hero_stats(refresh: bool = False) -> tuple[list[dict[str, Any]], int]
     Raises:
         ConnectionError: If OpenDota could not be reached or its answer was invalid
     """
-    try:
-        cached = redis_client.get(CACHE_KEY)
-    except Exception as e:
-        logger.warning(f"Redis unavailable for hero stats cache: {e}")
-        cached = None
-    if cached is not None:
-        data: dict[str, Any] = json.loads(cached)
-        if "error" in data:
-            raise ConnectionError(data["error"])
-        if not refresh or time.time() - int(data["fetched_at"]) < MIN_REFRESH_INTERVAL:
-            return data["heroes"], int(data["fetched_at"])
-
-    try:
-        return refresh_hero_stats()
-    except (ConnectionError, ValueError) as e:
-        _cache_put({"error": str(e)}, ERROR_CACHE_TTL)
-        raise ConnectionError(str(e)) from e
+    data = cached_json(
+        CACHE_KEY,
+        CACHE_TTL,
+        _fetch_entry,
+        error_ttl=ERROR_CACHE_TTL,
+        use=lambda cached: not refresh or time.time() - int(cached["fetched_at"]) < MIN_REFRESH_INTERVAL,
+    )
+    return data["heroes"], int(data["fetched_at"])
 
 
 def _percent(part: int, whole: int) -> Optional[float]:
