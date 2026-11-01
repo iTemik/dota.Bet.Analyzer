@@ -31,8 +31,9 @@ class FakeRedis:
         self.data.pop(key, None)
 
     def incr(self, key: str) -> int:
-        self.data[key] = int(self.data.get(key, 0)) + 1
-        return self.data[key]
+        count = int(self.data.get(key, 0)) + 1
+        self.data[key] = count
+        return count
 
     def expire(self, key: str, ttl: int) -> None:
         pass
