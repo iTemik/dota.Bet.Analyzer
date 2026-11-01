@@ -74,7 +74,7 @@ def _explorer_rows(sql: str) -> list[dict[str, Any]]:
         ValueError: If the answer has no rows (e.g. a query error)
     """
     try:
-        payload = get_json("/explorer", params={"sql": sql}, timeout=30)
+        payload = get_json("/explorer", params={"sql": sql}, timeout=30, background=True)
     except OpenDotaError as e:
         raise ConnectionError(f"Failed to query OpenDota explorer: {e}") from e
     rows = payload.get("rows") if isinstance(payload, dict) else None

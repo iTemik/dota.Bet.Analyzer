@@ -4,6 +4,10 @@ OpenDota limits requests in several ways: HTTP 429 when the per-minute limit is 
 about 60 requests per minute), HTTP 403 when requests are blocked for a while, and requests that time out or get
 the connection dropped when requests come too often in a short time window. In all these cases the request is
 postponed and repeated a few times instead of failing right away.
+
+To stay under those limits, every request first takes a slot from one rate limiter shared by all processes
+(backend.rate_limit): by default one request per 1.2 s and a daily budget, set in Config. Background requests
+(cache syncs) pass `background=True`: they go after user requests and stop when the daily budget is used up.
 """
 
 from __future__ import annotations
@@ -14,7 +18,9 @@ from typing import Any, Optional
 
 import requests
 
+from backend.config import Config
 from backend.logging_config import setup_logging
+from backend.rate_limit import DailyLimitReached, RateLimiter
 
 logger = setup_logging(__name__)
 
@@ -28,6 +34,8 @@ RETRY_ERRORS = (requests.Timeout, requests.ConnectionError)  # Short-window prot
 RADIANT_SLOT_LIMIT = 128  # player_slot < 128 is Radiant
 
 WaitCallback = Callable[[int], None]
+
+OPENDOTA_LIMITER = RateLimiter("opendota", Config.OPENDOTA_MIN_INTERVAL, Config.OPENDOTA_DAILY_LIMIT)
 
 
 def is_radiant(player_slot: int) -> bool:
@@ -72,20 +80,25 @@ def opendota_get(
     params: Optional[dict[str, Any]] = None,
     timeout: float = 30,
     on_wait: Optional[WaitCallback] = None,
+    background: bool = False,
 ) -> requests.Response:
     """GET an OpenDota URL, postponing and repeating the request on HTTP 403/429, timeouts and dropped connections.
+
+    Each attempt first waits for a slot of the shared OpenDota rate limiter.
 
     Args:
         url: URL or API path (e.g. "/teams/123")
         params: Optional query parameters
         timeout: Request timeout in seconds
-        on_wait: Called with the delay in seconds before each repeat (e.g. to report progress)
+        on_wait: Called with the delay in seconds before each repeat or long limiter wait (e.g. to report progress)
+        background: True for cache syncs: they let user requests go first and stop at the daily budget
 
     Returns:
         The last response (still HTTP 403/429 when every repeat was rate-limited)
 
     Raises:
         requests.RequestException: On network errors, or a timeout after the last repeat
+        DailyLimitReached: For a background request when the daily budget is used up
     """
     url = opendota_url(url)
     kwargs: dict[str, Any] = {"timeout": timeout}
@@ -94,6 +107,7 @@ def opendota_get(
     attempt = 0
     while True:
         resp: Optional[requests.Response] = None
+        OPENDOTA_LIMITER.acquire(background=background, on_wait=on_wait)
         try:
             resp = requests.get(url, **kwargs)
         except RETRY_ERRORS as exc:
@@ -117,6 +131,7 @@ def get_json(
     params: Optional[dict[str, Any]] = None,
     timeout: float = 30,
     on_wait: Optional[WaitCallback] = None,
+    background: bool = False,
 ) -> Any:
     """GET an OpenDota URL with the shared repeat rules and return the parsed JSON.
 
@@ -124,16 +139,19 @@ def get_json(
         url: URL or API path (e.g. "/teams/123")
         params: Optional query parameters
         timeout: Request timeout in seconds
-        on_wait: Called with the delay in seconds before each repeat
+        on_wait: Called with the delay in seconds before each repeat or long limiter wait
+        background: True for cache syncs: they let user requests go first and stop at the daily budget
 
     Returns:
         Parsed JSON payload
 
     Raises:
-        OpenDotaError: On network errors, non-200 answers or invalid JSON
+        OpenDotaError: On network errors, non-200 answers, invalid JSON or a used-up daily budget (DAILY_LIMIT, 429)
     """
     try:
-        resp = opendota_get(url, params=params, timeout=timeout, on_wait=on_wait)
+        resp = opendota_get(url, params=params, timeout=timeout, on_wait=on_wait, background=background)
+    except DailyLimitReached as exc:
+        raise OpenDotaError(429, "DAILY_LIMIT", str(exc)) from exc
     except Exception as exc:
         raise OpenDotaError(503, "NETWORK_ERROR", f"Network error fetching data: {exc}") from exc
 

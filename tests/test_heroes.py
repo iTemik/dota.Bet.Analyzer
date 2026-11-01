@@ -49,7 +49,7 @@ def mock_get_json():
 def test_fetch_parses_ids_names_and_full_icon_url(mock_get_json):
     heroes = fetch_heroes_from_api()
 
-    mock_get_json.assert_called_once_with("/constants/heroes", timeout=30)
+    mock_get_json.assert_called_once_with("/constants/heroes", timeout=30, background=False)
     assert heroes[0] == ANTI_MAGE
     assert [h["hero_id"] for h in heroes] == [1, 2]
 

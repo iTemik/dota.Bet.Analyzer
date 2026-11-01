@@ -14,8 +14,10 @@ from typing import Any, ClassVar, Optional
 import requests
 
 from backend import __version__
+from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import get_d2ba_db
+from backend.rate_limit import RateLimiter
 from backend.task_store import redis_client
 
 logger = setup_logging(__name__)
@@ -24,6 +26,7 @@ LIQUIPEDIA_API = "https://liquipedia.net/dota2/api.php"
 MATCHES_PAGE = "Liquipedia:Matches"
 # Liquipedia asks for a custom User-Agent that names the project and blocks generic ones; no link or contact sent
 USER_AGENT = f"DotaBetAnalyzer/{__version__}"
+LIQUIPEDIA_LIMITER = RateLimiter("liquipedia", Config.LIQUIPEDIA_MIN_INTERVAL)  # their terms: 1 parse per 30 s
 CACHE_KEY = "liquipedia:matches"
 CACHE_TTL = 600  # seconds
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner, to stay inside Liquipedia's limits
@@ -198,7 +201,7 @@ def parse_matches(html: str) -> list[dict[str, Any]]:
 
 
 def fetch_matches_from_liquipedia() -> list[dict[str, Any]]:
-    """Fetch and parse the Liquipedia matches page (one request).
+    """Fetch and parse the Liquipedia matches page (one request, after the shared Liquipedia limiter allows it).
 
     Returns:
         Series as returned by parse_matches
@@ -209,6 +212,7 @@ def fetch_matches_from_liquipedia() -> list[dict[str, Any]]:
     """
     params = {"action": "parse", "page": MATCHES_PAGE, "prop": "text", "format": "json", "formatversion": "2"}
     headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
+    LIQUIPEDIA_LIMITER.acquire()
     try:
         resp = requests.get(LIQUIPEDIA_API, params=params, headers=headers, timeout=30)
     except requests.RequestException as e:

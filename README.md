@@ -430,7 +430,7 @@ The same script creates `instance/predictions.sqlite` from the migrations in `ba
 **Rosters:** the roster is the 5 players with the most league games in the `days` window (default 20), from
 `/teams/{id}/matches` plus cached explorer lineups. Without a league match in the window, OpenDota team membership
 (`pro_players`) is used and marked unconfirmed. Core = players with 75% (else 50%) of the games; anyone else who
-played is a stand-in. Every OpenDota request is retried up to 3 times on HTTP 429 and 403, timeouts and dropped connections.
+played is a stand-in. Every OpenDota request is paced by a shared limiter (see Rate Limits) and retried up to 3 times on HTTP 429 and 403, timeouts and dropped connections.
 
 *Why roster comes from matches, not team membership:* majors used to make teams keep a lineup for 6+ months, but
 that rule proved inefficient. With far more tournaments and free agents, teams now swap players every tournament
@@ -666,6 +666,13 @@ Async task for comprehensive player analysis:
 - Obsolete (last sync 24+ hours old, or never) teams data is updated in the background at startup and on team search or matches requests; one sync runs at a time, a failed one is retried after 10 minutes
 - Incremental update: 2 OpenDota explorer requests (teams with a league game since the newest stored one, then their names), so a team renamed without new league games keeps its old name until it plays
 - Full update (empty teams table or `POST /api/teams/sync?full=true`): every `/teams` page, ~22 requests
+
+#### OpenDota and Liquipedia Rate Limits
+- Every OpenDota request waits for a slot of one limiter shared through Redis by Flask, the Celery worker and background threads: 1 request per 1.2 s (`OPENDOTA_MIN_INTERVAL`)
+- Compare and other user requests go first; background syncs (teams, pro players and heroes at startup) wait until no user request is queued
+- Daily budget (`OPENDOTA_DAILY_LIMIT`, default 1800, 0 = none) counts requests per UTC day; when it is used up background syncs stop and Compare still works
+- Liquipedia: 1 parse request per 30 s (`LIQUIPEDIA_MIN_INTERVAL`, their API terms)
+- Without Redis requests are not paced; the retry on HTTP 429/403 stays as the safety net
 
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
