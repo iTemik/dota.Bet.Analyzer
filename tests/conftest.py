@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import fakeredis
 import pytest
 
 # Add root directory to Python path so backend and scripts modules can be found
@@ -25,6 +26,19 @@ def reset_app_singleton():
     backend._app = None
     yield
     backend._app = None
+
+
+@pytest.fixture(autouse=True)
+def fake_redis():
+    """Every test gets an empty in-memory Redis as the app's one client, so tests never wait for or write to a real one.
+
+    Tests that need a broken or mocked Redis still patch backend.cache.redis_client themselves.
+    """
+    from backend import cache
+
+    client = fakeredis.FakeRedis()
+    with patch.object(cache, "redis_client", client):
+        yield client
 
 
 @pytest.fixture(autouse=True)
