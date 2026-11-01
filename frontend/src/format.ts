@@ -1,8 +1,8 @@
 // Formatting shared by the Team Comparison and Team Insights tables
 
-// Color constants - defined in App.css as CSS variables
-export const COLOR_POSITIVE = '#6b9d7a'
-export const COLOR_NEGATIVE = '#9d6b6b'
+// Cell classes for better / worse values (colours are the --pos / --neg tokens in index.css)
+export const CELL_POSITIVE = 'cell-pos'
+export const CELL_NEGATIVE = 'cell-neg'
 
 export const formatDate = (unixTime: number | null | undefined): string => {
   if (!unixTime) return '-'

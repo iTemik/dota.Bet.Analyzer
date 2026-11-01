@@ -922,18 +922,14 @@ describe('App Component', () => {
                 cell.textContent === '2500'
             )
 
-            expect(teamARatingCell).toHaveStyle({
-                backgroundColor: '#6b9d7a' // COLOR_POSITIVE (higher rating)
-            })
+            expect(teamARatingCell).toHaveClass('cell-pos') // higher rating
 
             const teamBRatingCell = ratingCells.find(cell =>
                 cell.parentElement?.children[0]?.firstChild?.textContent === 'Rating' && // label text, without the info tooltip
                 cell.textContent === '2300'
             )
 
-            expect(teamBRatingCell).toHaveStyle({
-                backgroundColor: '#9d6b6b' // COLOR_NEGATIVE (lower rating)
-            })
+            expect(teamBRatingCell).toHaveClass('cell-neg') // lower rating
         })
     })
 
@@ -1667,7 +1663,7 @@ describe('App Component', () => {
             const stateCells = rowOf('Roster Changes').querySelectorAll('td')
             expect(stateCells[1]).toHaveTextContent('Stand-ins (2 stand-ins)')
             expect(stateCells[2]).toHaveTextContent('New team (1 stand-in)')
-            expect(stateCells[1].getAttribute('style')).not.toEqual(stateCells[2].getAttribute('style'))
+            expect(stateCells[1].className).not.toEqual(stateCells[2].className)
 
             const cells = (label: string) => rowOf(label).querySelectorAll('td')
             // Core players: games per player, "of N" only when a player missed games; no rank before the task results

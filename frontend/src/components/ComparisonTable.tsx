@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { COLOR_NEGATIVE, COLOR_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
+import { CELL_NEGATIVE, CELL_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
 import type { FarmStats, LeagueForm, MatchesSummary, TeamData } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
@@ -24,11 +24,11 @@ interface CompareRowConfig {
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
   thresholdPercent?: number // differences up to this % of the smaller value are not coloured
-  color?: (team: TeamData | undefined, index: number) => string // per-team colour, for rows that don't compare
+  color?: (team: TeamData | undefined, index: number) => string // per-team cell class, for rows that don't compare
   render: (team: TeamData | undefined, summary: Summary) => ReactNode
 }
 
-// Colours for team 1 and team 2: the better value is positive, the other negative
+// Cell classes for team 1 and team 2: the better value is positive, the other negative
 const compareColors = (
   a: number | null,
   b: number | null,
@@ -36,12 +36,12 @@ const compareColors = (
   threshold = 0,
   thresholdPercent = 0,
 ): [string, string] => {
-  if (a === null || b === null) return ['transparent', 'transparent']
+  if (a === null || b === null) return ['', '']
   if (Math.abs(a - b) <= Math.max(threshold, (thresholdPercent / 100) * Math.min(Math.abs(a), Math.abs(b)))) {
-    return ['transparent', 'transparent']
+    return ['', '']
   }
   const firstWins = better === 'higher' ? a > b : a < b
-  return firstWins ? [COLOR_POSITIVE, COLOR_NEGATIVE] : [COLOR_NEGATIVE, COLOR_POSITIVE]
+  return firstWins ? [CELL_POSITIVE, CELL_NEGATIVE] : [CELL_NEGATIVE, CELL_POSITIVE]
 }
 
 // A cell with nothing to show: no value or an empty 0-0 record
@@ -66,7 +66,7 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
         {row.info && <RowInfoIcon info={row.info} />}
       </td>
       {cells.map((cell, i) => (
-        <td key={i} style={colors ? { backgroundColor: colors[i] } : undefined}>
+        <td key={i} className={colors?.[i] || undefined}>
           {cell}
         </td>
       ))}
@@ -74,11 +74,11 @@ const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (
   )
 }
 
-const getDeltaBackgroundColor = (delta: number | undefined): string => {
-  if (!delta) return 'transparent'
-  if (delta < -15) return COLOR_NEGATIVE
-  if (delta > 15) return COLOR_POSITIVE
-  return 'transparent'
+const getDeltaClass = (delta: number | undefined): string => {
+  if (!delta) return ''
+  if (delta < -15) return CELL_NEGATIVE
+  if (delta > 15) return CELL_POSITIVE
+  return ''
 }
 
 const getRosterRank = (team: TeamData | undefined): number | null =>
@@ -102,7 +102,7 @@ const lastMatchColor = (teams: (TeamData | undefined)[], now: number) => {
     const time = lastMatchTime(team)
     return time !== null && now - time <= STALE_DAYS * 24 * 3600
   })
-  return (_: TeamData | undefined, i: number) => (!recent[i] && recent[1 - i] ? COLOR_NEGATIVE : 'transparent')
+  return (_: TeamData | undefined, i: number) => (!recent[i] && recent[1 - i] ? CELL_NEGATIVE : '')
 }
 
 const formatLeagueRecord = (form: LeagueForm | null | undefined): string => {
@@ -167,7 +167,7 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
       assumption:
         'A team whose rating changed a lot recently is in its prime or on a losing streak. A much better indicator than the team rating.',
     },
-    color: (team) => getDeltaBackgroundColor(team?.delta),
+    color: (team) => getDeltaClass(team?.delta),
     render: (team) => (team?.delta ? `${team.delta > 0 ? '+' : ''}${team.delta.toFixed(1)}` : '-'),
   },
   {

@@ -58,8 +58,8 @@ describe('ComparisonTable', () => {
     render(<ComparisonTable teams={teams} summaries={[null, null]} showSummaryRows={false} days={20} />)
 
     const [first, second] = rowCells(/^Rating$/)
-    expect(first).toHaveStyle({ backgroundColor: '#6b9d7a' })
-    expect(second).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(first).toHaveClass('cell-pos')
+    expect(second).toHaveClass('cell-neg')
   })
 
   it('hides summary rows until asked to show them', () => {
@@ -71,7 +71,7 @@ describe('ComparisonTable', () => {
     rerender(<ComparisonTable teams={teams} summaries={summaries} showSummaryRows days={20} />)
     expect(rowCells(/^Rating Matches$/).map((c) => c.textContent)).toEqual(['40', '10'])
     // Lower average rank is better
-    expect(rowCells(/^Average Player Rank$/)[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    expect(rowCells(/^Average Player Rank$/)[0]).toHaveClass('cell-pos')
   })
 
   it('uses the days prop in the record label when the first team has no league form', () => {
@@ -91,12 +91,12 @@ describe('ComparisonTable', () => {
     )
     let cells = rowCells(/^Rating change, last 20 days$/)
     expect(cells.map((c) => c.textContent)).toEqual(['+40.3', '-3.0'])
-    expect(cells[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
-    expect(cells[1]).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(cells[0]).toHaveClass('cell-pos')
+    expect(cells[1]).toHaveClass('cell-neg')
 
     rerender(<ComparisonTable teams={[team({ rating_change: 10 }), team({ rating_change: -5 })]} summaries={[null, null]} showSummaryRows={false} days={20} />)
     cells = rowCells(/^Rating change, last 20 days$/)
-    expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(cells.map((c) => c.className)).toEqual(['', ''])
   })
 
   it('shows top 1 and top 2 GPM and XPM medians from the league form', () => {
@@ -120,7 +120,7 @@ describe('ComparisonTable', () => {
     // A team without parsed games has "-" and no colours
     const top1 = rowCells(/^Top 1 GPM \(median\)$/)
     expect(top1.map((c) => c.textContent)).toEqual(['750', '-'])
-    expect(top1[0].style.backgroundColor).toBe('transparent')
+    expect(top1[0].className).toBe('')
     expect(rowCells(/^Top 2 GPM \(median\)$/).map((c) => c.textContent)).toEqual(['601', '-'])
     expect(rowCells(/^Top 2 XPM \(median\)$/).map((c) => c.textContent)).toEqual(['700', '-'])
     const tooltip = within(screen.getByText(/^Top 1 XPM \(median\)$/)).getByRole('tooltip')
@@ -144,23 +144,23 @@ describe('ComparisonTable', () => {
     const { rerender } = render(<ComparisonTable teams={[team({ league_form: farm(700) }), team({ league_form: farm(600) })]} {...props} />)
     // 700 vs 600: 16.7% more than the smaller value
     let cells = rowCells(/^Top 1 GPM \(median\)$/)
-    expect(cells[0]).toHaveStyle({ backgroundColor: '#6b9d7a' })
-    expect(cells[1]).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(cells[0]).toHaveClass('cell-pos')
+    expect(cells[1]).toHaveClass('cell-neg')
     expect(within(screen.getByText(/^Top 1 GPM \(median\)$/)).getByRole('tooltip')).toHaveTextContent('differ by 15% or less')
 
     // 690 vs 600: exactly 15%, no colour; equal Top 2 GPM, no colour
     rerender(<ComparisonTable teams={[team({ league_form: farm(690) }), team({ league_form: farm(600) })]} {...props} />)
     cells = rowCells(/^Top 1 GPM \(median\)$/)
-    expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(cells.map((c) => c.className)).toEqual(['', ''])
 
     // XPM: 800 vs 700 (14.3%) no colour, 800 vs 600 (33%) coloured
     rerender(<ComparisonTable teams={[team({ league_form: farm(600, 800) }), team({ league_form: farm(600, 700) })]} {...props} />)
     cells = rowCells(/^Top 1 XPM \(median\)$/)
-    expect(cells.map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(cells.map((c) => c.className)).toEqual(['', ''])
     rerender(<ComparisonTable teams={[team({ league_form: farm(600, 600) }), team({ league_form: farm(600, 800) })]} {...props} />)
     cells = rowCells(/^Top 1 XPM \(median\)$/)
-    expect(cells[0]).toHaveStyle({ backgroundColor: '#9d6b6b' })
-    expect(cells[1]).toHaveStyle({ backgroundColor: '#6b9d7a' })
+    expect(cells[0]).toHaveClass('cell-neg')
+    expect(cells[1]).toHaveClass('cell-pos')
   })
 
   it('hides match count rows that are 0 for both teams but keeps Low Rank Players at 0', () => {
@@ -210,19 +210,19 @@ describe('ComparisonTable', () => {
     const at = (daysAgo: number) => team({ roster_last_match_time: now - daysAgo * 86400 })
     const { rerender } = render(<ComparisonTable teams={[at(3), at(20)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
     let [first, second] = rowCells(/^Last Match$/)
-    expect(first.style.backgroundColor).toBe('transparent')
-    expect(second).toHaveStyle({ backgroundColor: '#9d6b6b' })
+    expect(first.className).toBe('')
+    expect(second).toHaveClass('cell-neg')
 
     // No date counts as a long break
     rerender(<ComparisonTable teams={[team({}), at(3)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
     ;[first, second] = rowCells(/^Last Match$/)
-    expect(first).toHaveStyle({ backgroundColor: '#9d6b6b' })
-    expect(second.style.backgroundColor).toBe('transparent')
+    expect(first).toHaveClass('cell-neg')
+    expect(second.className).toBe('')
 
     // Both on a break or both recent: no colour
     rerender(<ComparisonTable teams={[at(15), at(30)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(rowCells(/^Last Match$/).map((c) => c.className)).toEqual(['', ''])
     rerender(<ComparisonTable teams={[at(1), at(13)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
-    expect(rowCells(/^Last Match$/).map((c) => c.style.backgroundColor)).toEqual(['transparent', 'transparent'])
+    expect(rowCells(/^Last Match$/).map((c) => c.className)).toEqual(['', ''])
   })
 })

@@ -1,11 +1,69 @@
+/* Colour tokens: the only place with colour literals. Use var(--name) everywhere else. */
+:root {
+  /* Brand */
+  --accent: #667eea;
+  --accent-end: #764ba2;
+
+  /* Better / worse values */
+  --pos: #6b9d7a;
+  --neg: #9d6b6b;
+  --neg-bright: #c46a6a;
+  --pos-text: #7ddc95;
+  --neg-text: #ff8a8a;
+  --error: #ff6b6b;
+  --error-text: #ffd0d0;
+  --gold: #ffd257;
+  --gold-bg: rgba(255, 200, 0, 0.08);
+  --gold-bg-strong: rgba(255, 200, 0, 0.2);
+
+  /* Text */
+  --text: #fff;
+  --text-soft: rgba(255, 255, 255, 0.85);
+  --text-muted: #bbb;
+  --text-faint: #999;
+
+  /* Light layers on the gradient (hover, panels, tags) */
+  --surface-1: rgba(255, 255, 255, 0.08);
+  --surface-2: rgba(255, 255, 255, 0.1);
+  --surface-3: rgba(255, 255, 255, 0.15);
+  --surface-4: rgba(255, 255, 255, 0.2);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --glow: rgba(255, 255, 255, 0.5);
+  --fill-neutral: rgba(255, 255, 255, 0.6);
+
+  /* Dark layers on the gradient (tables, code, boxes) */
+  --shade-1: rgba(0, 0, 0, 0.15);
+  --shade-2: rgba(0, 0, 0, 0.2);
+  --shade-3: rgba(0, 0, 0, 0.25);
+  --shade-4: rgba(0, 0, 0, 0.3);
+  --shadow: rgba(0, 0, 0, 0.5);
+
+  /* Lines */
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.15);
+  --border: rgba(255, 255, 255, 0.35);
+  --border-strong: rgba(255, 255, 255, 0.6);
+
+  /* Tooltip and light progress track */
+  --tooltip-bg: #1e1e1e;
+  --tooltip-text: #f0f0f0;
+  --track-light: #e0e0e0;
+
+  /* Page base */
+  --page-bg: #242424;
+  --page-text: rgba(255, 255, 255, 0.87);
+  --button-bg: #1a1a1a;
+  --button-hover: #646cff;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: var(--page-text);
+  background-color: var(--page-bg);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -42,24 +100,14 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: var(--button-bg);
   cursor: pointer;
   transition: border-color 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: var(--button-hover);
 }
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
 }
