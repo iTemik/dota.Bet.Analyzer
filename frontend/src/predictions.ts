@@ -27,20 +27,22 @@ export const possibleProfit = (p: Prediction): number | null => {
 // Possible loss of a bet: the stake; null without a bet
 export const possibleLoss = (p: Prediction): number | null => (p.bet_team === null ? null : p.stake)
 
-// Totals: net profit of settled bets (won profit minus lost stakes), possible profit over won and pending bets,
-// possible loss over lost and pending bets
+// Totals: profit of won bets, stakes of lost bets, net = won - lost, and possible profit and loss of pending bets
 export const betTotals = (predictions: Prediction[]) => {
-  let net = 0
-  let profit = 0
-  let loss = 0
+  let won = 0
+  let lost = 0
+  let pendingProfit = 0
+  let pendingLoss = 0
   for (const p of predictions) {
     const result = outcome(p)
-    if (result === 'won') net += possibleProfit(p) ?? 0
-    if (result === 'lost') net -= possibleLoss(p) ?? 0
-    if (result === 'won' || result === 'pending') profit += possibleProfit(p) ?? 0
-    if (result === 'lost' || result === 'pending') loss += possibleLoss(p) ?? 0
+    if (result === 'won') won += possibleProfit(p) ?? 0
+    if (result === 'lost') lost += possibleLoss(p) ?? 0
+    if (result === 'pending') {
+      pendingProfit += possibleProfit(p) ?? 0
+      pendingLoss += possibleLoss(p) ?? 0
+    }
   }
-  return { net, profit, loss }
+  return { net: won - lost, won, lost, pendingProfit, pendingLoss }
 }
 
 // Money amount with at most 2 decimals: 185, 92.5
