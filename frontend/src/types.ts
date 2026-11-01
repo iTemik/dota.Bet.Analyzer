@@ -234,7 +234,6 @@ export interface Meta {
   fetched_at: number
   params: MetaParams
   pro_matches: number
-  pub_bracket: string // Immortal, or the highest bracket with games
   pub_matches: number
   pro_meta: ProMetaHero[]
   ultra_meta: ProMetaHero[]

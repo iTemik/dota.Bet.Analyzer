@@ -708,7 +708,7 @@ class MetaQuerySchema(Schema):
     pub_top = fields.Int(
         load_default=MetaParams.pub_top,
         validate=validate.Range(min=1, max=200),
-        metadata={"description": "Pub meta: number of Immortal heroes with the highest win rate"},
+        metadata={"description": "Pub meta: number of heroes with the highest Immortal + Divine + Ancient win rate"},
     )
     refresh = fields.Bool(
         load_default=False,
@@ -747,9 +747,9 @@ class PubMetaHeroSchema(Schema):
     hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
     localized_name = fields.Str(required=True, metadata={"description": "Display name"})
     icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
-    picks = fields.Int(required=True, metadata={"description": "Picks in the bracket"})
-    wins = fields.Int(required=True, metadata={"description": "Wins in the bracket"})
-    pick_rate = fields.Float(required=True, metadata={"description": "picks / bracket matches, percent"})
+    picks = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient picks"})
+    wins = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient wins"})
+    pick_rate = fields.Float(required=True, metadata={"description": "picks / matches, percent"})
     win_rate = fields.Float(required=True, metadata={"description": "wins / picks, percent"})
 
 
@@ -764,10 +764,9 @@ class MetaSchema(Schema):
     fetched_at = fields.Int(required=True, metadata={"description": "When the hero stats were fetched (unix seconds)"})
     params = fields.Dict(required=True, metadata={"description": "Thresholds used"})
     pro_matches = fields.Int(required=True, metadata={"description": "Pro matches in the window (pro picks / 10)"})
-    pub_bracket = fields.Str(
-        required=True, metadata={"description": "Bracket used: Immortal, or the highest bracket with games (Divine)"}
+    pub_matches = fields.Int(
+        required=True, metadata={"description": "Immortal + Divine + Ancient matches (picks / 10)"}
     )
-    pub_matches = fields.Int(required=True, metadata={"description": "Matches in the bracket (picks / 10)"})
     pro_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
     ultra_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
     pub_meta = fields.List(fields.Nested(PubMetaHeroSchema), required=True)

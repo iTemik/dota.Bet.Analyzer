@@ -34,12 +34,12 @@ def hero_stats_entry(hero_id: int, name: str, pro: tuple[int, int, int], pubs: d
     return entry
 
 
-# 100 picks in total = 10 pro matches; bracket 8 (Immortal) is empty like on OpenDota today
+# 100 pro picks in total = 10 pro matches; pubs: brackets 6-8 (Ancient, Divine, Immortal) count, lower ones don't
 HERO_STATS = [
     hero_stats_entry(1, "Alpha", (5, 4, 0), {7: (100, 60)}),  # P+B 50%, win 80%: ultra
-    hero_stats_entry(2, "Beta", (2, 2, 2), {7: (100, 40)}),  # P+B 40%, win 100% but only 2 picks: not ultra
+    hero_stats_entry(2, "Beta", (2, 2, 2), {7: (100, 40), 8: (20, 15)}),  # P+B 40%, 2/2 wins: too few picks for ultra
     hero_stats_entry(3, "Gamma", (3, 1, 0), {7: (50, 30), 6: (10, 9)}),  # P+B exactly 30%: not meta
-    hero_stats_entry(4, "Delta", (90, 50, 10), {7: (50, 26)}),  # P+B 1000%, win 55.6%
+    hero_stats_entry(4, "Delta", (90, 50, 10), {7: (50, 26), 5: (1000, 900)}),  # P+B 1000%, win 55.6%
 ]
 
 
@@ -54,7 +54,8 @@ def test_fetch_hero_stats_keeps_used_fields():
         "pro_pick": 5,
         "pro_win": 4,
         "pro_ban": 0,
-        "pub": {str(b): ([100, 60] if b == 7 else [0, 0]) for b in range(1, 9)},
+        "pub_pick": 100,
+        "pub_win": 60,
     }
 
 
@@ -87,15 +88,15 @@ def test_compute_meta_defaults():
         "win_rate": 80.0,
     }
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Alpha", "Delta"]
-    # Immortal is empty, so Divine is used; sorted by win rate
-    assert (meta["pub_bracket"], meta["pub_matches"]) == ("Divine", 30)
-    assert [(h["localized_name"], h["win_rate"]) for h in meta["pub_meta"]] == [
-        ("Alpha", 60.0),
-        ("Gamma", 60.0),
-        ("Delta", 52.0),
-        ("Beta", 40.0),
+    # Immortal + Divine + Ancient together (Legend games of Delta are left out), highest win rate first
+    assert meta["pub_matches"] == 33
+    assert [(h["localized_name"], h["picks"], h["win_rate"]) for h in meta["pub_meta"]] == [
+        ("Gamma", 60, 65.0),
+        ("Alpha", 100, 60.0),
+        ("Delta", 50, 52.0),
+        ("Beta", 120, 45.8),
     ]
-    assert meta["pub_meta"][0]["pick_rate"] == pytest.approx(333.3)
+    assert meta["pub_meta"][0]["pick_rate"] == pytest.approx(181.8)
 
 
 def test_compute_meta_custom_params():
@@ -103,22 +104,14 @@ def test_compute_meta_custom_params():
     meta = compute_meta(heroes(), params)
     assert [h["localized_name"] for h in meta["pro_meta"]] == ["Delta", "Alpha", "Beta", "Gamma"]
     assert [h["localized_name"] for h in meta["ultra_meta"]] == ["Beta", "Alpha", "Delta"]
-    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Alpha"]
-
-
-def test_compute_meta_uses_immortal_when_it_has_games():
-    stats = [*HERO_STATS, hero_stats_entry(5, "Epsilon", (0, 0, 0), {8: (20, 11), 7: (10, 1)})]
-    with patch("backend.meta.get_json", return_value=stats):
-        meta = compute_meta(fetch_hero_stats(), MetaParams())
-    assert (meta["pub_bracket"], meta["pub_matches"]) == ("Immortal", 2)
-    assert [(h["localized_name"], h["win_rate"]) for h in meta["pub_meta"]] == [("Epsilon", 55.0)]
+    assert [h["localized_name"] for h in meta["pub_meta"]] == ["Gamma"]
 
 
 def test_compute_meta_empty():
     meta = compute_meta([], MetaParams())
     assert meta["pro_matches"] == 0
     assert meta["pro_meta"] == meta["ultra_meta"] == meta["pub_meta"] == []
-    assert meta["pub_bracket"] == "Herald"
+    assert meta["pub_matches"] == 0
 
 
 class FakeRedis:
@@ -158,7 +151,7 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
         "pub_top": 30,
     }
     assert [h["hero_id"] for h in data["pro_meta"]] == [4, 1, 2]
-    assert data["pub_bracket"] == "Divine"
+    assert data["pub_matches"] == 33
     assert isinstance(data["fetched_at"], int)
     again_data = again.get_json()
     assert [h["hero_id"] for h in again_data["pro_meta"]] == [4, 1, 2, 3]

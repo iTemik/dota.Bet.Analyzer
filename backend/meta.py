@@ -7,8 +7,8 @@ CACHE_TTL, so the thresholds (query parameters) can be changed without a new req
 - Pro meta: heroes whose pick + ban rate in pro matches is above `pro_min_pick_ban` percent. The rate is
   (picks + bans) / pro matches, where pro matches = all pro picks / 10, the same as OpenDota's Pro P+B%.
 - Ultra meta: pro meta heroes with a pro win rate above `ultra_min_win` percent and at least `ultra_min_picks` picks.
-- Pub meta: the `pub_top` heroes with the highest win rate in Immortal games. OpenDota currently has no Immortal
-  games, so the highest lower bracket with games is used instead (Divine).
+- Pub meta: the `pub_top` heroes with the highest win rate in Immortal, Divine and Ancient games together, the same
+  as OpenDota's "Imm/Div/Anc W%" column on its public heroes page.
 """
 
 import json
@@ -23,21 +23,12 @@ from backend.task_store import redis_client
 
 logger = setup_logging(__name__)
 
-CACHE_KEY = "opendota:hero_stats"
+CACHE_KEY = "opendota:hero_stats:v2"  # v2: pub picks and wins summed over PUB_BRACKETS
 CACHE_TTL = 3600  # seconds; OpenDota recomputes hero stats a few times a day
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner
 MIN_REFRESH_INTERVAL = 60  # seconds; a forced refresh of newer stats uses the cache
 
-BRACKETS = {
-    1: "Herald",
-    2: "Guardian",
-    3: "Crusader",
-    4: "Archon",
-    5: "Legend",
-    6: "Ancient",
-    7: "Divine",
-    8: "Immortal",
-}
+PUB_BRACKETS = (6, 7, 8)  # Ancient, Divine, Immortal: OpenDota's "Imm/Div/Anc"
 PICKS_PER_MATCH = 10
 
 
@@ -61,7 +52,8 @@ def _hero_stat(entry: dict[str, Any]) -> dict[str, Any]:
         "pro_pick": int(entry.get("pro_pick") or 0),
         "pro_win": int(entry.get("pro_win") or 0),
         "pro_ban": int(entry.get("pro_ban") or 0),
-        "pub": {str(b): [int(entry.get(f"{b}_pick") or 0), int(entry.get(f"{b}_win") or 0)] for b in BRACKETS},
+        "pub_pick": sum(int(entry.get(f"{b}_pick") or 0) for b in PUB_BRACKETS),
+        "pub_win": sum(int(entry.get(f"{b}_win") or 0) for b in PUB_BRACKETS),
     }
 
 
@@ -69,7 +61,7 @@ def fetch_hero_stats() -> list[dict[str, Any]]:
     """Fetch /heroStats from OpenDota and keep only the fields used here.
 
     Returns:
-        One entry per hero: hero_id, localized_name, icon, pro_pick, pro_win, pro_ban, and pub {bracket: [picks, wins]}
+        One entry per hero: hero_id, localized_name, icon, pro_pick, pro_win, pro_ban, pub_pick, pub_win
 
     Raises:
         ConnectionError: If OpenDota could not be reached or answered with an error
@@ -140,14 +132,6 @@ def _percent(part: int, whole: int) -> Optional[float]:
     return round(100 * part / whole, 1) if whole else None
 
 
-def _pub_bracket(heroes: list[dict[str, Any]]) -> int:
-    """Immortal, or the highest lower bracket with games when it has none (1 when all are empty)."""
-    for bracket in range(max(BRACKETS), 0, -1):
-        if any(h["pub"][str(bracket)][0] for h in heroes):
-            return bracket
-    return 1
-
-
 def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, Any]:
     """Pro, ultra and pub meta lists from cached hero stats.
 
@@ -156,7 +140,7 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
         params: Thresholds
 
     Returns:
-        pro_matches, pub_bracket (name of the bracket used), pub_matches, and the lists pro_meta (pick + ban rate,
+        pro_matches, pub_matches, and the lists pro_meta (pick + ban rate,
         highest first), ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (highest win rate first)
     """
     pro_matches = round(sum(h["pro_pick"] for h in heroes) / PICKS_PER_MATCH)
@@ -187,27 +171,24 @@ def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, 
     ]
     ultra_meta = sorted(ultra_meta, key=lambda h: (-h["win_rate"], h["localized_name"]))
 
-    bracket = _pub_bracket(heroes)
-    key = str(bracket)
-    pub_matches = round(sum(h["pub"][key][0] for h in heroes) / PICKS_PER_MATCH)
+    pub_matches = round(sum(h["pub_pick"] for h in heroes) / PICKS_PER_MATCH)
     pub = [
         {
             "hero_id": h["hero_id"],
             "localized_name": h["localized_name"],
             "icon": h["icon"],
-            "picks": h["pub"][key][0],
-            "wins": h["pub"][key][1],
-            "pick_rate": _percent(h["pub"][key][0], pub_matches),
-            "win_rate": _percent(h["pub"][key][1], h["pub"][key][0]),
+            "picks": h["pub_pick"],
+            "wins": h["pub_win"],
+            "pick_rate": _percent(h["pub_pick"], pub_matches),
+            "win_rate": _percent(h["pub_win"], h["pub_pick"]),
         }
         for h in heroes
-        if h["pub"][key][0]
+        if h["pub_pick"]
     ]
     pub.sort(key=lambda h: (-h["win_rate"], h["localized_name"]))
 
     return {
         "pro_matches": pro_matches,
-        "pub_bracket": BRACKETS[bracket],
         "pub_matches": pub_matches,
         "pro_meta": pro_meta,
         "ultra_meta": ultra_meta,

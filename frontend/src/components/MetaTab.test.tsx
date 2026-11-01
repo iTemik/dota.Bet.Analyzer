@@ -15,7 +15,6 @@ const meta: Meta = {
   fetched_at: 1_800_000_000,
   params: DEFAULT_META_PARAMS,
   pro_matches: 76,
-  pub_bracket: 'Divine',
   pub_matches: 1000,
   pro_meta: [
     { ...hero(4, 'Delta'), picks: 40, bans: 20, wins: 25, pick_ban_rate: 78.9, win_rate: 62.5 },
@@ -69,7 +68,7 @@ describe('MetaTab', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Top 30 heroes by win rate in Divine games (1000 matches). OpenDota has no Immortal games, so Divine is shown.',
+        "Top 30 heroes by win rate in Immortal, Divine and Ancient games (1000 matches), like OpenDota's Imm/Div/Anc W%.",
       ),
     ).toBeInTheDocument()
   })
@@ -121,15 +120,14 @@ describe('MetaTab', () => {
       '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=10',
       undefined,
     )
-    expect(screen.getByLabelText('Pub meta: top Immortal heroes')).toHaveValue(10)
+    expect(screen.getByLabelText('Pub meta: top heroes')).toHaveValue(10)
   })
 
   it('shows empty lists and errors', async () => {
-    mockFetch({ ...meta, pub_bracket: 'Immortal', pro_meta: [], ultra_meta: [], pub_meta: [] })
+    mockFetch({ ...meta, pro_meta: [], ultra_meta: [], pub_meta: [] })
     const { unmount } = render(<MetaTab />)
     expect(await screen.findAllByText('No heroes match these thresholds.')).toHaveLength(2)
     expect(screen.getByText('No pub games in this bracket.')).toBeInTheDocument()
-    expect(screen.queryByText(/OpenDota has no/)).not.toBeInTheDocument()
     unmount()
 
     mockFetch({ message: 'Failed to fetch hero stats from OpenDota' }, false, 503)

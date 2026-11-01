@@ -86,7 +86,7 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
   { key: 'pro_min_pick_ban', label: 'Pro meta: Pick + Ban % above', min: 0, max: 100, step: 0.1 },
   { key: 'ultra_min_win', label: 'Ultra meta: Win % above', min: 0, max: 100, step: 0.1 },
   { key: 'ultra_min_picks', label: 'Ultra meta: at least picks', min: 1 },
-  { key: 'pub_top', label: 'Pub meta: top Immortal heroes', min: 1, max: 200 },
+  { key: 'pub_top', label: 'Pub meta: top heroes', min: 1, max: 200 },
 ]
 
 /** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats, with adjustable thresholds. */
@@ -187,8 +187,8 @@ function MetaTab() {
           <ProMetaTable label="Ultra meta" heroes={data.ultra_meta} />
           <h2>Pub Meta</h2>
           <p className="prediction-hint">
-            Top {data.params.pub_top} heroes by win rate in {data.pub_bracket} games ({data.pub_matches} matches).
-            {data.pub_bracket !== 'Immortal' && ` OpenDota has no Immortal games, so ${data.pub_bracket} is shown.`}
+            Top {data.params.pub_top} heroes by win rate in Immortal, Divine and Ancient games ({data.pub_matches}{' '}
+            matches), like OpenDota&apos;s Imm/Div/Anc W%.
           </p>
           <PubMetaTable heroes={data.pub_meta} />
           <p className="prediction-hint">
