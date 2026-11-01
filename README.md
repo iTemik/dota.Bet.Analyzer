@@ -651,10 +651,11 @@ Async task for comprehensive player analysis:
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
 #### Hero Meta (`/heroes/meta`)
-- Pro meta: heroes with Pick + Ban rate in pro matches above 30%; ultra meta: those with win rate above 55% (5+ picks)
-- Pub meta: top 30 heroes by win rate in the Immortal bracket (Divine when OpenDota has no Immortal games)
+- Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold
+- Ultra meta: pro meta heroes with a win rate above a threshold and a minimum number of picks
+- Pub meta: top N heroes by win rate in a rank bracket (a lower bracket when OpenDota has no games in it)
+- All thresholds are query parameters, set on the Meta tab and kept in the browser; defaults in `backend/meta.py` `MetaParams`
 - One `/heroStats` request (OpenDota's window, about the last 7 days), cached in Redis for 1 hour; `refresh=true` (Refresh data button) fetches again, at most once a minute
-- Thresholds are query parameters, adjustable on the Meta tab and kept in the browser
 
 #### Matches (`/matches`)
 - `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, tournament (name, Liquipedia link, icon), Bo, teams, score
