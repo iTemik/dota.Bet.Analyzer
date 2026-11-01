@@ -1,5 +1,6 @@
 """Tests for the shared request limiter (backend.rate_limit), with an in-memory Redis and a fake clock."""
 
+import json
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
@@ -60,53 +61,88 @@ def clock() -> Clock:
 
 
 def limiter(clock: Clock, client: Optional[FakeRedis] = None, daily_limit: int = 0) -> RateLimiter:
+    """3 requests in any 60 s."""
     return RateLimiter(
-        "test", 1.2, daily_limit=daily_limit, client=client or FakeRedis(), clock=clock.time, sleep=clock.sleep
+        "test", 3, 60, daily_limit=daily_limit, client=client or FakeRedis(), clock=clock.time, sleep=clock.sleep
     )
 
 
-def test_requests_are_paced(clock):
+def full_window(client: FakeRedis, free_at: float) -> None:
+    """Fill the test window with 3 requests so the next slot is free at `free_at`."""
+    client.data["ratelimit:test:slots"] = json.dumps([free_at - 60] * 3)
+
+
+def test_burst_goes_out_without_waiting(clock):
     lim = limiter(clock)
     for _ in range(3):
         lim.acquire()
-    assert clock.sleeps == [1.2, 1.2]
+    assert clock.sleeps == []
+
+
+def test_full_window_waits_for_the_oldest_request_to_leave(clock):
+    lim = limiter(clock)
+    for _ in range(3):
+        lim.acquire()
+        clock.now += 10  # requests at +0, +10, +20
+    lim.acquire()  # at +30: waits until the first one is 60 s old
+    assert clock.sleeps == [30]
+    lim.acquire()  # at +60: waits until the second one is 60 s old
+    assert clock.sleeps == [30, 10]
 
 
 def test_no_wait_after_a_pause(clock):
     lim = limiter(clock)
-    lim.acquire()
-    clock.now += 5
-    lim.acquire()
+    for _ in range(3):
+        lim.acquire()
+    clock.now += 61
+    for _ in range(3):
+        lim.acquire()
     assert clock.sleeps == []
 
 
-def test_processes_share_one_pace(clock):
-    """Two limiters on the same Redis (e.g. Flask and the Celery worker) queue behind each other."""
+def test_processes_share_one_window(clock):
+    """Two limiters on the same Redis (e.g. Flask and the Celery worker) count into one window."""
     shared = FakeRedis()
+    for _ in range(3):
+        limiter(clock, shared).acquire()
     limiter(clock, shared).acquire()
-    limiter(clock, shared).acquire()
-    assert clock.sleeps == [1.2]
+    assert clock.sleeps == [60]
 
 
 def test_user_requests_go_before_background(clock):
     shared = FakeRedis()
     user = limiter(clock, shared)
     background = limiter(clock, shared)
-    user.acquire()
-    user.acquire()  # reserves the slot at +1.2 and waits for it
-    clock.now = START  # a background request arrives while user slots are taken up to +2.4
+    for _ in range(4):
+        user.acquire()  # the 4th reserves the slot at +60 and waits for it
+    clock.now = START  # a background request arrives while a user request is queued for +60
     background.acquire(background=True)
-    assert clock.sleeps == [1.2, 2.4]  # it waits until every reserved user slot has passed
-    assert clock.now == pytest.approx(START + 2.4)
+    assert clock.sleeps == [60, 60]  # it goes out only after the queued user request
+    assert clock.now == pytest.approx(START + 60)
+
+
+def test_background_goes_out_at_once_when_the_window_has_room(clock):
+    lim = limiter(clock)
+    lim.acquire()
+    lim.acquire(background=True)
+    assert clock.sleeps == []
 
 
 def test_long_waits_are_reported(clock):
     shared = FakeRedis()
-    shared.data["ratelimit:test:next"] = START + 10
+    full_window(shared, START + 10)
     waits: list[int] = []
     limiter(clock, shared).acquire(on_wait=waits.append)
-    limiter(clock, shared).acquire(on_wait=waits.append)  # normal pace, not reported
     assert waits == [10]
+
+
+def test_short_waits_are_not_reported(clock):
+    shared = FakeRedis()
+    full_window(shared, START + 2)
+    waits: list[int] = []
+    limiter(clock, shared).acquire(on_wait=waits.append)
+    assert waits == []
+    assert clock.sleeps == [2]
 
 
 def test_daily_limit_stops_background_but_not_user_requests(clock):
@@ -154,7 +190,7 @@ def test_redis_down_lets_requests_through(clock):
 def test_liquipedia_fetch_waits_for_its_limiter():
     from backend.matches import LIQUIPEDIA_LIMITER, fetch_matches_from_liquipedia
 
-    assert LIQUIPEDIA_LIMITER.min_interval == 30
+    assert (LIQUIPEDIA_LIMITER.limit, LIQUIPEDIA_LIMITER.window) == (1, 30)
     resp = MagicMock(status_code=200)
     resp.json.return_value = {"parse": {"text": ""}}
     with (
@@ -183,7 +219,7 @@ def test_used_today_is_none_when_redis_is_down(clock):
 
 def test_report_waits_is_the_default_on_wait(clock):
     shared = FakeRedis()
-    shared.data["ratelimit:test:next"] = START + 10
+    full_window(shared, START + 10)
     waits: list[int] = []
     with report_waits(waits.append):
         limiter(clock, shared).acquire()
