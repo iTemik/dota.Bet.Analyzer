@@ -84,8 +84,8 @@ def lock_token(fake: FakeRedis, name: str) -> str:
     return str(fake.data[f"job:{name}:lock"])
 
 
-def test_registry_has_the_startup_syncs():
-    assert list(jobs.JOBS) == ["pro_players", "heroes", "teams"]
+def test_registry_has_every_cache_job():
+    assert list(jobs.JOBS) == ["pro_players", "heroes", "teams", "hero_meta", "matches"]
     with pytest.raises(UnknownJobError):
         jobs.get_job("nope")
 
@@ -185,9 +185,9 @@ def test_run_with_old_token_is_skipped(app, test_job):
 def test_queue_due_jobs_skips_fresh_ones(app, mock_apply_async):
     set_synced_at(app, "heroes", int(time.time()))
     with app.app_context():
-        assert queue_due_jobs() == ["pro_players", "teams"]
+        assert queue_due_jobs() == ["pro_players", "teams", "hero_meta", "matches"]
         assert queue_due_jobs() == []  # Already queued
-    assert mock_apply_async.call_count == 2
+    assert mock_apply_async.call_count == 4
 
 
 def test_queue_if_due_logs_redis_errors(app, test_job, mock_apply_async):
@@ -205,7 +205,7 @@ def test_redis_down_reads_as_idle(app, test_job, monkeypatch):
 
 
 def test_startup_queues_due_jobs(app, mock_apply_async):
-    assert queue_due_jobs_on_startup(app) == ["pro_players", "heroes", "teams"]
+    assert queue_due_jobs_on_startup(app) == ["pro_players", "heroes", "teams", "hero_meta", "matches"]
 
 
 def test_startup_skips_worker_and_reloader_parent(app, mock_apply_async, monkeypatch):
@@ -238,11 +238,44 @@ def test_pro_players_and_heroes_jobs_store_data(app):
     fetch_heroes.assert_called_once_with(background=True)
 
 
+def test_hero_meta_and_matches_jobs_refresh_their_caches(app):
+    with (
+        patch("backend.meta.refresh_hero_stats", return_value=([{"hero_id": 1}], 100)) as refresh_meta,
+        patch("backend.matches.refresh_matches", return_value=[{}, {}]) as refresh_matches,
+    ):
+        assert jobs.JOBS["hero_meta"].run() == "Cached stats of 1 heroes"
+        assert jobs.JOBS["matches"].run() == "Cached 2 series"
+    refresh_meta.assert_called_once_with(background=True)
+    refresh_matches.assert_called_once_with(background=True)
+
+
+def test_hero_meta_job_fails_without_hero_stats():
+    with patch("backend.meta.refresh_hero_stats", return_value=([], 100)):
+        with pytest.raises(ValueError, match="no hero stats"):
+            jobs.JOBS["hero_meta"].run()
+
+
+def test_beat_sends_due_jobs_check_every_minute_to_background_queue():
+    from backend.celery_app import BACKGROUND_QUEUE, celery
+
+    entry = celery.conf.beat_schedule["check-due-jobs"]
+    assert entry["task"] == jobs.check_due_jobs_task.name
+    assert entry["schedule"] == 60
+    assert entry["options"] == {"queue": BACKGROUND_QUEUE, "expires": 60}
+
+
+def test_check_due_jobs_task_queues_due_jobs(app, mock_apply_async):
+    set_synced_at(app, "heroes", int(time.time()))
+    with patch("backend.create_app", return_value=app):
+        assert jobs.check_due_jobs_task.run() == ["pro_players", "teams", "hero_meta", "matches"]
+    assert mock_apply_async.call_count == 4
+
+
 def test_get_jobs_endpoint(client):
     rv = client.get("/api/jobs")
     assert rv.status_code == 200
     data = rv.get_json()
-    assert [job["name"] for job in data] == ["pro_players", "heroes", "teams"]
+    assert [job["name"] for job in data] == ["pro_players", "heroes", "teams", "hero_meta", "matches"]
     assert data[0]["state"] == IDLE
 
 

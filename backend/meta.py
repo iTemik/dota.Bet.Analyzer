@@ -2,7 +2,8 @@
 
 One /heroStats request returns, per hero, the pro picks, wins and bans and the pub picks and wins per rank
 bracket, all over OpenDota's own recent window (about the last 7 days). The answer is cached in Redis for
-CACHE_TTL, so the thresholds (query parameters) can be changed without a new request.
+CACHE_TTL, so the thresholds (query parameters) can be changed without a new request. The `hero_meta` cache job
+(backend.jobs) refreshes it every hour, so a page load rarely waits for OpenDota.
 
 - Pro meta: heroes whose pick + ban rate in pro matches is above `pro_min_pick_ban` percent. The rate is
   (picks + bans) / pro matches, where pro matches = all pro picks / 10, the same as OpenDota's Pro P+B%.
@@ -24,7 +25,7 @@ from backend.task_store import redis_client
 logger = setup_logging(__name__)
 
 CACHE_KEY = "opendota:hero_stats:v2"  # v2: pub picks and wins summed over PUB_BRACKETS
-CACHE_TTL = 3600  # seconds; OpenDota recomputes hero stats a few times a day
+CACHE_TTL = 2 * 3600  # seconds; longer than the hourly hero_meta job, so the job refreshes it before it expires
 ERROR_CACHE_TTL = 60  # a failed request is not repeated sooner
 MIN_REFRESH_INTERVAL = 60  # seconds; a forced refresh of newer stats uses the cache
 
@@ -58,8 +59,11 @@ def _hero_stat(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def fetch_hero_stats() -> list[dict[str, Any]]:
+def fetch_hero_stats(background: bool = False) -> list[dict[str, Any]]:
     """Fetch /heroStats from OpenDota and keep only the fields used here.
+
+    Args:
+        background: True for the cache job: lets user requests go first and stops at the daily budget
 
     Returns:
         One entry per hero: hero_id, localized_name, icon, pro_pick, pro_win, pro_ban, pub_pick, pub_win
@@ -69,7 +73,7 @@ def fetch_hero_stats() -> list[dict[str, Any]]:
         ValueError: If the answer is not a list of hero entries
     """
     try:
-        data = get_json("/heroStats", timeout=30)
+        data = get_json("/heroStats", timeout=30, background=background)
     except OpenDotaError as e:
         if e.code == "JSON_DECODE_ERROR":
             raise ValueError(f"Unexpected heroStats response: {e}") from e
@@ -91,6 +95,25 @@ def _cache_put(data: dict[str, Any], ttl: int) -> None:
         redis_client.setex(CACHE_KEY, ttl, json.dumps(data))
     except Exception as e:
         logger.warning(f"Failed to cache hero stats: {e}")
+
+
+def refresh_hero_stats(background: bool = False) -> tuple[list[dict[str, Any]], int]:
+    """Fetch the hero stats and cache them for CACHE_TTL.
+
+    Args:
+        background: True for the cache job (see fetch_hero_stats)
+
+    Returns:
+        Hero stats as returned by fetch_hero_stats, and the fetch time (unix seconds)
+
+    Raises:
+        ConnectionError, ValueError: As fetch_hero_stats
+        DailyLimitReached: For a background fetch when the daily budget is used up
+    """
+    heroes = fetch_hero_stats(background)
+    fetched_at = int(time.time())
+    _cache_put({"heroes": heroes, "fetched_at": fetched_at}, CACHE_TTL)
+    return heroes, fetched_at
 
 
 def cached_hero_stats(refresh: bool = False) -> tuple[list[dict[str, Any]], int]:
@@ -120,13 +143,10 @@ def cached_hero_stats(refresh: bool = False) -> tuple[list[dict[str, Any]], int]
             return data["heroes"], int(data["fetched_at"])
 
     try:
-        heroes = fetch_hero_stats()
+        return refresh_hero_stats()
     except (ConnectionError, ValueError) as e:
         _cache_put({"error": str(e)}, ERROR_CACHE_TTL)
         raise ConnectionError(str(e)) from e
-    fetched_at = int(time.time())
-    _cache_put({"heroes": heroes, "fetched_at": fetched_at}, CACHE_TTL)
-    return heroes, fetched_at
 
 
 def _percent(part: int, whole: int) -> Optional[float]:
