@@ -249,7 +249,7 @@ def test_team_task_is_queued_before_it_is_sent():
 
     assert [c[0] for c in calls.mock_calls] == ["update", "task.delay"]
     update.assert_called_once_with(team.task_id, 0, "Queued", 0)
-    assert team.task_id.startswith("task_1_")
+    assert team.task_id.startswith("task_")
 
 
 def test_players_statistics_queues_task_before_it_is_sent():
@@ -258,7 +258,7 @@ def test_players_statistics_queues_task_before_it_is_sent():
     app = create_app(test_config={})
     with (
         patch("backend.dota_bet_analyzer.players_statistics_task") as task,
-        patch("backend.dota_bet_analyzer.update_progress") as update,
+        patch("backend.task_store.update_progress") as update,
     ):
         calls.attach_mock(update, "update")
         calls.attach_mock(task.delay, "delay")

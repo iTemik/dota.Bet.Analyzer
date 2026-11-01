@@ -1,3 +1,5 @@
+import re
+
 import requests
 
 from backend.stats import Player, StatsResponse, compute_statistics
@@ -32,10 +34,6 @@ def test_compute_statistics_returns_model(monkeypatch):
         def delay(**kwargs):
             return FakeTask()
 
-    # Mock time.time() to return a fixed value
-    def fake_time():
-        return 1768287333.0
-
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr(
         "backend.stats.get_players_by_team", lambda team_id: ([Player(name="Alpha_Player1", id=101)], [])
@@ -44,7 +42,6 @@ def test_compute_statistics_returns_model(monkeypatch):
         "backend.stats._fetch_team_info", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
     )
     monkeypatch.setattr("backend.stats._local_logo_url", lambda team_id: None)
-    monkeypatch.setattr("backend.stats.time.time", fake_time)
     # Mock the import inside compute_statistics by patching dota_bet_analyzer module
     import sys
     from unittest.mock import MagicMock
@@ -67,7 +64,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
     assert team.task_id is not None  # task_id should be generated
-    assert team.task_id.startswith("task_42_")  # Verify task_id includes team_id
+    assert re.fullmatch(r"task_[0-9a-f]{32}", team.task_id)  # Unique uuid id
     assert team.error is None
 
 

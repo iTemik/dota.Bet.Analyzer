@@ -70,6 +70,26 @@ def no_startup_jobs(request):
 
 
 @pytest.fixture(autouse=True)
+def no_real_http():
+    """Block real HTTP in every test: tests mock requests.get, so a request that reaches the network fails the test.
+
+    The block raises inside the code under test and is reported again at teardown, because callers such as
+    get_json turn any exception into an error result. Yields the list of blocked URLs; a test that
+    checks the block itself clears it.
+    """
+    blocked: list[str] = []
+
+    def block(_adapter, request, *args, **kwargs):
+        blocked.append(request.url)
+        raise RuntimeError(f"Real HTTP request in a test: {request.url}")
+
+    with patch("requests.adapters.HTTPAdapter.send", block):
+        yield blocked
+    if blocked:
+        pytest.fail(f"Test made real HTTP requests (mock requests.get instead): {blocked}")
+
+
+@pytest.fixture(autouse=True)
 def no_opendota_retry_wait():
     """Skip the real waits between repeated OpenDota requests (429, timeouts) in tests."""
     with patch("backend.opendota.time.sleep") as mock_sleep:

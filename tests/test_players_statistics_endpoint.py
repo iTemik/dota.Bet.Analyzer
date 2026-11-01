@@ -206,3 +206,17 @@ class TestPlayersStatisticsIntegration:
         assert data["code"] == "VALIDATION_ERROR"
         assert "details" in data
         assert "errors" in data["details"]
+
+
+def test_two_starts_in_the_same_second_get_different_task_ids(client):
+    """Two Compares in one second used to share task_{time} and read each other's progress."""
+    with (
+        patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task,
+        patch("time.time", return_value=1_700_000_000.0),
+    ):
+        mock_task.delay.return_value = MagicMock(id="celery-task-1")
+        first = client.get("/api/statistics/players?account_id=123").get_json()["task_id"]
+        second = client.get("/api/statistics/players?account_id=123").get_json()["task_id"]
+
+    assert first != second
+    assert [call.kwargs["task_id"] for call in mock_task.delay.call_args_list] == [first, second]
