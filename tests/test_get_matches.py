@@ -3,6 +3,7 @@
 import pytest
 import requests
 
+from backend.opendota import OpenDotaError
 from backend.stats import MatchStats, get_matches
 
 
@@ -100,7 +101,7 @@ def test_get_matches_network_error(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    with pytest.raises(requests.RequestException, match="Failed to fetch matches"):
+    with pytest.raises(OpenDotaError, match="Failed to fetch matches"):
         get_matches(account_id=123456)
 
 
@@ -114,7 +115,7 @@ def test_get_matches_http_error(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    with pytest.raises(requests.RequestException, match="Failed to fetch matches"):
+    with pytest.raises(OpenDotaError, match="Failed to fetch matches"):
         get_matches(account_id=123456)
 
 
@@ -132,7 +133,7 @@ def test_get_matches_json_decode_error(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
 
-    with pytest.raises(requests.RequestException, match="Failed to fetch matches"):
+    with pytest.raises(OpenDotaError, match="Failed to fetch matches"):
         get_matches(account_id=123456)
 
 

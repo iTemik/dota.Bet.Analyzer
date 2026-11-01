@@ -810,7 +810,7 @@ The development server includes a proxy for API requests:
 
 ✅ **Automatic Cleanup** - Temporary files and directories are automatically cleaned up after each test using pytest fixtures.
 
-✅ **Mocked External APIs** - External API calls to OpenDota are mocked to prevent network requests and ensure test determinism.
+✅ **Mocked External APIs** - External API calls to OpenDota are mocked to prevent network requests and ensure test determinism. A real HTTP request in a test fails it, and only `backend/opendota.py` and `backend/matches.py` may import `requests` (`tests/test_network_guard.py`), so every request goes through the shared retry rules and rate limiter.
 
 ✅ **Database Performance Logging** - All insert/update operations log execution time and throughput (records/sec):
 ```

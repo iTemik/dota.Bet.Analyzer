@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import time
 
@@ -76,9 +76,9 @@ from backend.task_store import (
     load_results,
     progress_exists,
     read_progress,
+    start_task,
     store_results,
     subscribe_progress,
-    update_progress,
     wait_for_progress,
 )
 from backend.teams_sync import (
@@ -363,7 +363,7 @@ def statistics(args) -> tuple[Response, int]:
     200,
     TaskResponseSchema,
     description="Task started successfully",
-    example={"status": "started", "task_id": "task_<team_id>_1234567890", "celery_task_id": "abc-123-def"},
+    example={"status": "started", "task_id": "task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813", "celery_task_id": "abc-123-def"},
 )
 @bp.alt_response(
     400,
@@ -397,7 +397,6 @@ def statistics(args) -> tuple[Response, int]:
         "message": "Failed to start background task",
         "details": {
             "url": "/api/statistics/players",
-            "task_id": "task_1234567890",
             "exception": "Celery connection failed",
         },
     },
@@ -439,7 +438,7 @@ def players_statistics(args) -> tuple[Response, int]:
 
         {
             "status": "started",
-            "task_id": "task_1234567890",
+            "task_id": "task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813",
             "celery_task_id": "abc-123-def-456"
         }
 
@@ -453,13 +452,10 @@ def players_statistics(args) -> tuple[Response, int]:
         accounts_int = [int(a) if not isinstance(a, int) else a for a in accounts]
 
         try:
-            task_id = f"task_{int(time.time())}"
-            # Queue before the task starts, so a finished task's progress is never overwritten
-            update_progress(task_id, 0, "Queued", 0)
-            task = players_statistics_task.delay(task_id=task_id, accounts=accounts_int, days=days)
-            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": task.id}), 200
+            task_id, celery_task_id = start_task(players_statistics_task, accounts=accounts_int, days=days)
+            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": celery_task_id}), 200
         except Exception as e:
-            return api_error(500, Errors.FAILED_TO_START_TASK, e, task_id=task_id)
+            return api_error(500, Errors.FAILED_TO_START_TASK, e)
 
     except Exception as e:
         return api_error(400, Errors.INVALID_REQUEST, e)
@@ -597,7 +593,7 @@ def stream_progress(task_id: str) -> tuple[Response, int] | Response:
         Server-Sent Events stream with progress updates (200) or error response (404, 500)
 
     Example:
-        `GET /api/stream-progress/task_1234_1234567890`
+        `GET /api/stream-progress/task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813`
 
         Stream (200):
 
@@ -680,7 +676,7 @@ def get_results(task_id: str) -> tuple[Response, int]:
 
 
     Example:
-        `GET /api/results/task_12345_1234567890`
+        `GET /api/results/task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813`
 
         Response (200):
         {

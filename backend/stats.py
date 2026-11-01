@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 import statistics
-import time
 from typing import Any, List, Optional
 
-import requests
 from pydantic import BaseModel, Field
 
 from backend.helpers import ApiError, Errors
@@ -450,13 +448,16 @@ def _create_team_stats(
         account_ids = [player.id for player in team_stats.players]
         # Stand-ins (played in the window, outside the core) get only their rank
         standin_ids = [player.id for player in team_stats.other_players if player.games]
-        task_id = f"task_{team_stats.team_id}_{int(time.time())}"
         # Imported here: task_store imports this module
-        from backend.task_store import update_progress
+        from backend.task_store import start_task
 
-        # Queue before the task starts, so a finished task's progress is never overwritten
-        update_progress(task_id, 0, "Queued", 0)
-        players_statistics_task.delay(task_id=task_id, accounts=account_ids, days=days, rank_accounts=standin_ids)
+        task_id, _ = start_task(
+            players_statistics_task,
+            team_id=team_stats.team_id,
+            accounts=account_ids,
+            days=days,
+            rank_accounts=standin_ids,
+        )
 
     team_stats.task_id = task_id
 
@@ -577,7 +578,7 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
 
     Raises:
         ValueError: If account_id is invalid
-        requests.RequestException: If API request fails
+        OpenDotaError: If the API request fails
     """
     if not isinstance(account_id, int) or account_id < 0:
         raise ValueError("account_id must be a non-negative integer")
@@ -587,7 +588,7 @@ def get_matches(account_id: int, days: int = 20, on_wait: Optional[WaitCallback]
     try:
         data = get_json(url, timeout=60, on_wait=on_wait)
     except OpenDotaError as exc:
-        raise requests.RequestException(f"Failed to fetch matches for account {account_id}: {exc}") from exc
+        raise OpenDotaError(exc.status, exc.code, f"Failed to fetch matches for account {account_id}: {exc}") from exc
 
     if not isinstance(data, list):
         return []

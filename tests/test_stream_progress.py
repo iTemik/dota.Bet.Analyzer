@@ -258,7 +258,7 @@ def test_players_statistics_queues_task_before_it_is_sent():
     app = create_app(test_config={})
     with (
         patch("backend.dota_bet_analyzer.players_statistics_task") as task,
-        patch("backend.dota_bet_analyzer.update_progress") as update,
+        patch("backend.task_store.update_progress") as update,
     ):
         calls.attach_mock(update, "update")
         calls.attach_mock(task.delay, "delay")
@@ -269,3 +269,13 @@ def test_players_statistics_queues_task_before_it_is_sent():
     task_id = rv.get_json()["task_id"]
     assert [c[0] for c in calls.mock_calls] == ["update", "delay"]
     update.assert_called_once_with(task_id, 0, "Queued", 0)
+
+
+def test_task_ids_keep_the_team_id_and_never_repeat():
+    """Team tasks carry the team id; two ids made for the same team at once still differ."""
+    from backend.task_store import new_task_id
+
+    first, second = new_task_id(42), new_task_id(42)
+    assert first.startswith("task_42_")
+    assert first != second
+    assert new_task_id().count("_") == 1  # Tasks without a team: task_<uuid hex>

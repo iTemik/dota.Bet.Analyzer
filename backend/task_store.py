@@ -2,6 +2,8 @@
 
 import json
 import time
+import uuid
+from typing import Any
 
 from redis.client import PubSub
 
@@ -45,6 +47,38 @@ def update_progress(task_id: str, step: int, message: str, progress: float, data
     except Exception as e:
         # Log error but don't fail the task if Redis is unavailable
         logger.warning(f"Failed to update progress for task {task_id}: {e}")
+
+
+def new_task_id(team_id: int | None = None) -> str:
+    """A unique task id, also for two tasks started in the same second.
+
+    Args:
+        team_id: Team the task belongs to, kept in the id to tell team tasks apart in logs (optional)
+
+    Returns:
+        "task_<team_id>_<uuid hex>", or "task_<uuid hex>" without a team
+    """
+    prefix = f"task_{team_id}_" if team_id else "task_"
+    return f"{prefix}{uuid.uuid4().hex}"
+
+
+def start_task(task: Any, team_id: int | None = None, **kwargs: Any) -> tuple[str, str]:
+    """Queue a Celery task that reports progress under a new task id.
+
+    The "Queued" progress is written before the task is sent, so a finished task's progress is never overwritten.
+
+    Args:
+        task: Celery task; it receives the new id as its `task_id` argument
+        team_id: Team the task belongs to, put into the task id (optional)
+        **kwargs: The task's other arguments
+
+    Returns:
+        (task_id, celery_task_id)
+    """
+    task_id = new_task_id(team_id)
+    update_progress(task_id, 0, "Queued", 0)
+    result = task.delay(task_id=task_id, **kwargs)
+    return task_id, result.id
 
 
 class ProgressReporter:
