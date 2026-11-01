@@ -382,7 +382,7 @@ npm test -- --run # Single run
 ## 🗂️ Database initialization
 
 This project uses SQLite with **two separate databases** in `instance/`, both opened through `backend/db.py`:
-
+1. **d2ba.sqlite** - OpenDota/Liquipedia cache, can be deleted and rebuilt (`get_cache_db()`). It runs in WAL mode so the web app and the Celery workers can read while one of them writes; delete it together with `d2ba.sqlite-wal` and `d2ba.sqlite-shm`
 1. **d2ba.sqlite** - OpenDota/Liquipedia cache, can be deleted and rebuilt (`get_cache_db()`)
 2. **predictions.sqlite** - Your own data: team snapshots and predictions. Back it up; it can't be fetched again (`get_user_db()`)
 
