@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Bar from './Bar'
 import { requestJson } from '../api'
 import { type DataStatus as Status, type JobStatus, budgetNearLimit, followDataStatus, isBusy } from '../dataStatus'
 import { formatShortDateTime } from '../format'
@@ -75,9 +76,7 @@ export default function DataStatus() {
           {summary}
         </span>
         {running && running.state === 'running' && running.progress > 0 && (
-          <span className="data-bar" aria-hidden="true">
-            <span className="data-bar-fill" style={{ width: `${Math.min(100, running.progress)}%` }} />
-          </span>
+          <Bar value={running.progress} />
         )}
         {failed.length > 0 && (
           <button type="button" className="data-status-button" onClick={() => runJobs(failed.map((job) => job.name))}>
