@@ -875,14 +875,14 @@ def search_teams(args):
 
     Returns a list of matching teams ordered by relevance (starts-with matches first).
     """
-    from backend.pro_players import get_d2ba_db
+    from backend.db import get_cache_db
 
     _sync_teams_if_obsolete()
     search_query = args["q"]
     limit = args.get("limit", 10)
 
     try:
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
 
         # Search teams by name or tag (case-insensitive)

@@ -1,14 +1,13 @@
 """Pro Players database operations."""
 
-import os
 import sqlite3
 import time
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional, cast
 
-from flask import current_app, g
 from pydantic import BaseModel
 
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
 from backend.opendota import OpenDotaError, get_json
 
@@ -30,22 +29,6 @@ class Player(BaseModel):
     id: int
     games: Optional[int] = None
     is_core: Optional[bool] = None
-
-
-def get_d2ba_db():
-    """Get connection to d2ba.sqlite database."""
-    if "d2ba_db" not in g:
-        db_path = os.path.join(current_app.instance_path, "d2ba.sqlite")
-        g.d2ba_db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-        g.d2ba_db.row_factory = sqlite3.Row
-    return g.d2ba_db
-
-
-def close_d2ba_db(e=None):
-    """Close d2ba database connection."""
-    db = g.pop("d2ba_db", None)
-    if db is not None:
-        db.close()
 
 
 def fetch_pro_players_from_api(background: bool = False) -> list[dict[str, Any]]:
@@ -87,7 +70,7 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
         return 0
 
     start_time = time.time()
-    db = get_d2ba_db()
+    db = get_cache_db()
     cursor = db.cursor()
 
     count = 0
@@ -133,11 +116,6 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
     rate = count / elapsed if elapsed > 0 else 0.0
     logger.info(f"Stored/updated {count} pro players in {elapsed:.3f}s ({rate:.1f} records/sec)")
     return count
-
-
-def init_d2ba_app(app):
-    """Initialize d2ba database helpers for the app."""
-    app.teardown_appcontext(close_d2ba_db)
 
 
 def _extract_players_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[list[Player], list[Player]]:
@@ -198,7 +176,7 @@ def get_players_by_team(
         raise ValueError("At least one search criterion (team_id, team_name, or team_tag) must be provided")
 
     try:
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
 
         # Build query dynamically based on provided criteria
@@ -316,7 +294,7 @@ def store_teams(teams_data: list[dict[str, Any]]) -> int:
         return 0
 
     start_time = time.time()
-    db = get_d2ba_db()
+    db = get_cache_db()
     cursor = db.cursor()
 
     count = 0

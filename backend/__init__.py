@@ -56,7 +56,6 @@ def _configure_app(app, test_config=None):
     # Default configuration
     app.config.from_mapping(
         SECRET_KEY="dev",
-        DATABASE_FILENAME="d2ba.sqlite",
         # OpenAPI/Swagger configuration
         API_TITLE="Dota Bet Analyzer API",
         API_VERSION=__version__,
@@ -75,10 +74,7 @@ def _configure_app(app, test_config=None):
     else:
         app.config.from_mapping(test_config)
 
-    # Setup database path
     os.makedirs(app.instance_path, exist_ok=True)
-    db_filename = app.config.get("DATABASE_FILENAME", "d2ba.sqlite")
-    app.config["DATABASE"] = os.path.join(app.instance_path, db_filename)
 
 
 def _extract_error_from_dict(fields):
@@ -196,20 +192,10 @@ def _init_extensions(app):
     # This transforms webargs/marshmallow validation errors to match our ErrorSchema format
     _register_validation_error_handler(app)
 
-    # Initialize database
+    # Close the d2ba.sqlite and predictions.sqlite connections after each request
     from . import db
 
     db.init_app(app)
-
-    # Initialize d2ba database
-    from .pro_players import init_d2ba_app
-
-    init_d2ba_app(app)
-
-    # Initialize predictions database (snapshots and predictions)
-    from .predictions_db import init_predictions_app
-
-    init_predictions_app(app)
 
     # Register blueprints
     from .dota_bet_analyzer import bp as dota_bp

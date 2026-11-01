@@ -6,9 +6,9 @@ POST /api/jobs/heroes/run on demand.
 
 from typing import Any
 
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
 from backend.opendota import OpenDotaError, get_json
-from backend.pro_players import get_d2ba_db
 
 logger = setup_logging(__name__)
 
@@ -64,7 +64,7 @@ def store_heroes(heroes: list[dict[str, Any]]) -> int:
     Returns:
         Number of heroes stored
     """
-    db = get_d2ba_db()
+    db = get_cache_db()
     db.executemany(
         """
         INSERT INTO heroes (hero_id, name, localized_name, icon) VALUES (:hero_id, :name, :localized_name, :icon)
@@ -83,5 +83,5 @@ def list_heroes() -> list[dict[str, Any]]:
     Returns:
         Heroes with hero_id, name, localized_name and icon
     """
-    rows = get_d2ba_db().execute("SELECT hero_id, name, localized_name, icon FROM heroes ORDER BY localized_name")
+    rows = get_cache_db().execute("SELECT hero_id, name, localized_name, icon FROM heroes ORDER BY localized_name")
     return [dict(row) for row in rows]

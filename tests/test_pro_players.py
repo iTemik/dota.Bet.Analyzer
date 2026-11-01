@@ -107,9 +107,9 @@ def test_store_pro_players_stores_data(sample_pro_players_data, app):
 
         # Check database
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
             cursor.execute("SELECT COUNT(*) FROM pro_players")
             count = cursor.fetchone()[0]
@@ -141,9 +141,9 @@ def test_pro_players_upsert(sample_pro_players_data, app):
 
         # Check database
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
 
             # Should still have only 2 players
@@ -173,11 +173,11 @@ def test_store_pro_players_direct():
         app = create_app({"TESTING": True})
 
         with app.app_context():
-            # Mock the g.d2ba_db connection
+            # Mock the g.cache_db connection
             from flask import g
 
-            g.d2ba_db = sqlite3.connect(db_path)
-            g.d2ba_db.row_factory = sqlite3.Row
+            g.cache_db = sqlite3.connect(db_path)
+            g.cache_db.row_factory = sqlite3.Row
 
             players_data = [
                 {
@@ -198,13 +198,13 @@ def test_store_pro_players_direct():
             assert count == 1
 
             # Verify in database
-            cursor = g.d2ba_db.cursor()
+            cursor = g.cache_db.cursor()
             cursor.execute("SELECT * FROM pro_players WHERE account_id = ?", (123,))
             player = cursor.fetchone()
             assert player is not None
             assert player["name"] == "name"
 
-            g.d2ba_db.close()
+            g.cache_db.close()
 
     finally:
         if os.path.exists(db_path):
@@ -253,10 +253,11 @@ def test_fetch_pro_players_from_api_invalid_response():
 def test_get_players_by_team_id(app):
     """Test getting players by team_id."""
     with app.app_context():
-        from backend.pro_players import get_d2ba_db, get_players_by_team
+        from backend.db import get_cache_db
+        from backend.pro_players import get_players_by_team
 
         # Insert test data
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Team A", "TA", 1),
@@ -289,9 +290,10 @@ def test_get_players_by_team_id(app):
 def test_get_players_by_team_name(app):
     """Test getting players by team_name."""
     with app.app_context():
-        from backend.pro_players import get_d2ba_db, get_players_by_team
+        from backend.db import get_cache_db
+        from backend.pro_players import get_players_by_team
 
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Liquid", "Liquid", 1),
@@ -320,9 +322,10 @@ def test_get_players_by_team_name(app):
 def test_get_players_by_team_tag(app):
     """Test getting players by team_tag."""
     with app.app_context():
-        from backend.pro_players import get_d2ba_db, get_players_by_team
+        from backend.db import get_cache_db
+        from backend.pro_players import get_players_by_team
 
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Team A", "TA", 1),
@@ -351,9 +354,10 @@ def test_get_players_by_team_tag(app):
 def test_get_players_by_team_multiple_criteria(app):
     """Test getting players using multiple criteria (OR logic)."""
     with app.app_context():
-        from backend.pro_players import get_d2ba_db, get_players_by_team
+        from backend.db import get_cache_db
+        from backend.pro_players import get_players_by_team
 
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
         test_players = [
             (1, "76561197961234560", "url", "player1", "Player One", 1, 100, "Liquid", "Liquid", 1),
@@ -400,11 +404,12 @@ def test_get_players_by_team_no_criteria():
 def test_get_players_by_team_integration_with_stats(app):
     """Test that get_players_by_team works within stats computation."""
     with app.app_context():
-        from backend.pro_players import get_d2ba_db, get_players_by_team
+        from backend.db import get_cache_db
+        from backend.pro_players import get_players_by_team
         from backend.stats import TeamStats
 
         # Insert test pro players into database
-        db = get_d2ba_db()
+        db = get_cache_db()
         cursor = db.cursor()
         cursor.execute(
             """INSERT INTO pro_players
@@ -482,9 +487,9 @@ def test_teams_sync_stores_data(sample_teams_data, app):
 
         # Check database
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
             cursor.execute("SELECT COUNT(*) FROM teams")
             count = cursor.fetchone()[0]
@@ -525,9 +530,9 @@ def test_teams_upsert(sample_teams_data, app):
 
         # Check database
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
 
             # Should still have 2 teams (upserted, not inserted again)
@@ -630,9 +635,9 @@ def test_teams_sync_with_large_dataset(sample_teams_data, app):
 
         # Verify all teams are stored
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
             cursor.execute("SELECT COUNT(*) FROM teams")
             count = cursor.fetchone()[0]

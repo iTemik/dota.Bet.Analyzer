@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
+from backend.db import get_cache_db
 from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
 from backend.opendota import (
@@ -15,7 +16,7 @@ from backend.opendota import (
     get_json,
     is_radiant,
 )
-from backend.pro_players import Player, get_d2ba_db, get_players_by_team
+from backend.pro_players import Player, get_players_by_team
 from backend.ratings import window_rating_change
 from backend.rosters import LeagueForm, TeamRoster, resolve_roster
 
@@ -256,7 +257,7 @@ def _parse_error(team_str: Optional[str], team_id: Optional[int], url: str, exc:
 def _local_logo_url(team_id: int) -> Optional[str]:
     """Logo URL of a team from the local `teams` table (None when the team or its logo is not stored)."""
     try:
-        row = get_d2ba_db().execute("SELECT logo_url FROM teams WHERE team_id = ?", (team_id,)).fetchone()
+        row = get_cache_db().execute("SELECT logo_url FROM teams WHERE team_id = ?", (team_id,)).fetchone()
     except sqlite3.Error as exc:
         logger.warning(f"Teams table unavailable: {exc}")
         return None

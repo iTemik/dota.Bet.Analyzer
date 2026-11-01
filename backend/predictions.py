@@ -9,7 +9,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 
-from backend.predictions_db import get_predictions_db
+from backend.db import get_user_db
 from backend.snapshots import get_snapshot
 
 # Prediction columns plus each team's name, tag and logo as saved in its snapshot
@@ -119,7 +119,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 def _fetch(prediction_id: int) -> Optional[dict[str, Any]]:
     """Read one prediction without its snapshots' data."""
-    row = get_predictions_db().execute(f"{_LIST_QUERY} WHERE p.prediction_id = ?", (prediction_id,)).fetchone()
+    row = get_user_db().execute(f"{_LIST_QUERY} WHERE p.prediction_id = ?", (prediction_id,)).fetchone()
     return _row_to_dict(row) if row else None
 
 
@@ -151,7 +151,7 @@ def create_prediction(
     Raises:
         SnapshotMissingError: When a snapshot does not exist
     """
-    db = get_predictions_db()
+    db = get_user_db()
     for snapshot_id in (team1_snapshot_id, team2_snapshot_id):
         if db.execute("SELECT 1 FROM team_snapshots WHERE snapshot_id = ?", (snapshot_id,)).fetchone() is None:
             raise SnapshotMissingError(snapshot_id)
@@ -186,7 +186,7 @@ def list_predictions(status: Optional[str] = None) -> list[dict[str, Any]]:
         Predictions with team names and logos, without the snapshots' data
     """
     where = f"WHERE {_STATUS_CONDITIONS[status]}" if status else ""
-    rows = get_predictions_db().execute(f"{_LIST_QUERY} {where} ORDER BY p.created_at DESC, p.prediction_id DESC")
+    rows = get_user_db().execute(f"{_LIST_QUERY} {where} ORDER BY p.created_at DESC, p.prediction_id DESC")
     return [_row_to_dict(row) for row in rows]
 
 
@@ -231,7 +231,7 @@ def save_review(
         raise ValueError(
             f"{team1_maps_won}-{team2_maps_won} is not a result of a bo{prediction['best_of'] or '?'} series"
         )
-    db = get_predictions_db()
+    db = get_user_db()
     db.execute(
         "UPDATE predictions SET team1_maps_won = ?, team2_maps_won = ?, review_note = COALESCE(?, review_note) "
         "WHERE prediction_id = ?",
@@ -273,7 +273,7 @@ def update_decision(
     score = (prediction["team1_maps_won"], prediction["team2_maps_won"])
     if score[0] is not None and not is_valid_result(best_of, *score):
         raise ValueError(f"Saved result {score[0]}-{score[1]} is not a result of a bo{best_of or '?'} series")
-    db = get_predictions_db()
+    db = get_user_db()
     db.execute(
         "UPDATE predictions SET team1_odds = ?, team2_odds = ?, best_of = ?, bet_team = ?, stake = ?, comment = ? "
         "WHERE prediction_id = ?",
@@ -292,7 +292,7 @@ def delete_prediction(prediction_id: int) -> bool:
     Returns:
         True when it existed
     """
-    db = get_predictions_db()
+    db = get_user_db()
     cursor = db.execute("DELETE FROM predictions WHERE prediction_id = ?", (prediction_id,))
     db.commit()
     return cursor.rowcount > 0

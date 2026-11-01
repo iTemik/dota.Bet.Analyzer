@@ -12,7 +12,7 @@ import time
 from datetime import UTC, date, datetime
 from typing import Any, Optional
 
-from backend.predictions_db import get_predictions_db
+from backend.db import get_user_db
 
 # Columns returned for a snapshot, without its data; team_name is read from the stored team
 _SUMMARY_COLUMNS = (
@@ -59,7 +59,7 @@ def save_snapshot(
     data = json.dumps({"team": stored_team, "summary": summary, "players": players})
     key = (team_id, snapshot_date, days, last_match_time)
 
-    db = get_predictions_db()
+    db = get_user_db()
     existing = db.execute(
         "SELECT snapshot_id FROM team_snapshots "
         "WHERE team_id = ? AND snapshot_date = ? AND days = ? AND last_match_time = ?",
@@ -95,7 +95,7 @@ def is_snapshot_used(snapshot_id: int) -> bool:
         True when at least one prediction uses the snapshot
     """
     row = (
-        get_predictions_db()
+        get_user_db()
         .execute(
             "SELECT 1 FROM predictions WHERE team1_snapshot_id = ? OR team2_snapshot_id = ? LIMIT 1",
             (snapshot_id, snapshot_id),
@@ -131,7 +131,7 @@ def list_snapshots(
         params.append(date_to.isoformat())
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-    rows = get_predictions_db().execute(
+    rows = get_user_db().execute(
         f"SELECT {_SUMMARY_COLUMNS} FROM team_snapshots {where} ORDER BY taken_at DESC, snapshot_id DESC", params
     )
     return [_row_to_dict(row) for row in rows]
@@ -147,7 +147,7 @@ def get_snapshot(snapshot_id: int) -> Optional[dict[str, Any]]:
         The snapshot, or None when it does not exist
     """
     row = (
-        get_predictions_db()
+        get_user_db()
         .execute(f"SELECT {_SUMMARY_COLUMNS}, data FROM team_snapshots WHERE snapshot_id = ?", (snapshot_id,))
         .fetchone()
     )

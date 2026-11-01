@@ -12,8 +12,9 @@ on demand by POST /api/jobs/teams/run. The job lock keeps one sync running at a 
 import time
 from typing import Any, Optional
 
+from backend.db import get_cache_db
 from backend.opendota import OpenDotaError, get_json
-from backend.pro_players import fetch_teams_from_api, get_d2ba_db, store_teams
+from backend.pro_players import fetch_teams_from_api, store_teams
 
 TEAMS_SYNC_NAME = "teams"  # sync_state.name of the teams list
 TEAM_IDS_PER_QUERY = 200  # Team ids in one explorer `team_id IN (...)` query
@@ -21,7 +22,7 @@ TEAM_IDS_PER_QUERY = 200  # Team ids in one explorer `team_id IN (...)` query
 
 def _newest_match_time() -> Optional[int]:
     """Newest stored team `last_match_time`, the start of an incremental sync (None when no team has one)."""
-    row = get_d2ba_db().execute("SELECT MAX(last_match_time) FROM teams").fetchone()
+    row = get_cache_db().execute("SELECT MAX(last_match_time) FROM teams").fetchone()
     return row[0] if row else None
 
 
@@ -97,7 +98,7 @@ def run_teams_sync(full: bool = False) -> int:
             return 0
     else:
         count = store_teams(fetch_recent_teams(since))
-    db = get_d2ba_db()
+    db = get_cache_db()
     db.execute(
         """
         INSERT INTO sync_state (name, synced_at) VALUES (?, ?)

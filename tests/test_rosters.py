@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.db import get_cache_db
 from backend.opendota import RATE_LIMIT_RETRIES, opendota_get
-from backend.pro_players import get_d2ba_db
 from backend.rosters import (
     TEAM_MATCHES_TTL,
     LineupPlayer,
@@ -83,7 +83,7 @@ def ctx(app):
 
 
 def _store_names(names: dict[int, str]) -> None:
-    db = get_d2ba_db()
+    db = get_cache_db()
     db.executemany("INSERT INTO pro_players (account_id, name) VALUES (?, ?)", list(names.items()))
     db.commit()
 

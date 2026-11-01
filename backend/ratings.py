@@ -10,8 +10,8 @@ import sqlite3
 import time
 from typing import Optional
 
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
-from backend.pro_players import get_d2ba_db
 from backend.rosters import TeamMatch, get_team_league_matches, window_start
 
 logger = setup_logging(__name__)
@@ -31,7 +31,7 @@ def _local_ratings(team_ids: set[int]) -> dict[int, float]:
         return {}
     placeholders = ",".join("?" for _ in team_ids)
     rows = (
-        get_d2ba_db()
+        get_cache_db()
         .execute(f"SELECT team_id, rating FROM teams WHERE team_id IN ({placeholders})", list(team_ids))
         .fetchall()
     )

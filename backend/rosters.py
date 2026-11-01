@@ -19,9 +19,10 @@ from typing import Any, List, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
 from backend.opendota import OPENDOTA_API, OpenDotaError, get_json, is_radiant
-from backend.pro_players import Player, get_d2ba_db
+from backend.pro_players import Player
 
 logger = setup_logging(__name__)
 
@@ -224,7 +225,7 @@ def _parse_team_match(row: dict[str, Any]) -> Optional[TeamMatch]:
 def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch]]:
     """Return cached team matches if they are fresh, otherwise None."""
     try:
-        db = get_d2ba_db()
+        db = get_cache_db()
         sync = db.execute("SELECT fetched_at FROM team_matches_sync WHERE team_id = ?", (team_id,)).fetchone()
         if sync is None or now - int(sync["fetched_at"]) > TEAM_MATCHES_TTL:
             return None
@@ -242,7 +243,7 @@ def _load_cached_team_matches(team_id: int, now: int) -> Optional[list[TeamMatch
 def _store_team_matches(team_id: int, matches: Iterable[TeamMatch], now: int) -> None:
     """Replace cached matches of a team and mark them as fetched now."""
     try:
-        db = get_d2ba_db()
+        db = get_cache_db()
         db.execute("DELETE FROM team_matches WHERE team_id = ?", (team_id,))
         db.executemany(
             "INSERT OR REPLACE INTO team_matches (team_id, match_id, start_time, leagueid, radiant, radiant_win, "
@@ -301,7 +302,7 @@ def _load_cached_lineup(match_id: int) -> Optional[list[LineupPlayer]]:
     """Return the cached lineup of a match, or None if not cached."""
     try:
         rows = (
-            get_d2ba_db()
+            get_cache_db()
             .execute(
                 f"SELECT player_slot, account_id, {', '.join(LINEUP_STATS)} FROM match_players "
                 "WHERE match_id = ? ORDER BY player_slot",
@@ -320,7 +321,7 @@ def _load_cached_lineup(match_id: int) -> Optional[list[LineupPlayer]]:
 def _store_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
     """Cache a match lineup."""
     try:
-        db = get_d2ba_db()
+        db = get_cache_db()
         db.executemany(
             f"INSERT OR REPLACE INTO match_players (match_id, player_slot, account_id, {', '.join(LINEUP_STATS)}) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -426,7 +427,7 @@ def _player_names(account_ids: list[int]) -> dict[int, str]:
     try:
         placeholders = ",".join("?" for _ in account_ids)
         rows = (
-            get_d2ba_db()
+            get_cache_db()
             .execute(
                 f"SELECT account_id, name, personaname FROM pro_players WHERE account_id IN ({placeholders})",
                 account_ids,
