@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from backend.stats import MatchStats
 
 MATCH = MatchStats(match_id=1, player_slot=0, radiant_win=True, game_mode=22, lobby_type=7, hero_id=5)
@@ -49,3 +51,26 @@ def test_cache_errors_fall_through_to_api():
 
     with patch.object(cache, "redis_client", redis), patch.object(task_store, "get_rank", return_value=7):
         assert task_store.get_rank_cached(42) == 7
+
+
+def test_rank_error_is_not_cached():
+    """A failed rank request is raised and stored nowhere, so the next task asks OpenDota again."""
+    from backend import cache, task_store
+    from backend.opendota import OpenDotaError
+
+    store: dict[str, bytes] = {}
+    redis = MagicMock()
+    redis.get.side_effect = lambda key: store.get(key)
+    redis.setex.side_effect = lambda key, ttl, value: store.__setitem__(key, value.encode())
+    error = OpenDotaError(503, "NETWORK_ERROR", "timeout")
+
+    with (
+        patch.object(cache, "redis_client", redis),
+        patch.object(task_store, "get_rank", side_effect=[error, 7]) as fetch,
+    ):
+        with pytest.raises(OpenDotaError):
+            task_store.get_rank_cached(42)
+        assert store == {}
+        assert task_store.get_rank_cached(42) == 7
+
+    assert fetch.call_count == 2

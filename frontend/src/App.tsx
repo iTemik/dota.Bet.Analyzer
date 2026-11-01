@@ -9,6 +9,7 @@ import PredictionDetail from './components/PredictionDetail'
 import PredictionList from './components/PredictionList'
 import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
+import { requestJson } from './api'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
 import type { Match, MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
@@ -147,20 +148,8 @@ function App() {
       query.append(...param2)
       query.append('days', String(STATS_DAYS))
 
-      const response = await fetch(`/api/statistics?${query.toString()}`)
-
-      if (!response.ok) {
-        // Try to extract error message from response body
-        try {
-          const errorData = await response.json()
-          const errorMsg = errorData.message || `HTTP error! status: ${response.status}`
-          throw new Error(errorMsg)
-        } catch {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-      }
-
-      const data = await response.json()
+      // Throws with the backend's message ("Team not found"...) on an error status
+      const data = await requestJson<Statistics>(`/api/statistics?${query.toString()}`)
 
       // Reset summary data when new statistics are loaded
       // This ensures old data doesn't persist between searches
@@ -168,9 +157,7 @@ function App() {
       setStatistics(data)
 
       // Check if any team has a task_id (ongoing background task)
-      const taskIds = data.teams
-        .filter((team: TeamData) => team.task_id)
-        .map((team: TeamData) => team.task_id)
+      const taskIds = data.teams.map((team) => team.task_id).filter((taskId): taskId is string => Boolean(taskId))
 
       if (taskIds.length > 0) {
         // Poll progress for all tasks
@@ -232,12 +219,10 @@ function App() {
       for (const taskId of taskIds) {
         if (!taskId) continue
 
-        const resultsResponse = await fetch(`/api/results/${taskId}`)
-        if (resultsResponse.ok) {
-          const resultsData = await resultsResponse.json()
-          detailedResults[taskId] = resultsData
-        } else {
-          console.warn(`Failed to fetch results for task ${taskId}: HTTP ${resultsResponse.status}`)
+        try {
+          detailedResults[taskId] = await requestJson<StatisticsResult>(`/api/results/${taskId}`)
+        } catch (err) {
+          console.warn(`Failed to fetch results for task ${taskId}: ${err instanceof Error ? err.message : err}`)
           detailedResults[taskId] = summaries[taskId]
         }
       }

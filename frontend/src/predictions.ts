@@ -104,11 +104,3 @@ export const resultOptions = (bestOf: number | null): [number, number][] => {
   const wins: [number, number][] = Array.from({ length: toWin }, (_, lost) => [toWin, lost])
   return [...wins, ...wins.map(([w, l]): [number, number] => [l, w]).reverse()]
 }
-
-// Fetch JSON; throws with the backend's message on an error status. Returns null for 204 No Content
-export const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(url, init)
-  const data = response.status === 204 ? null : await response.json().catch(() => null)
-  if (!response.ok) throw new Error(data?.message || `HTTP error! status: ${response.status}`)
-  return data as T
-}

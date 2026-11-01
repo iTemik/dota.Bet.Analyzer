@@ -168,7 +168,7 @@ describe('App Component', () => {
             await userEvent.click(button)
 
             await waitFor(() => {
-                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team=Nigma+Galaxy&team=Aurora&days=20')
+                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team=Nigma+Galaxy&team=Aurora&days=20', undefined)
             })
         })
 
@@ -226,6 +226,28 @@ describe('App Component', () => {
             await waitFor(() => {
                 expect(screen.getByText(/HTTP error! status: 500/i)).toBeInTheDocument()
             })
+        })
+
+        it('shows the backend error message', async () => {
+            const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
+                if (url === '/api/version') return createVersionResponse()
+                if (url.startsWith('/api/statistics')) {
+                    return Promise.resolve(
+                        createMockResponse({ status: 404, code: 'TEAM_NOT_FOUND', message: 'Team not found' }, false, 404)
+                    )
+                }
+                return Promise.resolve(createMockResponse([]))
+            }) as any
+
+            globalThis.fetch = mockFetch
+
+            render(<App />)
+            await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'Team A')
+            await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'Team B')
+            await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+            expect(await screen.findByText('Team not found')).toBeInTheDocument()
         })
 
         it('should handle network errors', async () => {
@@ -1853,7 +1875,7 @@ describe('App Component', () => {
             await userEvent.click(await screen.findByText('New Squad'))
 
             await waitFor(() => {
-                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team_id=9467224&team=New+Squad&days=20')
+                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team_id=9467224&team=New+Squad&days=20', undefined)
             })
             expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Aurora')
             expect(screen.getByPlaceholderText(/Enter second team name/i)).toHaveValue('New Squad')

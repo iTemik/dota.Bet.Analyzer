@@ -1,7 +1,9 @@
 """Tests for get_rank function."""
 
+import pytest
 import requests
 
+from backend.opendota import OpenDotaError
 from backend.stats import get_rank
 
 
@@ -71,15 +73,14 @@ def test_get_rank_null_leaderboard_rank(monkeypatch):
 
 
 def test_get_rank_http_error(monkeypatch):
-    """Test when HTTP request fails."""
+    """A failed HTTP request raises, so it is not cached as "no rank"."""
 
     def fake_get(url, timeout=5):
         return DummyResponse(404, {"error": "Not found"})
 
     monkeypatch.setattr(requests, "get", fake_get)
-    rank = get_rank(123456789)
-
-    assert rank is None
+    with pytest.raises(OpenDotaError):
+        get_rank(123456789)
 
 
 def test_get_rank_network_error(monkeypatch):
@@ -89,9 +90,8 @@ def test_get_rank_network_error(monkeypatch):
         raise RuntimeError("Connection failed")
 
     monkeypatch.setattr(requests, "get", fake_get)
-    rank = get_rank(123456789)
-
-    assert rank is None
+    with pytest.raises(OpenDotaError):
+        get_rank(123456789)
 
 
 def test_get_rank_invalid_json(monkeypatch):
@@ -107,9 +107,8 @@ def test_get_rank_invalid_json(monkeypatch):
         return response
 
     monkeypatch.setattr(requests, "get", fake_get)
-    rank = get_rank(123456789)
-
-    assert rank is None
+    with pytest.raises(OpenDotaError):
+        get_rank(123456789)
 
 
 def test_get_rank_string_rank_converts_to_int(monkeypatch):

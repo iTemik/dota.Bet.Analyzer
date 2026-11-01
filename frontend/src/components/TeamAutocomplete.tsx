@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { requestJson } from '../api'
 import './TeamAutocomplete.css'
 
 interface Team {
@@ -103,13 +104,7 @@ export function TeamAutocomplete({
 
     try {
       const params = new URLSearchParams({ q: query, limit: '10' })
-      const response = await fetch(`/api/teams/search?${params.toString()}`)
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await requestJson<Team[]>(`/api/teams/search?${params.toString()}`)
       // Spread into a new array so we never mutate the parsed response.
       // Ordering is handled by the backend (relevance tier first, then recency).
       const sortedData = [...data]

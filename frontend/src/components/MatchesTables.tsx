@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatShortDateTime } from '../format'
-import { requestJson } from '../predictions'
+import { requestJson } from '../api'
 import type { Match, Matches, MatchTournament } from '../types'
 import { bestOfLabel, scoreLabel, usePage } from '../series'
 import { Pager, TeamCells } from './seriesTable'

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { patchJson, putJson, requestJson } from '../api'
 import { formatDateTime } from '../format'
 import {
   type BetChoice,
@@ -7,7 +8,6 @@ import {
   decisionErrors,
   isSettled,
   outcome,
-  requestJson,
   resultOptions,
   seriesLabel,
   teamLabel,
@@ -55,10 +55,10 @@ function ReviewForm({
     setSaving(true)
     setError(null)
     try {
-      const updated = await requestJson<Prediction>(`/api/predictions/${prediction.prediction_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team1_maps_won: Number(score[0]), team2_maps_won: Number(score[1]), review_note: note }),
+      const updated = await patchJson<Prediction>(`/api/predictions/${prediction.prediction_id}`, {
+        team1_maps_won: Number(score[0]),
+        team2_maps_won: Number(score[1]),
+        review_note: note,
       })
       onSaved(updated)
     } catch (err) {
@@ -151,11 +151,10 @@ function DecisionForm({
     setSaving(true)
     setError(null)
     try {
-      const updated = await requestJson<Prediction>(`/api/predictions/${prediction.prediction_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(decisionBody(odds, bestOf, bet, stake, comment)),
-      })
+      const updated = await putJson<Prediction>(
+        `/api/predictions/${prediction.prediction_id}`,
+        decisionBody(odds, bestOf, bet, stake, comment),
+      )
       onSaved(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
