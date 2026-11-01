@@ -197,3 +197,46 @@ export interface Matches {
   upcoming: Match[]
   finished: Match[]
 }
+
+// GET /api/heroes/meta: pro_meta[] and ultra_meta[]
+export interface ProMetaHero {
+  hero_id: number
+  localized_name: string
+  icon: string
+  picks: number
+  bans: number
+  wins: number
+  pick_ban_rate: number
+  win_rate: number | null
+}
+
+// GET /api/heroes/meta: pub_meta[]
+export interface PubMetaHero {
+  hero_id: number
+  localized_name: string
+  icon: string
+  picks: number
+  wins: number
+  pick_rate: number
+  win_rate: number
+}
+
+// GET /api/heroes/meta query parameters (thresholds) and `params` in the answer
+export interface MetaParams {
+  pro_min_pick_ban: number
+  ultra_min_win: number
+  ultra_min_picks: number
+  pub_top: number
+  pub_min_win: number
+}
+
+// GET /api/heroes/meta
+export interface Meta {
+  fetched_at: number
+  params: MetaParams
+  pro_matches: number
+  pub_matches: number
+  pro_meta: ProMetaHero[]
+  ultra_meta: ProMetaHero[]
+  pub_meta: PubMetaHero[]
+}

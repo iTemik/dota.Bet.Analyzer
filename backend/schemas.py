@@ -11,6 +11,7 @@ from marshmallow import Schema, ValidationError, fields, validate, validates_sch
 from pydantic import BaseModel
 
 # Import Pydantic models for auto-generation (imported here to avoid circular imports later)
+from backend.meta import MetaParams
 from backend.pro_players import Player
 from backend.stats import ApiError, StatsResponse, TeamStats
 
@@ -684,3 +685,97 @@ ErrorSchema = pydantic_to_marshmallow(ApiError)
 PlayerSchema = pydantic_to_marshmallow(Player)
 TeamStatsSchema = pydantic_to_marshmallow(TeamStats)
 StatsResponseSchema = pydantic_to_marshmallow(StatsResponse)
+
+
+class MetaQuerySchema(Schema):
+    """Query parameters of GET /api/heroes/meta (thresholds; defaults in backend.meta.MetaParams)."""
+
+    pro_min_pick_ban = fields.Float(
+        load_default=MetaParams.pro_min_pick_ban,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Pro meta: minimum pick + ban rate in pro matches, percent"},
+    )
+    ultra_min_win = fields.Float(
+        load_default=MetaParams.ultra_min_win,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Ultra meta: minimum pro win rate, percent"},
+    )
+    ultra_min_picks = fields.Int(
+        load_default=MetaParams.ultra_min_picks,
+        validate=validate.Range(min=1),
+        metadata={"description": "Ultra meta: minimum pro picks"},
+    )
+    pub_top = fields.Int(
+        load_default=MetaParams.pub_top,
+        validate=validate.Range(min=1, max=200),
+        metadata={"description": "Pub meta: number of most picked Immortal + Divine + Ancient heroes"},
+    )
+    pub_min_win = fields.Float(
+        load_default=MetaParams.pub_min_win,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Pub meta: minimum win rate of those heroes, percent"},
+    )
+    refresh = fields.Bool(
+        load_default=False,
+        metadata={
+            "description": "Fetch new hero stats from OpenDota instead of the 1 hour cache (at most once a minute)"
+        },
+    )
+
+
+class ProMetaHeroSchema(Schema):
+    """Hero of the pro or ultra meta list."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
+    localized_name = fields.Str(required=True, metadata={"description": "Display name"})
+    icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
+    picks = fields.Int(required=True, metadata={"description": "Pro picks"})
+    bans = fields.Int(required=True, metadata={"description": "Pro bans"})
+    wins = fields.Int(required=True, metadata={"description": "Pro wins"})
+    pick_ban_rate = fields.Float(required=True, metadata={"description": "(picks + bans) / pro matches, percent"})
+    win_rate = fields.Float(allow_none=True, metadata={"description": "wins / picks, percent; null without picks"})
+
+
+class PubMetaHeroSchema(Schema):
+    """Hero of the pub meta list."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
+    localized_name = fields.Str(required=True, metadata={"description": "Display name"})
+    icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
+    picks = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient picks"})
+    wins = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient wins"})
+    pick_rate = fields.Float(required=True, metadata={"description": "picks / matches, percent"})
+    win_rate = fields.Float(required=True, metadata={"description": "wins / picks, percent"})
+
+
+class MetaSchema(Schema):
+    """Current hero meta from OpenDota /heroStats (OpenDota's window, about the last 7 days)."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    fetched_at = fields.Int(required=True, metadata={"description": "When the hero stats were fetched (unix seconds)"})
+    params = fields.Dict(required=True, metadata={"description": "Thresholds used"})
+    pro_matches = fields.Int(required=True, metadata={"description": "Pro matches in the window (pro picks / 10)"})
+    pub_matches = fields.Int(
+        required=True, metadata={"description": "Immortal + Divine + Ancient matches (picks / 10)"}
+    )
+    pro_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
+    ultra_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
+    pub_meta = fields.List(
+        fields.Nested(PubMetaHeroSchema),
+        required=True,
+        metadata={"description": "Most picked heroes above the win rate, most picked first"},
+    )

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
 import MatchesTables from './components/MatchesTables'
+import MetaTab from './components/MetaTab'
 import InsightsTable, { type PlayerRanks } from './components/InsightsTable'
 import PredictionDetail from './components/PredictionDetail'
 import PredictionList from './components/PredictionList'
@@ -17,12 +18,14 @@ import trollFace from './assets/trollface.png'
 const STATS_DAYS = 20
 
 // Page tabs, kept in the URL hash so a refresh stays on the tab ("#predictions/12" is the Predictions tab too)
-type Tab = 'compare' | 'predictions'
+type Tab = 'compare' | 'meta' | 'predictions'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'compare', label: 'Compare' },
+  { id: 'meta', label: 'Meta' },
   { id: 'predictions', label: 'Predictions' },
 ]
-const tabFromHash = (hash: string): Tab => (hash.startsWith('#predictions') ? 'predictions' : 'compare')
+const tabFromHash = (hash: string): Tab =>
+  hash.startsWith('#predictions') ? 'predictions' : hash === '#meta' ? 'meta' : 'compare'
 // Prediction opened on the Predictions tab ("#predictions/12"), null for the list
 const predictionIdFromHash = (hash: string): number | null => {
   const id = /^#predictions\/(\d+)$/.exec(hash)?.[1]
@@ -288,6 +291,12 @@ function App() {
           ))}
         </nav>
       </div>
+
+      {tab === 'meta' && (
+        <div className="tab-panel">
+          <MetaTab />
+        </div>
+      )}
 
       {/* Mounted only while open, so the list is loaded again after logging a new prediction */}
       {tab === 'predictions' && (
