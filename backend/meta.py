@@ -154,68 +154,67 @@ def _percent(part: int, whole: int) -> Optional[float]:
 
 
 def compute_meta(heroes: list[dict[str, Any]], params: MetaParams) -> dict[str, Any]:
-    """Pro, ultra and pub meta lists from cached hero stats.
+    """Pro, ultra and pub meta heroes from cached hero stats, in one list.
 
     Args:
         heroes: Hero stats as returned by fetch_hero_stats
         params: Thresholds
 
     Returns:
-        pro_matches, pub_matches, and the lists pro_meta (pick + ban rate,
-        highest first), ultra_meta (subset of pro_meta, highest win rate first) and pub_meta (most picked first)
+        pro_matches, pub_matches and `heroes`: every hero in at least one meta, with its pro and pub stats and
+        `meta` (the metas it is in, of "ultra", "pro" and "pub"); ultra first, then pro, then pub only, each
+        by pro pick + ban rate and then pub picks
     """
     pro_matches = round(sum(h["pro_pick"] for h in heroes) / PICKS_PER_MATCH)
+    pub_matches = round(sum(h["pub_pick"] for h in heroes) / PICKS_PER_MATCH)
 
-    pro_meta = []
+    # Pub meta: of the pub_top most picked heroes, those above the win rate
+    most_picked = sorted((h for h in heroes if h["pub_pick"]), key=lambda h: (-h["pub_pick"], h["localized_name"]))
+    pub_ids = {
+        h["hero_id"]
+        for h in most_picked[: params.pub_top]
+        if (_percent(h["pub_win"], h["pub_pick"]) or 0) > params.pub_min_win
+    }
+
+    result = []
     for h in heroes:
         pick_ban_rate = _percent(h["pro_pick"] + h["pro_ban"], pro_matches)
-        if pick_ban_rate is None or pick_ban_rate <= params.pro_min_pick_ban:
+        pro_win_rate = _percent(h["pro_win"], h["pro_pick"])
+        meta = []
+        if pick_ban_rate is not None and pick_ban_rate > params.pro_min_pick_ban:
+            if (
+                h["pro_pick"] >= params.ultra_min_picks
+                and pro_win_rate is not None
+                and pro_win_rate > params.ultra_min_win
+            ):
+                meta.append("ultra")
+            meta.append("pro")
+        if h["hero_id"] in pub_ids:
+            meta.append("pub")
+        if not meta:
             continue
-        pro_meta.append(
+        result.append(
             {
                 "hero_id": h["hero_id"],
                 "localized_name": h["localized_name"],
                 "icon": h["icon"],
-                "picks": h["pro_pick"],
-                "bans": h["pro_ban"],
-                "wins": h["pro_win"],
-                "pick_ban_rate": pick_ban_rate,
-                "win_rate": _percent(h["pro_win"], h["pro_pick"]),
+                "meta": meta,
+                "pro_picks": h["pro_pick"],
+                "pro_bans": h["pro_ban"],
+                "pro_wins": h["pro_win"],
+                "pro_pick_ban_rate": pick_ban_rate,
+                "pro_win_rate": pro_win_rate,
+                "pub_picks": h["pub_pick"],
+                "pub_wins": h["pub_win"],
+                "pub_pick_rate": _percent(h["pub_pick"], pub_matches),
+                "pub_win_rate": _percent(h["pub_win"], h["pub_pick"]),
             }
         )
-    pro_meta.sort(key=lambda h: (-h["pick_ban_rate"], h["localized_name"]))
-
-    ultra_meta = [
-        h
-        for h in pro_meta
-        if h["picks"] >= params.ultra_min_picks and h["win_rate"] is not None and h["win_rate"] > params.ultra_min_win
-    ]
-    ultra_meta = sorted(ultra_meta, key=lambda h: (-h["win_rate"], h["localized_name"]))
-
-    pub_matches = round(sum(h["pub_pick"] for h in heroes) / PICKS_PER_MATCH)
-    pub = [
-        {
-            "hero_id": h["hero_id"],
-            "localized_name": h["localized_name"],
-            "icon": h["icon"],
-            "picks": h["pub_pick"],
-            "wins": h["pub_win"],
-            "pick_rate": _percent(h["pub_pick"], pub_matches),
-            "win_rate": _percent(h["pub_win"], h["pub_pick"]),
-        }
-        for h in heroes
-        if h["pub_pick"]
-    ]
-    pub.sort(key=lambda h: (-h["picks"], h["localized_name"]))
-    pub = [h for h in pub[: params.pub_top] if h["win_rate"] > params.pub_min_win]
-
-    return {
-        "pro_matches": pro_matches,
-        "pub_matches": pub_matches,
-        "pro_meta": pro_meta,
-        "ultra_meta": ultra_meta,
-        "pub_meta": pub,
-    }
+    rank = {"ultra": 0, "pro": 1, "pub": 2}
+    result.sort(
+        key=lambda h: (rank[h["meta"][0]], -(h["pro_pick_ban_rate"] or 0), -h["pub_picks"], h["localized_name"])
+    )
+    return {"pro_matches": pro_matches, "pub_matches": pub_matches, "heroes": result}
 
 
 def get_meta(params: MetaParams, refresh: bool = False) -> dict[str, Any]:

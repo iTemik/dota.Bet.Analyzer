@@ -869,13 +869,116 @@ pre {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Meta tab */
+/* Meta tab: one compact table like OpenDota's hero tables, settings below it */
 .meta-section {
   text-align: left;
 }
 
-.meta-settings {
-  margin-bottom: 1.5rem;
+.meta-updated {
+  margin-bottom: 0.5rem;
+}
+
+.stats-table.meta-table {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.stats-table.meta-table th,
+.stats-table.meta-table td {
+  padding: 0.2rem 0.6rem;
+  text-align: left;
+}
+
+.stats-table.meta-table th {
+  padding: 0 0.6rem;
+}
+
+.meta-sort {
+  width: 100%;
+  padding: 0.35rem 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.meta-sort-arrow {
+  display: inline-block;
+  width: 1em;
+  margin-left: 0.25rem;
+  font-size: 0.7rem;
+}
+
+.meta-table .meta-hero {
+  white-space: nowrap;
+}
+
+.meta-table .meta-hero img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
+/* Ultra meta: golden hero name and a faint golden row */
+.meta-table tr.meta-ultra {
+  background: rgba(255, 200, 0, 0.08);
+}
+
+.meta-table tr.meta-ultra .meta-hero {
+  color: #ffd257;
+  font-weight: 600;
+}
+
+.meta-kind {
+  white-space: nowrap;
+}
+
+/* Same look as the "before prediction" tag */
+.meta-tag {
+  margin-right: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: help;
+}
+
+.meta-tag-ultra {
+  color: #ffd257;
+  background: rgba(255, 200, 0, 0.2);
+  font-weight: 600;
+}
+
+/* Value with a thin bar under it */
+.meta-bar-cell {
+  min-width: 5.5rem;
+  cursor: help;
+}
+
+.meta-bar {
+  display: block;
+  height: 3px;
+  margin-top: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.meta-bar-fill {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.meta-bar-fill.good {
+  background: #6b9d7a;
+}
+
+.meta-bar-fill.bad {
+  background: #c46a6a;
 }
 
 .meta-settings input[type='number'] {
@@ -887,31 +990,11 @@ pre {
 
 .meta-buttons {
   display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.meta-table .meta-hero {
-  text-align: left;
-  white-space: nowrap;
-}
-
-.meta-table .meta-hero img {
-  width: 1.75rem;
-  height: 1.75rem;
-  object-fit: contain;
-  vertical-align: middle;
-  margin-right: 0.5rem;
-}
-
-.meta-updated {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0 1rem;
-  margin-bottom: 1rem;
+  gap: 1rem;
+  margin-top: 0.5rem;
 }
 
-.meta-updated .prediction-hint {
-  margin: 0;
+.meta-source {
+  margin-top: 0.75rem;
 }

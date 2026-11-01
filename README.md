@@ -658,6 +658,7 @@ Async task for comprehensive player analysis:
 - Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold
 - Ultra meta: pro meta heroes with a win rate above a threshold and a minimum number of picks
 - Pub meta: of the N most picked heroes in Immortal, Divine and Ancient games together (OpenDota's Imm/Div/Anc), those with a win rate above a threshold
+- One `heroes` list: every hero in any meta with `meta` (ultra, pro, pub) and its pro and pub stats
 - All thresholds are query parameters, set on the Meta tab and kept in the browser; defaults in `backend/meta.py` `MetaParams`
 - One `/heroStats` request (OpenDota's window, about the last 7 days), refreshed hourly by the `hero_meta` cache job (Redis, 2 hours); `refresh=true` (Refresh data button) fetches again, at most once a minute
 
@@ -754,7 +755,12 @@ npm test          # Run tests
   - Low rank players count (players outside of top 200 in the leaderboards. Lower rank = better)
 
 #### Tabs
-- **Compare**, **Meta** and **Predictions** tabs, kept in the URL hash (`#compare`, `#meta`, `#predictions`) so a refresh stays on the tab
+- **Compare**, **Predictions** and **Meta** tabs, kept in the URL hash (`#compare`, `#predictions`, `#meta`) so a refresh stays on the tab
+
+#### Meta
+- One compact table of pro, ultra and pub meta heroes, like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B, Pro Win, Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
+- Click a column header to sort (highest first, click again to reverse); hover a number for the picks, bans and wins behind it
+- Thresholds, Apply, Defaults and Refresh data sit below the table; thresholds are kept in the browser
 
 #### Predictions
 - List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet) with the bet's profit in green and loss in red; 10 per page

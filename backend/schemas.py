@@ -751,8 +751,8 @@ class MetaQuerySchema(Schema):
     )
 
 
-class ProMetaHeroSchema(Schema):
-    """Hero of the pro or ultra meta list."""
+class MetaHeroSchema(Schema):
+    """Hero in at least one meta, with its pro and pub stats."""
 
     class Meta:
         """Keep fields in declaration order."""
@@ -762,28 +762,24 @@ class ProMetaHeroSchema(Schema):
     hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
     localized_name = fields.Str(required=True, metadata={"description": "Display name"})
     icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
-    picks = fields.Int(required=True, metadata={"description": "Pro picks"})
-    bans = fields.Int(required=True, metadata={"description": "Pro bans"})
-    wins = fields.Int(required=True, metadata={"description": "Pro wins"})
-    pick_ban_rate = fields.Float(required=True, metadata={"description": "(picks + bans) / pro matches, percent"})
-    win_rate = fields.Float(allow_none=True, metadata={"description": "wins / picks, percent; null without picks"})
-
-
-class PubMetaHeroSchema(Schema):
-    """Hero of the pub meta list."""
-
-    class Meta:
-        """Keep fields in declaration order."""
-
-        ordered = True
-
-    hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
-    localized_name = fields.Str(required=True, metadata={"description": "Display name"})
-    icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
-    picks = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient picks"})
-    wins = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient wins"})
-    pick_rate = fields.Float(required=True, metadata={"description": "picks / matches, percent"})
-    win_rate = fields.Float(required=True, metadata={"description": "wins / picks, percent"})
+    meta = fields.List(
+        fields.Str(), required=True, metadata={"description": 'Metas the hero is in: "ultra", "pro", "pub"'}
+    )
+    pro_picks = fields.Int(required=True, metadata={"description": "Pro picks"})
+    pro_bans = fields.Int(required=True, metadata={"description": "Pro bans"})
+    pro_wins = fields.Int(required=True, metadata={"description": "Pro wins"})
+    pro_pick_ban_rate = fields.Float(
+        allow_none=True, metadata={"description": "(picks + bans) / pro matches, percent; null without pro matches"}
+    )
+    pro_win_rate = fields.Float(
+        allow_none=True, metadata={"description": "Pro wins / picks, percent; null without picks"}
+    )
+    pub_picks = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient picks"})
+    pub_wins = fields.Int(required=True, metadata={"description": "Immortal + Divine + Ancient wins"})
+    pub_pick_rate = fields.Float(allow_none=True, metadata={"description": "Pub picks / matches, percent"})
+    pub_win_rate = fields.Float(
+        allow_none=True, metadata={"description": "Pub wins / picks, percent; null without picks"}
+    )
 
 
 class MetaSchema(Schema):
@@ -800,10 +796,8 @@ class MetaSchema(Schema):
     pub_matches = fields.Int(
         required=True, metadata={"description": "Immortal + Divine + Ancient matches (picks / 10)"}
     )
-    pro_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
-    ultra_meta = fields.List(fields.Nested(ProMetaHeroSchema), required=True)
-    pub_meta = fields.List(
-        fields.Nested(PubMetaHeroSchema),
+    heroes = fields.List(
+        fields.Nested(MetaHeroSchema),
         required=True,
-        metadata={"description": "Most picked heroes above the win rate, most picked first"},
+        metadata={"description": "Heroes in any meta: ultra first, then pro, then pub only"},
     )

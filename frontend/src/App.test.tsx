@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -1192,6 +1192,12 @@ describe('App Component', () => {
             await userEvent.click(screen.getByRole('link', { name: 'Predictions' }))
             await waitFor(() => expect(window.location.hash).toBe('#predictions'))
             expect(screen.getByText('Data up to date')).toBeVisible()
+        })
+
+        it('shows the Meta tab after Predictions', () => {
+            render(<App />)
+            const tabs = within(screen.getByRole('navigation')).getAllByRole('link')
+            expect(tabs.map((t) => t.textContent)).toEqual(['Compare', 'Predictions', 'Meta'])
         })
 
         it('switches to the Meta tab and loads the meta heroes', async () => {

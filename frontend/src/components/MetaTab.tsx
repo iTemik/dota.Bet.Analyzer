@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { formatDateTime, formatPercent } from '../format'
+import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { formatDateTime, formatPercent, formatShortCount } from '../format'
 import { requestJson } from '../predictions'
 import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
-import type { Meta, MetaParams, ProMetaHero, PubMetaHero } from '../types'
+import type { Meta, MetaHero, MetaKind, MetaParams } from '../types'
 
 // Saved thresholds over the defaults; keys no longer used (e.g. from an older version) are dropped
 const loadParams = (): MetaParams => {
@@ -18,63 +18,221 @@ const loadParams = (): MetaParams => {
 const metaUrl = (params: MetaParams): string =>
   `/api/heroes/meta?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`
 
-/** Icon and name of a hero. */
-function HeroCell({ hero }: { hero: { localized_name: string; icon: string } }) {
+const META_RANK: Record<MetaKind, number> = { ultra: 0, pro: 1, pub: 2 }
+const isUltra = (h: MetaHero) => h.meta.includes('ultra')
+
+// Meta tags of a hero: an ultra meta hero is pro meta too, so it shows Ultra instead of Pro
+const metaTags = (h: MetaHero): MetaKind[] => h.meta.filter((m) => !(m === 'pro' && isUltra(h)))
+
+const metaRule = (kind: MetaKind, p: MetaParams): string =>
+  ({
+    ultra: `Ultra meta: pro meta with a win rate above ${p.ultra_min_win}% and at least ${p.ultra_min_picks} picks`,
+    pro: `Pro meta: Pick + Ban rate in pro matches above ${p.pro_min_pick_ban}%`,
+    pub: `Pub meta: of the ${p.pub_top} most picked Immortal, Divine and Ancient heroes, a win rate above ${p.pub_min_win}%`,
+  })[kind]
+
+const META_LABEL: Record<MetaKind, string> = { ultra: '★ Ultra', pro: 'Pro', pub: 'Pub' }
+
+const count = (n: number) => n.toLocaleString('en-US')
+
+/** Number with a bar under it, like OpenDota's hero tables; the tooltip shows the numbers behind it. */
+function BarCell({
+  text,
+  value,
+  max,
+  title,
+  win,
+}: {
+  text: string
+  value: number | null
+  max: number
+  title: string
+  win?: boolean
+}) {
+  const width = value !== null && max > 0 ? Math.min(100, (100 * value) / max) : 0
+  const tone = win && value !== null ? (value >= 50 ? 'good' : 'bad') : 'plain'
   return (
-    <td className="meta-hero">
-      <img src={hero.icon} alt={`${hero.localized_name} icon`} />
-      {hero.localized_name}
+    <td className="meta-bar-cell" title={title}>
+      <span>{text}</span>
+      <span className="meta-bar">
+        <span className={`meta-bar-fill ${tone}`} style={{ width: `${width}%` }} />
+      </span>
     </td>
   )
 }
 
-function ProMetaTable({ label, heroes }: { label: string; heroes: ProMetaHero[] }) {
-  if (!heroes.length) return <p className="prediction-hint">No heroes match these thresholds.</p>
-  return (
-    <table className="stats-table meta-table" aria-label={label}>
-      <thead>
-        <tr>
-          <th>Hero</th>
-          <th>Pick + Ban</th>
-          <th>Picks</th>
-          <th>Bans</th>
-          <th>Win %</th>
-        </tr>
-      </thead>
-      <tbody>
-        {heroes.map((h) => (
-          <tr key={h.hero_id}>
-            <HeroCell hero={h} />
-            <td>{formatPercent(h.pick_ban_rate)}</td>
-            <td>{h.picks}</td>
-            <td>{h.bans}</td>
-            <td>{formatPercent(h.win_rate)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+interface Column {
+  key: string
+  label: string
+  title: string // header tooltip
+  value: (h: MetaHero) => number | string | null
+  firstDir: 'asc' | 'desc' // direction of the first click
+  cell: (h: MetaHero, data: Meta, max: number) => ReactNode
+  bar?: (h: MetaHero) => number | null // value the bar is scaled by (to the column's highest)
 }
 
-function PubMetaTable({ heroes }: { heroes: PubMetaHero[] }) {
-  if (!heroes.length) return <p className="prediction-hint">No heroes match these thresholds.</p>
+// One object per column: header, sort value and cell
+const COLUMNS: Column[] = [
+  {
+    key: 'hero',
+    label: 'Hero',
+    title: 'Hero name',
+    value: (h) => h.localized_name,
+    firstDir: 'asc',
+    cell: (h) => (
+      <td className="meta-hero">
+        <img src={h.icon} alt={`${h.localized_name} icon`} />
+        {h.localized_name}
+      </td>
+    ),
+  },
+  {
+    key: 'meta',
+    label: 'Meta',
+    title: 'Ultra, Pro or Pub meta (ultra first)',
+    value: (h) => META_RANK[h.meta[0]],
+    firstDir: 'asc',
+    cell: (h, data) => (
+      <td className="meta-kind">
+        {metaTags(h).map((m) => (
+          <span key={m} className={`meta-tag meta-tag-${m}`} title={metaRule(m, data.params)}>
+            {META_LABEL[m]}
+          </span>
+        ))}
+      </td>
+    ),
+  },
+  {
+    key: 'pro_pick_ban_rate',
+    label: 'Pro P+B',
+    title: 'Pick + Ban rate in pro matches',
+    value: (h) => h.pro_pick_ban_rate,
+    bar: (h) => h.pro_pick_ban_rate,
+    firstDir: 'desc',
+    cell: (h, data, max) => (
+      <BarCell
+        text={formatPercent(h.pro_pick_ban_rate)}
+        value={h.pro_pick_ban_rate}
+        max={max}
+        title={`${count(h.pro_picks)} picks + ${count(h.pro_bans)} bans in ${count(data.pro_matches)} pro matches`}
+      />
+    ),
+  },
+  {
+    key: 'pro_win_rate',
+    label: 'Pro Win',
+    title: 'Win rate in pro matches',
+    value: (h) => h.pro_win_rate,
+    bar: (h) => h.pro_win_rate,
+    firstDir: 'desc',
+    cell: (h, _data, max) => (
+      <BarCell
+        text={formatPercent(h.pro_win_rate)}
+        value={h.pro_win_rate}
+        max={max}
+        title={`${count(h.pro_wins)} wins in ${count(h.pro_picks)} pro picks`}
+        win
+      />
+    ),
+  },
+  {
+    key: 'pub_picks',
+    label: 'Pub Picks',
+    title: 'Picks in Immortal, Divine and Ancient matches',
+    value: (h) => h.pub_picks,
+    bar: (h) => h.pub_picks,
+    firstDir: 'desc',
+    cell: (h, data, max) => (
+      <BarCell
+        text={formatShortCount(h.pub_picks)}
+        value={h.pub_picks}
+        max={max}
+        title={`${count(h.pub_picks)} picks, ${formatPercent(h.pub_pick_rate)} of ${count(data.pub_matches)} Imm/Div/Anc matches`}
+      />
+    ),
+  },
+  {
+    key: 'pub_win_rate',
+    label: 'Pub Win',
+    title: 'Win rate in Immortal, Divine and Ancient matches',
+    value: (h) => h.pub_win_rate,
+    bar: (h) => h.pub_win_rate,
+    firstDir: 'desc',
+    cell: (h, _data, max) => (
+      <BarCell
+        text={formatPercent(h.pub_win_rate)}
+        value={h.pub_win_rate}
+        max={max}
+        title={`${count(h.pub_wins)} wins in ${count(h.pub_picks)} Imm/Div/Anc picks`}
+        win
+      />
+    ),
+  },
+]
+
+interface Sort {
+  key: string
+  dir: 'asc' | 'desc'
+}
+// The backend order: ultra, pro, then pub only, each by pro Pick + Ban
+const DEFAULT_SORT: Sort = { key: 'meta', dir: 'asc' }
+
+// Sorted copy; empty values last, ties keep the backend order
+const sortHeroes = (heroes: MetaHero[], sort: Sort): MetaHero[] => {
+  const column = COLUMNS.find((c) => c.key === sort.key) ?? COLUMNS[1]
+  const sign = sort.dir === 'asc' ? 1 : -1
+  return heroes
+    .map((h, i) => ({ h, i, v: column.value(h) }))
+    .sort((a, b) => {
+      if (a.v === b.v) return a.i - b.i
+      if (a.v === null) return 1
+      if (b.v === null) return -1
+      return sign * (typeof a.v === 'string' ? a.v.localeCompare(String(b.v)) : a.v - (b.v as number))
+    })
+    .map(({ h }) => h)
+}
+
+/** All meta heroes in one compact table, sorted by clicking a column header like on OpenDota. */
+function MetaTable({ data }: { data: Meta }) {
+  const [sort, setSort] = useState<Sort>(DEFAULT_SORT)
+  if (!data.heroes.length) return <p className="prediction-hint">No heroes match these thresholds.</p>
+
+  const clickHeader = (c: Column) =>
+    setSort(
+      sort.key === c.key ? { key: c.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key: c.key, dir: c.firstDir },
+    )
+  const maxOf = (c: Column) => Math.max(0, ...data.heroes.map((h) => c.bar?.(h) ?? 0))
+  const maxes = COLUMNS.map(maxOf)
+
   return (
-    <table className="stats-table meta-table" aria-label="Pub meta">
+    <table className="stats-table meta-table" aria-label="Meta heroes">
       <thead>
         <tr>
-          <th>Hero</th>
-          <th>Pick %</th>
-          <th>Win %</th>
-          <th>Picks</th>
+          {COLUMNS.map((c) => {
+            const active = sort.key === c.key
+            return (
+              <th
+                key={c.key}
+                title={c.title}
+                aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+              >
+                <button type="button" className="meta-sort" onClick={() => clickHeader(c)}>
+                  {c.label}
+                  <span className="meta-sort-arrow" aria-hidden="true">
+                    {active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                  </span>
+                </button>
+              </th>
+            )
+          })}
         </tr>
       </thead>
       <tbody>
-        {heroes.map((h) => (
-          <tr key={h.hero_id}>
-            <HeroCell hero={h} />
-            <td>{formatPercent(h.pick_rate)}</td>
-            <td>{formatPercent(h.win_rate)}</td>
-            <td>{h.picks}</td>
+        {sortHeroes(data.heroes, sort).map((h) => (
+          <tr key={h.hero_id} className={isUltra(h) ? 'meta-ultra' : undefined}>
+            {COLUMNS.map((c, i) => (
+              <Fragment key={c.key}>{c.cell(h, data, maxes[i])}</Fragment>
+            ))}
           </tr>
         ))}
       </tbody>
@@ -90,7 +248,7 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
   { key: 'pub_min_win', label: 'Pub meta: Win % above', min: 0, max: 100, step: 0.1 },
 ]
 
-/** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats, with adjustable thresholds. */
+/** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats in one table, thresholds below it. */
 function MetaTab() {
   const [params, setParams] = useState<MetaParams>(loadParams)
   const [form, setForm] = useState<MetaParams>(params)
@@ -122,7 +280,7 @@ function MetaTab() {
     setForm(DEFAULT_META_PARAMS)
     setParams(DEFAULT_META_PARAMS)
   }
-  // New hero stats from OpenDota instead of the backend's 1 hour cache
+  // New hero stats from OpenDota instead of the backend's cache
   const refresh = () => {
     setRefreshing(true)
     requestJson<Meta>(`${metaUrl(params)}&refresh=true`)
@@ -137,6 +295,19 @@ function MetaTab() {
 
   return (
     <div className="meta-section">
+      {error && <div className="error-message">Meta: {error}</div>}
+      {!data && !error && <p>Loading meta...</p>}
+      {data && (
+        <>
+          <p className="prediction-hint meta-updated">
+            OpenDota hero stats for about the last 7 days: {count(data.pro_matches)} pro matches,{' '}
+            {formatShortCount(data.pub_matches)} Immortal, Divine and Ancient matches. Updated{' '}
+            {formatDateTime(data.fetched_at)}.
+          </p>
+          <MetaTable data={data} />
+        </>
+      )}
+
       <form className="bookmaker-box meta-settings" onSubmit={apply} aria-label="Meta settings">
         <div className="prediction-row">
           {FIELDS.map((f) => (
@@ -155,51 +326,23 @@ function MetaTab() {
           ))}
         </div>
         <div className="meta-buttons">
-          <button type="submit">Apply</button>
-          <button type="button" onClick={reset}>
+          <button type="submit" className="check-btn">
+            Apply
+          </button>
+          <button type="button" className="check-btn" onClick={reset}>
             Defaults
+          </button>
+          <button type="button" className="check-btn" onClick={refresh} disabled={refreshing}>
+            {refreshing ? 'Refreshing...' : 'Refresh data'}
           </button>
         </div>
       </form>
-
-      {error && <div className="error-message">Meta: {error}</div>}
-      {!data && !error && <p>Loading meta...</p>}
-      {data && (
-        <>
-          <div className="meta-updated">
-            <p className="prediction-hint">
-              OpenDota hero stats for about the last 7 days: {data.pro_matches} pro matches. Updated{' '}
-              {formatDateTime(data.fetched_at)}.
-            </p>
-            <button type="button" onClick={refresh} disabled={refreshing}>
-              {refreshing ? 'Refreshing...' : 'Refresh data'}
-            </button>
-          </div>
-          <h2>Pro Meta</h2>
-          <p className="prediction-hint">
-            Pick + Ban rate in pro matches above {data.params.pro_min_pick_ban}%.
-          </p>
-          <ProMetaTable label="Pro meta" heroes={data.pro_meta} />
-          <h2>Ultra Meta</h2>
-          <p className="prediction-hint">
-            Pro meta heroes with a win rate above {data.params.ultra_min_win}% and at least{' '}
-            {data.params.ultra_min_picks} picks.
-          </p>
-          <ProMetaTable label="Ultra meta" heroes={data.ultra_meta} />
-          <h2>Pub Meta</h2>
-          <p className="prediction-hint">
-            Of the {data.params.pub_top} most picked heroes in Immortal, Divine and Ancient games ({data.pub_matches}{' '}
-            matches, like OpenDota&apos;s Imm/Div/Anc), those with a win rate above {data.params.pub_min_win}%.
-          </p>
-          <PubMetaTable heroes={data.pub_meta} />
-          <p className="prediction-hint">
-            Data:{' '}
-            <a href="https://www.opendota.com/heroes/pro" target="_blank" rel="noreferrer">
-              OpenDota
-            </a>
-          </p>
-        </>
-      )}
+      <p className="prediction-hint meta-source">
+        Data:{' '}
+        <a href="https://www.opendota.com/heroes/pro" target="_blank" rel="noreferrer">
+          OpenDota
+        </a>
+      </p>
     </div>
   )
 }
