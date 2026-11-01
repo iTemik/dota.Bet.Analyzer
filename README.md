@@ -439,27 +439,15 @@ that rule proved inefficient. With far more tournaments and free agents, teams n
 or even monthly when results are poor, so OpenDota's team assignments are often stale. The 75%/50% shares are a temporary
 assumption.
 
-**Sync Pro Players Data:**
+**Cached Data (pro players, teams, heroes):**
 
-Once the backend is running, sync the pro players database:
-
-```bash
-curl -X POST http://localhost:5000/api/pro-players/sync
-```
-
-**Sync Teams Data:**
-
-Updated automatically when the last sync is 24+ hours old (see Teams List below). To force one (`full=true` reads every
-page, ~22 requests):
+Background cache jobs keep it up to date (see Cache Jobs below). To update one now, use Run in the Data line Details or:
 
 ```bash
-curl -X POST "http://localhost:5000/api/teams/sync?full=true"
+curl -X POST http://localhost:5000/api/jobs/pro_players/run
+curl -X POST "http://localhost:5000/api/jobs/teams/run?full=true"   # every teams page, ~22 requests
+curl -X POST http://localhost:5000/api/jobs/heroes/run
 ```
-
-Or use your API client to send POST requests to:
-- `http://localhost:5000/api/pro-players/sync` - Sync professional players
-- `http://localhost:5000/api/teams/sync` - Sync teams (incremental, or all pages with `?full=true`)
-- `http://localhost:5000/api/heroes/sync` - Refresh the hero list (also filled at startup when empty)
 
 See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
 
@@ -478,8 +466,8 @@ The API uses:
 
 **Quick Example:**
 ```bash
-# Sync pro players
-curl -X POST http://localhost:5000/api/pro-players/sync
+# Update the pro players now (background job)
+curl -X POST http://localhost:5000/api/jobs/pro_players/run
 
 # Search teams
 curl "http://localhost:5000/api/teams/search?q=liquid&limit=5"
@@ -654,7 +642,7 @@ Async task for comprehensive player analysis:
 
 #### Heroes (`/heroes`)
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
-- Filled by the `heroes` cache job (one `/constants/heroes` request, weekly); `POST /heroes/sync` refreshes it
+- Filled by the `heroes` cache job (one `/constants/heroes` request, weekly); `POST /jobs/heroes/run` refreshes it
 
 #### Hero Meta (`/heroes/meta`)
 - Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold
@@ -669,17 +657,17 @@ Async task for comprehensive player analysis:
 - Source: Liquipedia's free API (OpenDota has no schedule), refreshed every 10 minutes by the `matches` cache job (Redis, 30 minutes); credited under the tables as its CC-BY-SA license requires
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
-#### Teams List (`/teams/sync`)
+#### Teams List
 - Obsolete (last sync 24+ hours old, or never) teams data is updated by the `teams` cache job, queued at startup and on team search or matches requests
 - Incremental update: 2 OpenDota explorer requests (teams with a league game since the newest stored one, then their names), so a team renamed without new league games keeps its old name until it plays
-- Full update (empty teams table or `POST /api/teams/sync?full=true`): every `/teams` page, ~22 requests
+- Full update (empty teams table or `POST /api/jobs/teams/run?full=true`): every `/teams` page, ~22 requests
 
 #### Cache Jobs (`/jobs`)
 - Pro players (daily), heroes (weekly), the teams list (daily), hero meta (hourly) and Liquipedia matches (every 10 minutes) are kept up to date by background jobs on the Celery `background` queue
 - A due job (never run, or its last success is older than its limit) is queued by Celery Beat (checks every minute) and at startup; a failed one is retried after 10 minutes
 - One run of a job at a time (Redis lock); the time of the last success is kept in `sync_state`, so a Redis restart causes no resync
 - `GET /jobs` lists each job's state (idle, queued, running, failed), progress, message, last success, last error and next run
-- `POST /jobs/<name>/run` queues a job now (409 when it is already queued or running)
+- `POST /jobs/<name>/run` queues a job now (409 when it is already queued or running); `?full=true` for `teams` reads every page
 - `GET /jobs/stream` streams the jobs and today's OpenDota request count as JSON lines, on every change
 - Main page "Data" line under the tabs: "Data up to date" (hover for each job's last update), the running job or a wait for the request limit, a failed job in red with Retry, and "OpenDota today: 340 / 1800" with a bar that turns red near the limit; Details lists the jobs with a Run button
 
@@ -693,7 +681,7 @@ Async task for comprehensive player analysis:
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
 - Stores player data in SQLite database for reference
-- Updated daily by the `pro_players` cache job, or on demand by `POST /pro-players/sync`
+- Updated daily by the `pro_players` cache job, or on demand by `POST /jobs/pro_players/run`
 
 ### Backend Testing
 

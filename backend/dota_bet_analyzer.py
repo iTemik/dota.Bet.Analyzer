@@ -9,7 +9,7 @@ from backend import __version__
 from backend.celery_app import celery
 from backend.head_to_head import get_head_to_head
 from backend.helpers import Errors, api_error
-from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
+from backend.heroes import list_heroes
 from backend.jobs import (
     JobRunningError,
     UnknownJobError,
@@ -31,11 +31,11 @@ from backend.predictions import (
     save_review,
     update_decision,
 )
-from backend.pro_players import fetch_pro_players_from_api, store_pro_players
 from backend.schemas import (
     ErrorSchema,
     HeadToHeadSchema,
     HeroSchema,
+    JobRunQuerySchema,
     JobSchema,
     MatchesSchema,
     MetaQuerySchema,
@@ -53,12 +53,9 @@ from backend.schemas import (
     SnapshotSchema,
     StatisticsResultSchema,
     StatsResponseSchema,
-    SyncResponseSchema,
     TaskResponseSchema,
     TeamSchema,
     TeamSearchQuerySchema,
-    TeamsSyncQuerySchema,
-    TeamsSyncResponseSchema,
     TeamStatisticsQuerySchema,
     VersionSchema,
 )
@@ -80,11 +77,6 @@ from backend.task_store import (
     store_results,
     subscribe_progress,
     wait_for_progress,
-)
-from backend.teams_sync import (
-    TeamsSyncRunningError,
-    get_teams_synced_at,
-    run_teams_sync,
 )
 
 # Setup logger
@@ -698,143 +690,10 @@ def get_results(task_id: str) -> tuple[Response, int]:
         return api_error(500, Errors.FAILED_TO_RETRIEVE_RESULTS, e)
 
 
-@bp.route("/pro-players/sync", methods=["POST"])
-@bp.response(200, SyncResponseSchema)
-@bp.alt_response(
-    503,
-    schema=ErrorSchema,
-    description="API connection failed",
-    example={
-        "status": 503,
-        "code": "FAILED_TO_FETCH_PRO_PLAYERS",
-        "message": "Failed to fetch pro players from API",
-        "details": {"url": "/api/pro-players/sync", "exception": "Connection timeout"},
-    },
-)
-@bp.alt_response(
-    502,
-    schema=ErrorSchema,
-    description="Invalid API response",
-    example={
-        "status": 502,
-        "code": "FAILED_TO_FETCH_PRO_PLAYERS",
-        "message": "Failed to fetch pro players from API",
-        "details": {"url": "/api/pro-players/sync", "exception": "Invalid JSON response"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Database operation failed",
-    example={
-        "status": 500,
-        "code": "FAILED_TO_STORE_PRO_PLAYERS",
-        "message": "Failed to store pro players to database",
-        "details": {"url": "/api/pro-players/sync", "exception": "Database connection error"},
-    },
-)
-def sync_pro_players() -> tuple[Response, int]:
-    """Sync pro players from OpenDota API to local database.
-
-    Fetches fresh pro player data from OpenDota API and updates the d2ba database.
-    Intended to run infrequently (e.g., once daily during maintenance).
-
-    Returns the number of players successfully synced.
-    """
-    # Fetch data from OpenDota API
-    try:
-        players_data = fetch_pro_players_from_api()
-    except ConnectionError as e:
-        return api_error(503, Errors.FAILED_TO_FETCH_PRO_PLAYERS, e)
-    except ValueError as e:
-        return api_error(502, Errors.FAILED_TO_FETCH_PRO_PLAYERS, e)
-
-    if not players_data:
-        return jsonify({"synced_count": 0, "message": "No pro players data available"}), 200
-
-    # Store to database
-    try:
-        count = store_pro_players(players_data)
-        return jsonify({"synced_count": count, "message": f"Stored {count} pro players"}), 200
-    except Exception as e:
-        return api_error(500, Errors.FAILED_TO_STORE_PRO_PLAYERS, e)
-
-
 def _sync_teams_if_obsolete() -> None:
     """Update the teams list in the background when it is obsolete (not in tests, which never reach OpenDota)."""
     if not current_app.config.get("TESTING"):
         queue_job_if_due("teams")
-
-
-@bp.route("/teams/sync", methods=["POST"])
-@bp.arguments(TeamsSyncQuerySchema, location="query")
-@bp.response(200, TeamsSyncResponseSchema)
-@bp.alt_response(
-    409,
-    schema=ErrorSchema,
-    description="A teams sync is already running in this process",
-    example={
-        "status": 409,
-        "code": "TEAMS_SYNC_RUNNING",
-        "message": "Teams sync is already running",
-        "details": {"url": "/api/teams/sync"},
-    },
-)
-@bp.alt_response(
-    503,
-    schema=ErrorSchema,
-    description="API connection failed",
-    example={
-        "status": 503,
-        "code": "FAILED_TO_FETCH_TEAMS",
-        "message": "Failed to fetch teams from API",
-        "details": {"url": "/api/teams/sync", "exception": "Connection timeout"},
-    },
-)
-@bp.alt_response(
-    502,
-    schema=ErrorSchema,
-    description="Invalid API response",
-    example={
-        "status": 502,
-        "code": "FAILED_TO_FETCH_TEAMS",
-        "message": "Failed to fetch teams from API",
-        "details": {"url": "/api/teams/sync", "exception": "Invalid JSON response"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Database operation failed",
-    example={
-        "status": 500,
-        "code": "FAILED_TO_STORE_TEAMS",
-        "message": "Failed to store teams to database",
-        "details": {"url": "/api/teams/sync", "exception": "Database connection error"},
-    },
-)
-def sync_teams(args: dict) -> tuple[Response, int]:
-    """Sync teams from OpenDota API to local database.
-
-    Incremental by default (two explorer queries: teams with a league game since the newest stored one), full with
-    `full=true` or when no team is stored (every `/teams` page, 1000 entries each). The `teams` cache job also runs
-    it on its own when the last sync is 24+ hours old.
-
-    Returns the number of teams successfully synced and the time of the last successful sync.
-    """
-    try:
-        count = run_teams_sync(full=args["full"])
-    except TeamsSyncRunningError:
-        return api_error(409, Errors.TEAMS_SYNC_RUNNING)
-    except ConnectionError as e:
-        return api_error(503, Errors.FAILED_TO_FETCH_TEAMS, e)
-    except ValueError as e:
-        return api_error(502, Errors.FAILED_TO_FETCH_TEAMS, e)
-    except Exception as e:
-        return api_error(500, Errors.FAILED_TO_STORE_TEAMS, e)
-
-    message = f"Stored {count} teams" if count else "No new teams data"
-    return jsonify({"synced_count": count, "message": message, "synced_at": get_teams_synced_at()}), 200
 
 
 @bp.route("/jobs", methods=["GET"])
@@ -907,7 +766,14 @@ def stream_jobs() -> Response:
 
 
 @bp.route("/jobs/<string:name>/run", methods=["POST"])
+@bp.arguments(JobRunQuerySchema, location="query")
 @bp.response(202, JobSchema)
+@bp.alt_response(
+    400,
+    schema=ErrorSchema,
+    description="`full=true` was given for a job that has no full run",
+    example={"status": 400, "code": "JOB_FULL_NOT_SUPPORTED", "message": "This job has no full run"},
+)
 @bp.alt_response(
     404,
     schema=ErrorSchema,
@@ -921,17 +787,20 @@ def stream_jobs() -> Response:
     example={"status": 409, "code": "JOB_RUNNING", "message": "Job is already queued or running"},
 )
 @bp.alt_response(503, schema=ErrorSchema, description="Redis or the Celery broker could not be reached")
-def run_job_now(name: str) -> tuple[Response, int]:
+def run_job_now(args: dict, name: str) -> tuple[Response, int]:
     """Queue a background cache job now, even when its data is not stale.
 
-    The job runs on the background worker; GET /api/jobs shows its progress.
+    The job runs on the background worker; GET /api/jobs shows its progress. `full=true` (teams only) fetches every
+    OpenDota /teams page (~22 requests) instead of the 2-request incremental update.
     """
     try:
-        get_job(name)
+        job = get_job(name)
     except UnknownJobError:
         return api_error(404, Errors.JOB_NOT_FOUND, name=name)
+    if args["full"] and job.run_full is None:
+        return api_error(400, Errors.JOB_FULL_NOT_SUPPORTED, name=name)
     try:
-        return jsonify(queue_job(name)), 202
+        return jsonify(queue_job(name, full=args["full"])), 202
     except JobRunningError:
         return api_error(409, Errors.JOB_RUNNING, name=name)
     except Exception as e:
@@ -944,37 +813,13 @@ def run_job_now(name: str) -> tuple[Response, int]:
 def get_heroes() -> tuple[Response, int]:
     """List the cached heroes (id, names, icon URL) ordered by display name.
 
-    Reads d2ba.sqlite only, no OpenDota request. The `heroes` cache job refreshes the list weekly, POST /heroes/sync
-    on demand.
+    Reads d2ba.sqlite only, no OpenDota request. The `heroes` cache job refreshes the list weekly, POST
+    /jobs/heroes/run on demand.
     """
     try:
         return jsonify(list_heroes()), 200
     except Exception as e:
         return api_error(500, Errors.FAILED_TO_READ_HEROES, e)
-
-
-@bp.route("/heroes/sync", methods=["POST"])
-@bp.response(200, SyncResponseSchema)
-@bp.alt_response(503, schema=ErrorSchema, description="API connection failed")
-@bp.alt_response(502, schema=ErrorSchema, description="Invalid API response")
-@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
-def sync_heroes() -> tuple[Response, int]:
-    """Refresh the hero list from OpenDota /constants/heroes (one request).
-
-    Returns the number of heroes stored.
-    """
-    try:
-        heroes = fetch_heroes_from_api()
-    except ConnectionError as e:
-        return api_error(503, Errors.FAILED_TO_FETCH_HEROES, e)
-    except ValueError as e:
-        return api_error(502, Errors.FAILED_TO_FETCH_HEROES, e)
-
-    try:
-        count = store_heroes(heroes)
-        return jsonify({"synced_count": count, "message": f"Stored {count} heroes"}), 200
-    except Exception as e:
-        return api_error(500, Errors.FAILED_TO_STORE_HEROES, e)
 
 
 @bp.route("/heroes/meta", methods=["GET"])

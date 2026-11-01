@@ -1,19 +1,14 @@
-"""Tests for the teams list sync: POST /api/teams/sync, full vs incremental, and queueing the teams job on requests."""
+"""Tests for the teams list sync: full vs incremental, and queueing the teams job on requests."""
 
 import time
 from unittest.mock import patch
 
 import pytest
 
-from backend import teams_sync
+from backend.jobs import get_synced_at
 from backend.opendota import OpenDotaError
 from backend.pro_players import get_d2ba_db, store_teams
-from backend.teams_sync import (
-    TeamsSyncRunningError,
-    fetch_recent_teams,
-    get_teams_synced_at,
-    run_teams_sync,
-)
+from backend.teams_sync import fetch_recent_teams, run_teams_sync
 
 TEAMS = [
     {"team_id": 1, "rating": 1500.0, "name": "Team A", "tag": "TA", "logo_url": None, "last_match_time": 100},
@@ -68,7 +63,7 @@ def test_run_with_empty_table_is_full_and_records_time(app, mock_fetch, mock_exp
     with app.app_context():
         before = int(time.time())
         assert run_teams_sync() == 2
-        assert get_teams_synced_at() >= before
+        assert get_synced_at("teams") >= before
     assert team_names(app) == {1: "Team A", 2: "Team B"}
     mock_explorer.assert_not_called()
 
@@ -76,14 +71,14 @@ def test_run_with_empty_table_is_full_and_records_time(app, mock_fetch, mock_exp
 def test_full_run_without_teams_keeps_no_sync_time(app):
     with app.app_context(), patch("backend.teams_sync.fetch_teams_from_api", return_value=[]):
         assert run_teams_sync() == 0
-        assert get_teams_synced_at() is None
+        assert get_synced_at("teams") is None
 
 
 def test_run_with_stored_teams_is_incremental(app, mock_fetch, mock_explorer):
     store_known_teams(app)
     with app.app_context():
         assert run_teams_sync() == 2
-        assert get_teams_synced_at() is not None
+        assert get_synced_at("teams") is not None
     mock_fetch.assert_not_called()
     assert mock_explorer.call_count == 2
     assert "last_match_time >= 200" in mock_explorer.call_args_list[0].kwargs["params"]["sql"]
@@ -98,7 +93,7 @@ def test_incremental_run_without_new_games_records_time(app):
     store_known_teams(app)
     with app.app_context(), patch("backend.teams_sync.get_json", return_value={"rows": []}) as mock:
         assert run_teams_sync() == 0
-        assert get_teams_synced_at() is not None
+        assert get_synced_at("teams") is not None
     assert mock.call_count == 1
 
 
@@ -124,50 +119,6 @@ def test_recent_teams_errors(app):
     with patch("backend.teams_sync.get_json", return_value={"rows": None, "err": "syntax error"}):
         with pytest.raises(ValueError, match="syntax error"):
             fetch_recent_teams(0)
-
-
-def test_run_refuses_a_second_concurrent_sync(app, mock_fetch):
-    with app.app_context(), teams_sync._sync_lock:
-        with pytest.raises(TeamsSyncRunningError):
-            run_teams_sync()
-    mock_fetch.assert_not_called()
-
-
-def test_sync_endpoint_returns_count_and_time(client, mock_fetch):
-    rv = client.post("/api/teams/sync")
-    assert rv.status_code == 200
-    data = rv.get_json()
-    assert data["synced_count"] == 2
-    assert data["message"] == "Stored 2 teams"
-    assert isinstance(data["synced_at"], int)
-
-
-def test_sync_endpoint_full_flag(app, client, mock_fetch, mock_explorer):
-    store_known_teams(app)
-    assert client.post("/api/teams/sync?full=true").status_code == 200
-    mock_fetch.assert_called_once()
-    mock_explorer.assert_not_called()
-
-
-def test_sync_endpoint_no_teams(client):
-    with patch("backend.teams_sync.fetch_teams_from_api", return_value=[]):
-        rv = client.post("/api/teams/sync")
-    assert rv.status_code == 200
-    assert rv.get_json() == {"synced_count": 0, "message": "No new teams data", "synced_at": None}
-
-
-def test_sync_endpoint_conflict_while_running(client, mock_fetch):
-    with teams_sync._sync_lock:
-        rv = client.post("/api/teams/sync")
-    assert rv.status_code == 409
-    assert rv.get_json()["code"] == "TEAMS_SYNC_RUNNING"
-
-
-def test_sync_endpoint_database_error(client, mock_fetch):
-    with patch("backend.teams_sync.store_teams", side_effect=RuntimeError("disk full")):
-        rv = client.post("/api/teams/sync")
-    assert rv.status_code == 500
-    assert rv.get_json()["code"] == "FAILED_TO_STORE_TEAMS"
 
 
 @pytest.mark.parametrize("url", ["/api/teams/search?q=Team", "/api/matches"])

@@ -5,7 +5,7 @@ task on the `background` queue, served by its own worker, so Compare never waits
 - every minute by Celery Beat (check_due_jobs_task) for every due job
 - at startup (Flask server only) for every due job
 - on team search and matches requests for the teams list
-- by POST /api/jobs/{name}/run
+- by POST /api/jobs/{name}/run (`?full=true` for the complete teams list)
 
 State in Redis (db 1):
 - `job:<name>:lock`: held from queueing until the job ends, so a job never runs twice at once; it expires after
@@ -97,10 +97,10 @@ def _run_matches() -> str:
     return f"Cached {len(refresh_matches(background=True))} series"
 
 
-def _run_teams() -> str:
+def _run_teams(full: bool = False) -> str:
     from backend.teams_sync import run_teams_sync
 
-    count = run_teams_sync()
+    count = run_teams_sync(full=full)
     if not count and get_synced_at("teams") is None:
         raise ValueError("OpenDota returned no teams")
     return f"Stored {count} teams" if count else "No new teams data"
@@ -115,12 +115,15 @@ class Job:
         title: Shown to the user, e.g. "Teams list"
         run: Updates the cache inside an app context and returns a short result message; raises on failure
         stale_after: Seconds after the last success when the job is due again
+        run_full: Slower complete update, queued only on request (POST /api/jobs/{name}/run?full=true); None when
+            the job has none
     """
 
     name: str
     title: str
     run: Callable[[], str]
     stale_after: int
+    run_full: Optional[Callable[[], str]] = None
 
 
 JOBS: dict[str, Job] = {
@@ -131,7 +134,13 @@ JOBS: dict[str, Job] = {
         # New heroes are rare; one request
         Job(name="heroes", title="Heroes", run=_run_heroes, stale_after=7 * 86400),
         # Incremental: 2 explorer requests (full ~22 only when the table is empty)
-        Job(name="teams", title="Teams list", run=_run_teams, stale_after=24 * 3600),
+        Job(
+            name="teams",
+            title="Teams list",
+            run=_run_teams,
+            stale_after=24 * 3600,
+            run_full=lambda: _run_teams(full=True),  # ~22 requests: every /teams page
+        ),
         # One /heroStats request; OpenDota recomputes it a few times a day (Meta tab)
         Job(name="hero_meta", title="Hero meta", run=_run_hero_meta, stale_after=3600),
         # One Liquipedia parse (their limit: 1 per 30 s); upcoming and finished series of the main page
@@ -280,11 +289,12 @@ def is_due(job: Job, now: Optional[float] = None) -> bool:
     return status["state"] not in (QUEUED, RUNNING) and status["next_run"] is None
 
 
-def queue_job(name: str) -> dict[str, Any]:
+def queue_job(name: str, full: bool = False) -> dict[str, Any]:
     """Queue a job on the background queue.
 
     Args:
         name: Job name
+        full: Run the job's `run_full` instead of `run` (only for jobs that have one)
 
     Returns:
         The job's status after queueing
@@ -299,8 +309,10 @@ def queue_job(name: str) -> dict[str, Any]:
     if not cache.redis_client.set(_lock_key(name), token, nx=True, ex=LOCK_TTL_SECONDS):
         raise JobRunningError(f"{job.title} update is already running")
     try:
-        _write_status(name, state=QUEUED, progress=0, message=f"{job.title} update queued")
-        run_job_task.apply_async(args=[name, token], queue=BACKGROUND_QUEUE)
+        kind = "full update" if full else "update"
+        _write_status(name, state=QUEUED, progress=0, message=f"{job.title} {kind} queued")
+        options: dict[str, Any] = {"kwargs": {"full": True}} if full else {}
+        run_job_task.apply_async(args=[name, token], queue=BACKGROUND_QUEUE, **options)
     except Exception:
         _release(name, token)
         _write_status(name, state=IDLE, message=None)
@@ -367,7 +379,7 @@ def _release(name: str, token: str) -> None:
         logger.warning(f"Could not release the lock of job {name}: {e}")
 
 
-def run_job(name: str, token: str) -> Optional[str]:
+def run_job(name: str, token: str, full: bool = False) -> Optional[str]:
     """Run a queued job inside an app context, record its status and release its lock.
 
     A run whose lock expired or was taken by a newer queueing is skipped (an old message left in the queue).
@@ -375,6 +387,7 @@ def run_job(name: str, token: str) -> Optional[str]:
     Args:
         name: Job name
         token: Lock token from queue_job
+        full: Run the job's `run_full` (falls back to `run` when the job has none)
 
     Returns:
         The result message, or None when the run was skipped or failed
@@ -398,7 +411,7 @@ def run_job(name: str, token: str) -> Optional[str]:
 
     try:
         with report_waits(report_wait):
-            message = job.run()
+            message = (job.run_full or job.run)() if full else job.run()
         _set_synced_at(name, int(time.time()))
     except Exception as e:
         logger.error(f"Job {name} failed: {e}")
@@ -433,9 +446,9 @@ def check_due_jobs_task() -> list[str]:
 
 
 @celery.task(name="backend.jobs.run_job_task")
-def run_job_task(name: str, token: str) -> Optional[str]:
+def run_job_task(name: str, token: str, full: bool = False) -> Optional[str]:
     """Celery task of one cache job (background queue); see run_job."""
     from backend import create_app
 
     with create_app().app_context():
-        return run_job(name, token)
+        return run_job(name, token, full)

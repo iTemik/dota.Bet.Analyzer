@@ -307,6 +307,40 @@ def test_run_endpoint_errors(client, mock_apply_async):
     assert rv.get_json()["code"] == "FAILED_TO_QUEUE_JOB"
 
 
+def test_run_endpoint_full_teams_update(client, mock_apply_async):
+    rv = client.post("/api/jobs/teams/run?full=true")
+    assert rv.status_code == 202
+    assert rv.get_json()["message"] == "Teams list full update queued"
+    assert mock_apply_async.call_args.kwargs["kwargs"] == {"full": True}
+
+
+def test_run_endpoint_full_needs_a_full_run(client, mock_apply_async):
+    rv = client.post("/api/jobs/heroes/run?full=true")
+    assert rv.status_code == 400
+    assert rv.get_json()["code"] == "JOB_FULL_NOT_SUPPORTED"
+    mock_apply_async.assert_not_called()
+
+
+def test_run_job_full_uses_run_full(app, fake_redis, monkeypatch):
+    run, run_full = MagicMock(return_value="2 teams"), MagicMock(return_value="22 pages")
+    monkeypatch.setitem(
+        jobs.JOBS, "teams", Job(name="teams", title="Teams list", run=run, stale_after=3600, run_full=run_full)
+    )
+    fake_redis.set("job:teams:lock", "token")
+    with app.app_context():
+        assert run_job("teams", "token", full=True) == "22 pages"
+    run.assert_not_called()
+
+
+def test_teams_job_full_run_fetches_every_page(app):
+    with (
+        app.app_context(),
+        patch("backend.teams_sync.run_teams_sync", return_value=5) as sync,
+    ):
+        assert jobs.JOBS["teams"].run_full() == "Stored 5 teams"
+    sync.assert_called_once_with(full=True)
+
+
 def test_running_job_reports_limiter_waits(app, test_job, fake_redis):
     seen: list[str] = []
 

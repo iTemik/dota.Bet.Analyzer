@@ -1,11 +1,11 @@
-"""Tests for the hero list: OpenDota /constants/heroes sync, GET /api/heroes and POST /api/heroes/sync."""
+"""Tests for the hero list: OpenDota /constants/heroes sync, storage and GET /api/heroes."""
 
 import sqlite3
 from unittest.mock import patch
 
 import pytest
 
-from backend.heroes import fetch_heroes_from_api, list_heroes
+from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
 from backend.opendota import OpenDotaError
 
 CONSTANTS_HEROES = {
@@ -68,8 +68,13 @@ def test_get_heroes_empty(client):
     assert response.get_json() == []
 
 
+def store_constants(app) -> int:
+    with app.app_context():
+        return store_heroes(fetch_heroes_from_api())
+
+
 def test_get_heroes_sorted_by_name(app, client, mock_get_json):
-    client.post("/api/heroes/sync")
+    store_constants(app)
 
     response = client.get("/api/heroes")
 
@@ -86,37 +91,12 @@ def test_get_heroes_database_error(client):
     assert response.get_json()["code"] == "FAILED_TO_READ_HEROES"
 
 
-def test_sync_endpoint_refreshes_changed_hero(app, client, mock_get_json):
-    client.post("/api/heroes/sync")
+def test_store_refreshes_changed_hero(app, mock_get_json):
+    store_constants(app)
     renamed = {"1": {**CONSTANTS_HEROES["1"], "localized_name": "Anti Mage"}}
 
     with patch("backend.heroes.get_json", return_value=renamed):
-        response = client.post("/api/heroes/sync")
+        assert store_constants(app) == 1
 
-    assert response.status_code == 200
-    assert response.get_json() == {"synced_count": 1, "message": "Stored 1 heroes"}
     with app.app_context():
         assert [h["localized_name"] for h in list_heroes()] == ["Anti Mage", "Axe"]
-
-
-@pytest.mark.parametrize(
-    ("error", "status"),
-    [
-        (OpenDotaError(503, "NETWORK_ERROR", "down"), 503),
-        (OpenDotaError(502, "JSON_DECODE_ERROR", "bad json"), 502),
-    ],
-)
-def test_sync_endpoint_opendota_errors(client, error, status):
-    with patch("backend.heroes.get_json", side_effect=error):
-        response = client.post("/api/heroes/sync")
-
-    assert response.status_code == status
-    assert response.get_json()["code"] == "FAILED_TO_FETCH_HEROES"
-
-
-def test_sync_endpoint_database_error(client, mock_get_json):
-    with patch("backend.dota_bet_analyzer.store_heroes", side_effect=sqlite3.OperationalError("locked")):
-        response = client.post("/api/heroes/sync")
-
-    assert response.status_code == 500
-    assert response.get_json()["code"] == "FAILED_TO_STORE_HEROES"

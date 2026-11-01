@@ -1,6 +1,5 @@
-"""Tests for pro players endpoint and database operations."""
+"""Tests for pro players and teams fetch and storage."""
 
-import json
 import os
 import sqlite3
 import tempfile
@@ -10,7 +9,12 @@ import pytest
 import requests
 
 from backend import create_app
-from backend.pro_players import fetch_pro_players_from_api, fetch_teams_from_api
+from backend.pro_players import (
+    fetch_pro_players_from_api,
+    fetch_teams_from_api,
+    store_pro_players,
+)
+from backend.teams_sync import run_teams_sync
 from scripts.init_d2ba_db import init_d2ba_db
 
 
@@ -96,26 +100,10 @@ def sample_pro_players_data():
     ]
 
 
-def test_pro_players_endpoint_success(client, sample_pro_players_data):
-    """Test /pro-players/sync endpoint with successful API response."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = sample_pro_players_data
-
-        response = client.post("/api/pro-players/sync")
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data["synced_count"] == 2
-        assert "Stored 2 pro players" in data["message"]
-
-
-def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
-    """Test that /pro-players/sync actually stores data in database."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = sample_pro_players_data
-
-        response = client.post("/api/pro-players/sync")
-        assert response.status_code == 200
+def test_store_pro_players_stores_data(sample_pro_players_data, app):
+    """Test that store_pro_players stores every field the app reads."""
+    with app.app_context():
+        assert store_pro_players(sample_pro_players_data) == 2
 
         # Check database
         with app.app_context():
@@ -137,59 +125,19 @@ def test_pro_players_endpoint_stores_data(client, sample_pro_players_data, app):
             assert player["is_pro"] == 1  # SQLite stores boolean as integer
 
 
-def test_pro_players_endpoint_connection_failure(client):
-    """Test /pro-players/sync endpoint when connection fails."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
-
-        response = client.post("/api/pro-players/sync")
-
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        assert "code" in data
-
-
-def test_pro_players_endpoint_invalid_response(client):
-    """Test /pro-players/sync endpoint when API returns invalid response."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
-
-        response = client.post("/api/pro-players/sync")
-
-        assert response.status_code == 502
-        data = json.loads(response.data)
-        assert "code" in data
-
-
-def test_pro_players_endpoint_empty_response(client):
-    """Test /pro-players/sync endpoint with empty array from API."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = []
-
-        response = client.post("/api/pro-players/sync")
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data["synced_count"] == 0
-
-
-def test_pro_players_upsert(client, sample_pro_players_data, app):
+def test_pro_players_upsert(sample_pro_players_data, app):
     """Test that updating existing players works (upsert behavior)."""
-    with patch("backend.dota_bet_analyzer.fetch_pro_players_from_api") as mock_fetch:
-        mock_fetch.return_value = sample_pro_players_data
-
+    with app.app_context():
         # First insert
-        client.post("/api/pro-players/sync")
+        store_pro_players(sample_pro_players_data)
 
         # Update data
         updated_data = sample_pro_players_data.copy()
         updated_data[0]["team_name"] = "Updated Team"
         updated_data[0]["team_tag"] = "UPD"
 
-        mock_fetch.return_value = updated_data
-
         # Second insert (should update)
-        client.post("/api/pro-players/sync")
+        store_pro_players(updated_data)
 
         # Check database
         with app.app_context():
@@ -525,26 +473,12 @@ def sample_teams_data():
     ]
 
 
-def test_teams_endpoint_sync_success(client, sample_teams_data):
-    """Test /teams/sync endpoint with successful API response."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
+def test_teams_sync_stores_data(sample_teams_data, app):
+    """Test that a teams sync stores only the columns the app reads."""
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch, app.app_context():
         mock_fetch.return_value = sample_teams_data
 
-        response = client.post("/api/teams/sync")
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data["synced_count"] == 2
-        assert "Stored 2 teams" in data["message"]
-
-
-def test_teams_endpoint_stores_data(client, sample_teams_data, app):
-    """Test that /teams/sync actually stores data in database."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
-        mock_fetch.return_value = sample_teams_data
-
-        response = client.post("/api/teams/sync")
-        assert response.status_code == 200
+        assert run_teams_sync() == 2
 
         # Check database
         with app.app_context():
@@ -571,50 +505,13 @@ def test_teams_endpoint_stores_data(client, sample_teams_data, app):
             assert "delta" not in dict(team).keys()
 
 
-def test_teams_endpoint_api_failure(client):
-    """Test /teams/sync endpoint when OpenDota API fails."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
-        mock_fetch.side_effect = ConnectionError("Failed to connect to OpenDota API")
-
-        response = client.post("/api/teams/sync")
-
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        assert "code" in data
-
-
-def test_teams_endpoint_invalid_response(client):
-    """Test /teams/sync endpoint when API returns invalid response."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
-        mock_fetch.side_effect = ValueError("Invalid response from OpenDota API")
-
-        response = client.post("/api/teams/sync")
-
-        assert response.status_code == 502
-        data = json.loads(response.data)
-        assert "code" in data
-
-
-def test_teams_endpoint_empty_response(client):
-    """Test /teams/sync endpoint with empty array from API."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
-        mock_fetch.return_value = []
-
-        response = client.post("/api/teams/sync")
-
-        assert response.status_code == 200
-        data = json.loads(response.data)
-
-        assert data["synced_count"] == 0
-
-
-def test_teams_upsert(client, sample_teams_data, app):
+def test_teams_upsert(sample_teams_data, app):
     """Test that updating existing teams works (upsert behavior)."""
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch, app.app_context():
         mock_fetch.return_value = sample_teams_data
 
         # First insert
-        client.post("/api/teams/sync")
+        run_teams_sync()
 
         # Update data
         updated_data = sample_teams_data.copy()
@@ -624,7 +521,7 @@ def test_teams_upsert(client, sample_teams_data, app):
         mock_fetch.return_value = updated_data
 
         # Second full sync (should update)
-        client.post("/api/teams/sync?full=true")
+        run_teams_sync(full=True)
 
         # Check database
         with app.app_context():
@@ -706,8 +603,8 @@ def test_fetch_teams_from_api_partial_failure_graceful_degradation(mock_get, sam
     assert len(result) == 1000  # Only page 1 data
 
 
-def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
-    """Test /teams/sync endpoint with larger dataset."""
+def test_teams_sync_with_large_dataset(sample_teams_data, app):
+    """Test a full teams sync with a larger dataset."""
     # Create 1500 unique teams (more than one page)
     large_dataset = []
     for i in range(1500):
@@ -726,13 +623,10 @@ def test_teams_endpoint_with_large_dataset(client, sample_teams_data, app):
             }
         )
 
-    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch:
+    with patch("backend.teams_sync.fetch_teams_from_api") as mock_fetch, app.app_context():
         mock_fetch.return_value = large_dataset
 
-        response = client.post("/api/teams/sync")
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data["synced_count"] == 1500
+        assert run_teams_sync() == 1500
 
         # Verify all teams are stored
         with app.app_context():
