@@ -113,10 +113,10 @@ function PredictionList() {
           ))}
         </div>
         <p className="prediction-totals">
-          Bets: {filtered.length - count('no_bet')} · Won: {count('won')} · Lost: {count('lost')} · Pending:{' '}
-          {count('pending')} · net {totals.net < 0 ? <Loss value={-totals.net} /> : <Profit value={totals.net} />} (won{' '}
-          <Profit value={totals.won} /> lost <Loss value={totals.lost} />), pending <Profit value={totals.pendingProfit} />/
-          <Loss value={totals.pendingLoss} />{' '}
+          Bets: {filtered.length - count('no_bet')} (
+          {totals.net < 0 ? <Loss value={-totals.net} /> : <Profit value={totals.net} />}) · Won: {count('won')} (
+          <Profit value={totals.won} />) · Lost: {count('lost')} (<Loss value={totals.lost} />) · Pending:{' '}
+          {count('pending')} (<Profit value={totals.pendingProfit} />/<Loss value={totals.pendingLoss} />){' '}
           <span className="simulation-badge">{SIMULATION_NOTE}</span>
         </p>
       </div>
