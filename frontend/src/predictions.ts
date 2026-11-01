@@ -27,7 +27,7 @@ export const possibleProfit = (p: Prediction): number | null => {
 // Possible loss of a bet: the stake; null without a bet
 export const possibleLoss = (p: Prediction): number | null => (p.bet_team === null ? null : p.stake)
 
-// Totals: net result of settled bets (won profit minus lost stakes), possible profit over won and pending bets,
+// Totals: net profit of settled bets (won profit minus lost stakes), possible profit over won and pending bets,
 // possible loss over lost and pending bets
 export const betTotals = (predictions: Prediction[]) => {
   let net = 0
