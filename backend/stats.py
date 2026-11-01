@@ -451,7 +451,13 @@ def _create_team_stats(
         # Imported here: task_store imports this module
         from backend.task_store import start_task
 
-        task_id, _ = start_task(players_statistics_task, accounts=account_ids, days=days, rank_accounts=standin_ids)
+        task_id, _ = start_task(
+            players_statistics_task,
+            team_id=team_stats.team_id,
+            accounts=account_ids,
+            days=days,
+            rank_accounts=standin_ids,
+        )
 
     team_stats.task_id = task_id
 

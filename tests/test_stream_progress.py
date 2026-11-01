@@ -249,7 +249,7 @@ def test_team_task_is_queued_before_it_is_sent():
 
     assert [c[0] for c in calls.mock_calls] == ["update", "task.delay"]
     update.assert_called_once_with(team.task_id, 0, "Queued", 0)
-    assert team.task_id.startswith("task_")
+    assert team.task_id.startswith("task_1_")
 
 
 def test_players_statistics_queues_task_before_it_is_sent():
@@ -269,3 +269,13 @@ def test_players_statistics_queues_task_before_it_is_sent():
     task_id = rv.get_json()["task_id"]
     assert [c[0] for c in calls.mock_calls] == ["update", "delay"]
     update.assert_called_once_with(task_id, 0, "Queued", 0)
+
+
+def test_task_ids_keep_the_team_id_and_never_repeat():
+    """Team tasks carry the team id; two ids made for the same team at once still differ."""
+    from backend.task_store import new_task_id
+
+    first, second = new_task_id(42), new_task_id(42)
+    assert first.startswith("task_42_")
+    assert first != second
+    assert new_task_id().count("_") == 1  # Tasks without a team: task_<uuid hex>

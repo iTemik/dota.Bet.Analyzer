@@ -64,7 +64,7 @@ def test_compute_statistics_returns_model(monkeypatch):
     assert team.players[0].name == "Alpha_Player1"
     assert team.players[0].id == 101
     assert team.task_id is not None  # task_id should be generated
-    assert re.fullmatch(r"task_[0-9a-f]{32}", team.task_id)  # Unique uuid id
+    assert re.fullmatch(r"task_42_[0-9a-f]{32}", team.task_id)  # Team id + unique uuid
     assert team.error is None
 
 
