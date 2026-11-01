@@ -26,7 +26,7 @@ from typing import Any, Optional
 
 import redis
 
-from backend.config import Config
+from backend import cache
 from backend.logging_config import setup_logging
 
 logger = setup_logging(__name__)
@@ -96,10 +96,8 @@ class RateLimiter:
 
     @property
     def client(self) -> Any:
-        """Redis client, created on first use."""
-        if self._client is None:
-            self._client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
-        return self._client
+        """Redis client: the one given to the constructor, else the app's shared client (backend.cache)."""
+        return self._client if self._client is not None else cache.redis_client
 
     def _key(self, suffix: str) -> str:
         return f"ratelimit:{self.name}:{suffix}"
