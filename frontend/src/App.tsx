@@ -329,15 +329,8 @@ function App() {
           <div className="progress-section">
             <h2>Task Progress</h2>
             <p>{progress.message}</p>
-            <div style={{ width: '100%', height: '20px', backgroundColor: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  width: `${progress.progress}%`,
-                  height: '100%',
-                  backgroundColor: '#6b9d7a',
-                  transition: 'width 0.3s ease',
-                }}
-              />
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${progress.progress}%` }} />
             </div>
             <p>{progress.progress}% complete</p>
           </div>

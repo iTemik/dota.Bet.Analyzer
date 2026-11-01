@@ -1,8 +1,3 @@
-:root {
-  --color-positive: #6b9d7a;
-  --color-negative: #9d6b6b;
-}
-
 #root {
   max-width: 1800px;
   margin: 0 auto;
@@ -15,7 +10,7 @@
   align-items: center;
   gap: 2rem;
   padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-end) 100%);
   border-radius: 12px;
   color: white;
   min-height: 100vh;
@@ -24,7 +19,7 @@
 h1 {
   font-size: 2.5rem;
   margin: 0;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 2px 2px 4px var(--shade-4);
 }
 
 /* Desktop: both team inputs and the button in one row */
@@ -35,7 +30,7 @@ h1 {
   gap: 1.5rem;
   width: 100%;
   max-width: 1100px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
   padding: 2rem;
   border-radius: 8px;
   backdrop-filter: blur(10px);
@@ -64,9 +59,9 @@ label {
 
 input {
   padding: 0.75rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--input-bg);
   color: black;
   font-size: 1rem;
   transition: all 0.3s ease;
@@ -75,14 +70,14 @@ input {
 input:focus {
   outline: none;
   border-color: white;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 10px var(--glow);
   background: white;
 }
 
 .check-btn {
   padding: 0.75rem 1.5rem;
   background: white;
-  color: #667eea;
+  color: var(--accent);
   border: none;
   border-radius: 6px;
   font-size: 1.1rem;
@@ -94,7 +89,7 @@ input:focus {
 
 .check-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 20px var(--shade-2);
 }
 
 .check-btn:disabled {
@@ -103,7 +98,7 @@ input:focus {
 }
 
 .error-message {
-  background: #ff6b6b;
+  background: var(--error);
   color: white;
   padding: 1rem;
   border-radius: 6px;
@@ -115,7 +110,7 @@ input:focus {
 
 .results-section {
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
   padding: 2rem;
   border-radius: 8px;
   backdrop-filter: blur(10px);
@@ -133,20 +128,20 @@ input:focus {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 2rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--shade-2);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .stats-table thead {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-3);
 }
 
 .stats-table th,
 .stats-table td {
   padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--line);
 }
 
 .stats-table th {
@@ -195,9 +190,9 @@ input:focus {
   width: 22rem;
   padding: 0.6rem 0.8rem;
   border-radius: 6px;
-  background: #1e1e1e;
-  color: #f0f0f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  box-shadow: 0 2px 8px var(--shadow);
   font-size: 0.85rem;
   font-style: normal;
   font-weight: normal;
@@ -229,13 +224,13 @@ input:focus {
 }
 
 pre {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--shade-4);
   padding: 1rem;
   border-radius: 6px;
   overflow: auto;
   text-align: left;
   font-size: 0.9rem;
-  color: #fff;
+  color: var(--text);
   max-height: 400px;
 }
 
@@ -246,7 +241,7 @@ pre {
   align-items: center;
   cursor: pointer;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--shade-2);
   border-radius: 6px;
   user-select: none;
   transition: background 0.2s;
@@ -254,7 +249,7 @@ pre {
 }
 
 .collapsible-header:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--shade-4);
 }
 
 .collapsible-header h2 {
@@ -363,7 +358,7 @@ pre {
 }
 
 .app-tagline {
-  color: #bbb;
+  color: var(--text-muted);
   font-size: 0.8rem;
   font-style: italic;
   margin-top: 0.25rem;
@@ -399,7 +394,7 @@ pre {
 }
 
 .app-version {
-  color: #999;
+  color: var(--text-faint);
   font-size: 0.8rem;
 }
 
@@ -438,16 +433,16 @@ pre {
   color: white;
   font-weight: 600;
   text-decoration: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
 }
 
 .tab:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--surface-4);
 }
 
 .tab.active {
   background: white;
-  color: #667eea;
+  color: var(--accent);
 }
 
 /* "Data" status line under the tabs: background cache jobs and today's OpenDota requests */
@@ -457,7 +452,7 @@ pre {
   flex-direction: column;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-soft);
 }
 
 .data-status-line {
@@ -467,7 +462,7 @@ pre {
   gap: 0.75rem;
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--shade-1);
 }
 
 .data-status-label {
@@ -479,7 +474,7 @@ pre {
 }
 
 .data-status-failed {
-  color: #ff8a8a;
+  color: var(--neg-text);
   font-weight: 600;
 }
 
@@ -487,8 +482,8 @@ pre {
   padding: 0.15rem 0.6rem;
   font-size: 0.8rem;
   color: white;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
 }
 
 .data-status-button:disabled {
@@ -508,23 +503,23 @@ pre {
   width: 80px;
   height: 6px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--surface-4);
   overflow: hidden;
 }
 
 .data-bar-fill {
   display: block;
   height: 100%;
-  background: #7ddc95;
+  background: var(--pos-text);
 }
 
 .data-budget-warn {
-  color: #ff8a8a;
+  color: var(--neg-text);
   font-weight: 600;
 }
 
 .data-budget-warn .data-bar-fill {
-  background: #ff6b6b;
+  background: var(--error);
 }
 
 .data-jobs {
@@ -536,7 +531,7 @@ pre {
 .data-jobs th,
 .data-jobs td {
   padding: 0.3rem 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .tab-panel {
@@ -553,7 +548,7 @@ pre {
 
 /* Log prediction panel under the comparison tables */
 .prediction-panel {
-  border: 2px solid rgba(255, 255, 255, 0.35);
+  border: 2px solid var(--border);
   border-radius: 8px;
   padding: 1.5rem;
   margin-bottom: 2rem;
@@ -590,11 +585,11 @@ pre {
 
 /* Values copied from the bookmaker: own box with a different background */
 .bookmaker-box {
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1rem;
   margin: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--shade-3);
 }
 
 .bookmaker-box legend {
@@ -655,7 +650,7 @@ pre {
 }
 
 .field-error {
-  color: #ffd0d0;
+  color: var(--error-text);
   font-size: 0.85rem;
 }
 
@@ -670,7 +665,7 @@ pre {
   padding: 0.5rem 1rem;
   background: transparent;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 0.95rem;
   cursor: pointer;
@@ -710,7 +705,7 @@ pre {
 
 .secondary-btn.active {
   background: white;
-  color: #667eea;
+  color: var(--accent);
 }
 
 .prediction-totals {
@@ -723,25 +718,25 @@ pre {
 }
 
 .prediction-row-link:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-1);
 }
 
 .outcome-won {
-  background-color: var(--color-positive);
+  background-color: var(--pos);
 }
 
 .outcome-lost {
-  background-color: var(--color-negative);
+  background-color: var(--neg);
 }
 
 /* Possible profit (green) and loss (red) of bets */
 .money-profit {
-  color: #7ddc95;
+  color: var(--pos-text);
   font-weight: 600;
 }
 
 .money-loss {
-  color: #ff8a8a;
+  color: var(--neg-text);
   font-weight: 600;
 }
 
@@ -749,7 +744,7 @@ pre {
 .simulation-badge {
   margin-left: 0.5rem;
   padding: 0.1rem 0.5rem;
-  border: 1px dashed rgba(255, 255, 255, 0.6);
+  border: 1px dashed var(--border-strong);
   border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -800,7 +795,7 @@ pre {
 }
 
 .head-to-head-table tr.before-prediction {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-1);
 }
 
 .before-prediction-tag {
@@ -808,7 +803,7 @@ pre {
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
   font-size: 0.8rem;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-3);
 }
 
 .matches-table .match-team-icon {
@@ -833,7 +828,7 @@ pre {
 }
 
 .match-row-clickable:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-1);
 }
 
 .stats-table.matches-table td {
@@ -866,7 +861,7 @@ pre {
 .head-to-head-table tr.prediction-time-row td {
   text-align: center;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-3);
 }
 
 /* Meta tab: one compact table like OpenDota's hero tables, settings below it */
@@ -926,11 +921,11 @@ pre {
 
 /* Ultra meta: golden hero name and a faint golden row */
 .meta-table tr.meta-ultra {
-  background: rgba(255, 200, 0, 0.08);
+  background: var(--gold-bg);
 }
 
 .meta-table tr.meta-ultra .meta-hero {
-  color: #ffd257;
+  color: var(--gold);
   font-weight: 600;
 }
 
@@ -944,13 +939,13 @@ pre {
   padding: 0.05rem 0.4rem;
   border-radius: 4px;
   font-size: 0.8rem;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-3);
   cursor: help;
 }
 
 .meta-tag-ultra {
-  color: #ffd257;
-  background: rgba(255, 200, 0, 0.2);
+  color: var(--gold);
+  background: var(--gold-bg-strong);
   font-weight: 600;
 }
 
@@ -964,21 +959,21 @@ pre {
   display: block;
   height: 3px;
   margin-top: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
 }
 
 .meta-bar-fill {
   display: block;
   height: 100%;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--fill-neutral);
 }
 
 .meta-bar-fill.good {
-  background: #6b9d7a;
+  background: var(--pos);
 }
 
 .meta-bar-fill.bad {
-  background: #c46a6a;
+  background: var(--neg-bright);
 }
 
 .meta-settings input[type='number'] {
@@ -997,4 +992,28 @@ pre {
 
 .meta-source {
   margin-top: 0.75rem;
+}
+
+/* Better / worse cells in the comparison table (format.ts CELL_POSITIVE / CELL_NEGATIVE) */
+.cell-pos {
+  background-color: var(--pos);
+}
+
+.cell-neg {
+  background-color: var(--neg);
+}
+
+/* Compare task progress bar */
+.progress-track {
+  width: 100%;
+  height: 20px;
+  background-color: var(--track-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--pos);
+  transition: width 0.3s ease;
 }
