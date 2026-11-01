@@ -339,6 +339,34 @@ class TeamsSyncQuerySchema(Schema):
     )
 
 
+class JobSchema(Schema):
+    """Status of one background cache job."""
+
+    name = fields.Str(required=True, metadata={"description": "Job name, e.g. teams"})
+    title = fields.Str(required=True, metadata={"description": "Name shown to the user, e.g. Teams list"})
+    state = fields.Str(
+        required=True,
+        validate=validate.OneOf(["idle", "queued", "running", "failed"]),
+        metadata={"description": "idle (not queued or running), queued, running, or failed (last run failed)"},
+    )
+    progress = fields.Float(required=True, metadata={"description": "Progress of the current or last run, 0-100"})
+    message = fields.Str(
+        required=True, allow_none=True, metadata={"description": "Status or result of the current or last run"}
+    )
+    last_success = fields.Int(
+        required=True, allow_none=True, metadata={"description": "Unix time of the last successful run"}
+    )
+    last_error = fields.Str(required=True, allow_none=True, metadata={"description": "Error of the last failed run"})
+    last_error_at = fields.Int(
+        required=True, allow_none=True, metadata={"description": "Unix time of the last failed run"}
+    )
+    next_run = fields.Int(
+        required=True,
+        allow_none=True,
+        metadata={"description": "Unix time when the job is due again; null when it is due now"},
+    )
+
+
 class HeroSchema(Schema):
     """Hero from the OpenDota hero list."""
 

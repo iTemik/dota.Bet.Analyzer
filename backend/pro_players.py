@@ -52,7 +52,7 @@ def fetch_pro_players_from_api(background: bool = False) -> list[dict[str, Any]]
     """Fetch pro players data from OpenDota API.
 
     Args:
-        background: True for the startup sync (goes after user requests, stops at the daily OpenDota budget)
+        background: True for the cache job (goes after user requests, stops at the daily OpenDota budget)
 
     Returns:
         List of pro player dictionaries.
@@ -138,33 +138,6 @@ def store_pro_players(players_data: list[dict[str, Any]]) -> int:
 def init_d2ba_app(app):
     """Initialize d2ba database helpers for the app."""
     app.teardown_appcontext(close_d2ba_db)
-
-
-def sync_pro_players_on_startup(app):
-    """Fetch and store pro players data on app startup.
-
-    This runs asynchronously to not block app initialization.
-    Errors are logged but don't fail the app startup.
-    """
-
-    try:
-        with app.app_context():
-            logger.info("Fetching pro players from OpenDota API...")
-            players_data = fetch_pro_players_from_api(background=True)
-
-            if players_data is None:
-                logger.warning("Failed to fetch pro players from OpenDota API")
-                return
-
-            if not players_data:
-                logger.info("No pro players data available from OpenDota API")
-                return
-
-            count = store_pro_players(players_data)
-            logger.info(f"Successfully stored {count} pro players to d2ba database")
-
-    except Exception as e:
-        logger.error(f"Error syncing pro players on startup: {e}")
 
 
 def _extract_players_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[list[Player], list[Player]]:

@@ -46,13 +46,13 @@ def no_roster_requests(request):
 
 
 @pytest.fixture(autouse=True)
-def no_startup_teams_sync(request):
-    """Keep app startup offline: the background teams sync never starts (tested in test_teams_sync itself)."""
-    if request.module.__name__.endswith("test_teams_sync"):
+def no_startup_jobs(request):
+    """Keep app startup offline: no cache job is queued (tested in test_jobs itself)."""
+    if request.module.__name__.endswith("test_jobs"):
         yield None
         return
-    with patch("backend.teams_sync.sync_teams_on_startup") as mock_sync:
-        yield mock_sync
+    with patch("backend.jobs.queue_due_jobs_on_startup") as mock_queue:
+        yield mock_queue
 
 
 @pytest.fixture(autouse=True)

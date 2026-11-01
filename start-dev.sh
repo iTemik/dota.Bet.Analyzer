@@ -58,6 +58,11 @@ echo "✓ Starting Celery Worker"
 python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo &
 CELERY_PID=$!
 
+# Celery Worker for background cache jobs
+echo "✓ Starting Celery Background Worker"
+python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo -Q background -n background &
+CELERY_BG_PID=$!
+
 # Frontend
 echo "✓ Starting Frontend (http://localhost:5173)"
 cd frontend
@@ -74,9 +79,9 @@ echo "Backend:   http://localhost:5000"
 echo "Frontend:  http://localhost:5173"
 echo "Celery:    Running in background"
 echo ""
-echo "PIDs: Backend=$BACKEND_PID, Celery=$CELERY_PID, Frontend=$FRONTEND_PID"
+echo "PIDs: Backend=$BACKEND_PID, Celery=$CELERY_PID, Background=$CELERY_BG_PID, Frontend=$FRONTEND_PID"
 echo ""
-echo "To stop all services, run: kill $BACKEND_PID $CELERY_PID $FRONTEND_PID"
+echo "To stop all services, run: kill $BACKEND_PID $CELERY_PID $CELERY_BG_PID $FRONTEND_PID"
 echo ""
 
 # Wait for all processes
