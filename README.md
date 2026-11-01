@@ -504,7 +504,8 @@ npm run dev
 This starts all services in one terminal using `concurrently`:
 - **Backend** (Flask) → http://localhost:5000
 - **Frontend** (Vite + React) → http://localhost:5173
-- **Celery Worker** → processes async tasks
+- **Celery Worker** → processes async tasks (Compare)
+- **Celery Background Worker** → runs the cache jobs (queue `background`), so Compare never waits behind them
 
 **Note:** npm scripts automatically use the virtual environment's Python (via `scripts/run-with-venv.js`). No manual venv activation needed.
 
@@ -556,7 +557,8 @@ Frontend runs at `http://localhost:5173`
 
 ```bash
 # Using npm:
-npm run celery
+npm run celery              # Compare tasks
+npm run celery:background   # Cache jobs (queue background)
 
 # Or direct celery command:
 # Development (Windows-compatible solo pool):
@@ -648,7 +650,7 @@ Async task for comprehensive player analysis:
 
 #### Heroes (`/heroes`)
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
-- Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
+- Filled by the `heroes` cache job (one `/constants/heroes` request, weekly); `POST /heroes/sync` refreshes it
 
 #### Hero Meta (`/heroes/meta`)
 - Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold
@@ -663,21 +665,28 @@ Async task for comprehensive player analysis:
 - Teams are matched by name (ignoring case, punctuation, "(stack)", "Esports") to the teams table for their OpenDota ID and logo; the Liquipedia icon is the fallback logo
 
 #### Teams List (`/teams/sync`)
-- Obsolete (last sync 24+ hours old, or never) teams data is updated in the background at startup and on team search or matches requests; one sync runs at a time, a failed one is retried after 10 minutes
+- Obsolete (last sync 24+ hours old, or never) teams data is updated by the `teams` cache job, queued at startup and on team search or matches requests
 - Incremental update: 2 OpenDota explorer requests (teams with a league game since the newest stored one, then their names), so a team renamed without new league games keeps its old name until it plays
 - Full update (empty teams table or `POST /api/teams/sync?full=true`): every `/teams` page, ~22 requests
 
+#### Cache Jobs (`/jobs`)
+- Pro players (daily), heroes (weekly) and the teams list (daily) are kept up to date by background jobs on the Celery `background` queue
+- A due job (never run, or its last success is older than its limit) is queued at startup; a failed one is retried after 10 minutes
+- One run of a job at a time (Redis lock); the time of the last success is kept in `sync_state`, so a Redis restart causes no resync
+- `GET /jobs` lists each job's state (idle, queued, running, failed), progress, message, last success, last error and next run
+- `POST /jobs/<name>/run` queues a job now (409 when it is already queued or running)
+
 #### OpenDota and Liquipedia Rate Limits
-- Every OpenDota request waits for a slot of one limiter shared through Redis by Flask, the Celery worker and background threads: 1 request per 1.2 s (`OPENDOTA_MIN_INTERVAL`)
-- Compare and other user requests go first; background syncs (teams, pro players and heroes at startup) wait until no user request is queued
-- Daily budget (`OPENDOTA_DAILY_LIMIT`, default 1800, 0 = none) counts requests per UTC day; when it is used up background syncs stop and Compare still works
+- Every OpenDota request waits for a slot of one limiter shared through Redis by Flask and the Celery workers: 1 request per 1.2 s (`OPENDOTA_MIN_INTERVAL`)
+- Compare and other user requests go first; background cache jobs wait until no user request is queued
+- Daily budget (`OPENDOTA_DAILY_LIMIT`, default 1800, 0 = none) counts requests per UTC day; when it is used up cache jobs stop and Compare still works
 - Liquipedia: 1 parse request per 30 s (`LIQUIPEDIA_MIN_INTERVAL`, their API terms)
 - Without Redis requests are not paced; the retry on HTTP 429/403 stays as the safety net
 
 #### Pro Players Database (`/ProPlayers`)
 - Fetches professional Dota 2 players from OpenDota API
 - Stores player data in SQLite database for reference
-- Updates player information on demand
+- Updated daily by the `pro_players` cache job, or on demand by `POST /pro-players/sync`
 
 ### Backend Testing
 

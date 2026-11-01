@@ -1,7 +1,7 @@
 """Teams list sync from OpenDota into d2ba.sqlite (used by team search and the Matches tab).
 
-The list is updated on its own when it is obsolete (last successful sync 24+ hours old, or never): at startup and
-on team search / matches requests, in a background thread. One sync runs at a time.
+The list is updated on its own by the `teams` cache job (backend.jobs) when the last sync is 24+ hours old, or on
+demand by POST /api/teams/sync. One sync runs at a time in a process.
 
 - Full sync (teams table empty, or POST /api/teams/sync?full=1): every `/teams` page, about 22 requests.
 - Incremental sync (otherwise): two explorer queries, teams with a league game since the newest stored
@@ -9,31 +9,21 @@ on team search / matches requests, in a background thread. One sync runs at a ti
   A team renamed without playing a league game keeps its old name until it plays.
 """
 
-import sqlite3
 import threading
 import time
 from typing import Any, Optional
 
-from flask import Flask
-from werkzeug.serving import is_running_from_reloader
-
-from backend.logging_config import setup_logging
 from backend.opendota import OpenDotaError, get_json
 from backend.pro_players import fetch_teams_from_api, get_d2ba_db, store_teams
 
-logger = setup_logging(__name__)
-
 TEAMS_SYNC_NAME = "teams"  # sync_state.name of the teams list
-TEAMS_MAX_AGE_SECONDS = 24 * 60 * 60  # Older teams data is obsolete
-RETRY_AFTER_FAILURE_SECONDS = 10 * 60  # No new automatic sync this soon after a failed one
 TEAM_IDS_PER_QUERY = 200  # Team ids in one explorer `team_id IN (...)` query
 
 _sync_lock = threading.Lock()
-_last_failure: Optional[float] = None  # Time of the last failed automatic sync in this process
 
 
 class TeamsSyncRunningError(Exception):
-    """A teams sync is already running (from POST /api/teams/sync or an automatic one)."""
+    """A teams sync is already running in this process."""
 
 
 def get_teams_synced_at() -> Optional[int]:
@@ -44,20 +34,6 @@ def get_teams_synced_at() -> Optional[int]:
     """
     row = get_d2ba_db().execute("SELECT synced_at FROM sync_state WHERE name = ?", (TEAMS_SYNC_NAME,)).fetchone()
     return row["synced_at"] if row else None
-
-
-def is_teams_sync_due(now: Optional[float] = None) -> bool:
-    """Whether the teams data is obsolete: never synced or the last sync is 24+ hours old.
-
-    Args:
-        now: Current unix time (defaults to time.time())
-
-    Returns:
-        True when a sync is needed
-    """
-    synced_at = get_teams_synced_at()
-    current = time.time() if now is None else now
-    return synced_at is None or current - synced_at >= TEAMS_MAX_AGE_SECONDS
 
 
 def _newest_match_time() -> Optional[int]:
@@ -154,61 +130,3 @@ def run_teams_sync(full: bool = False) -> int:
         return count
     finally:
         _sync_lock.release()
-
-
-def _sync_in_background(app: Flask) -> None:
-    """Run a teams sync in its own app context; errors are logged."""
-    global _last_failure
-    try:
-        with app.app_context():
-            count = run_teams_sync()
-            logger.info(f"Automatic teams sync stored {count} teams")
-    except TeamsSyncRunningError:
-        logger.info("Automatic teams sync skipped, a sync is already running")
-    except Exception as e:
-        _last_failure = time.time()
-        logger.error(f"Error in automatic teams sync: {e}")
-
-
-def sync_teams_if_obsolete(app: Flask) -> Optional[threading.Thread]:
-    """Start a background teams sync when the data is obsolete, without blocking the caller.
-
-    Skipped while a sync is running and for RETRY_AFTER_FAILURE_SECONDS after a failed one.
-
-    Args:
-        app: Flask app
-
-    Returns:
-        The started thread, or None when no sync is needed
-    """
-    if _sync_lock.locked():
-        return None
-    if _last_failure is not None and time.time() - _last_failure < RETRY_AFTER_FAILURE_SECONDS:
-        return None
-    try:
-        with app.app_context():
-            if not is_teams_sync_due():
-                return None
-    except sqlite3.Error as e:
-        logger.error(f"Error checking teams sync time: {e}")
-        return None
-    logger.info("Teams data is older than 24 hours or was never synced, syncing in the background")
-    thread = threading.Thread(target=_sync_in_background, args=(app,), name="teams-sync", daemon=True)
-    thread.start()
-    return thread
-
-
-def sync_teams_on_startup(app: Flask) -> Optional[threading.Thread]:
-    """Start a background teams sync at startup when the data is obsolete.
-
-    With the debug reloader, only the serving child process syncs (the watching parent also creates the app).
-
-    Args:
-        app: Flask app
-
-    Returns:
-        The started thread, or None when no sync is needed
-    """
-    if app.debug and not is_running_from_reloader():
-        return None
-    return sync_teams_if_obsolete(app)

@@ -2,15 +2,22 @@
 import os
 import time
 
-from celery import Celery  # type: ignore[import-untyped]
 from flask import Response, current_app, jsonify, request, stream_with_context
 from flask_smorest import Blueprint
 
 from backend import __version__
-from backend.config import Config
+from backend.celery_app import celery
 from backend.head_to_head import get_head_to_head
 from backend.helpers import Errors, api_error
 from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
+from backend.jobs import (
+    JobRunningError,
+    UnknownJobError,
+    get_job,
+    list_job_statuses,
+    queue_job,
+    queue_job_if_due,
+)
 from backend.logging_config import setup_logging
 from backend.matches import get_matches
 from backend.meta import MetaParams, get_meta
@@ -28,6 +35,7 @@ from backend.schemas import (
     ErrorSchema,
     HeadToHeadSchema,
     HeroSchema,
+    JobSchema,
     MatchesSchema,
     MetaQuerySchema,
     MetaSchema,
@@ -76,7 +84,6 @@ from backend.teams_sync import (
     TeamsSyncRunningError,
     get_teams_synced_at,
     run_teams_sync,
-    sync_teams_if_obsolete,
 )
 
 # Setup logger
@@ -84,16 +91,6 @@ logger = setup_logging(__name__)
 
 
 bp = Blueprint("dota", __name__, url_prefix="/api", description="Dota 2 Bet Analyzer API")
-
-# Initialize Celery without app-specific config; the app factory will update it
-celery = Celery(__name__)
-
-# Configure Celery to use Redis as message broker (development)
-# Redis connection: redis://localhost:6379/0
-celery.conf.update(
-    broker_url=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
-    result_backend=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
-)
 
 
 def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response, int] | None]:
@@ -769,7 +766,7 @@ def sync_pro_players() -> tuple[Response, int]:
 def _sync_teams_if_obsolete() -> None:
     """Update the teams list in the background when it is obsolete (not in tests, which never reach OpenDota)."""
     if not current_app.config.get("TESTING"):
-        sync_teams_if_obsolete(current_app._get_current_object())  # type: ignore[attr-defined]
+        queue_job_if_due("teams")
 
 
 @bp.route("/teams/sync", methods=["POST"])
@@ -778,7 +775,7 @@ def _sync_teams_if_obsolete() -> None:
 @bp.alt_response(
     409,
     schema=ErrorSchema,
-    description="A teams sync is already running (started from the UI or at startup)",
+    description="A teams sync is already running in this process",
     example={
         "status": 409,
         "code": "TEAMS_SYNC_RUNNING",
@@ -823,8 +820,8 @@ def sync_teams(args: dict) -> tuple[Response, int]:
     """Sync teams from OpenDota API to local database.
 
     Incremental by default (two explorer queries: teams with a league game since the newest stored one), full with
-    `full=true` or when no team is stored (every `/teams` page, 1000 entries each). Also runs on its own when the
-    last sync is 24+ hours old. Only one sync runs at a time.
+    `full=true` or when no team is stored (every `/teams` page, 1000 entries each). The `teams` cache job also runs
+    it on its own when the last sync is 24+ hours old.
 
     Returns the number of teams successfully synced and the time of the last successful sync.
     """
@@ -843,13 +840,61 @@ def sync_teams(args: dict) -> tuple[Response, int]:
     return jsonify({"synced_count": count, "message": message, "synced_at": get_teams_synced_at()}), 200
 
 
+@bp.route("/jobs", methods=["GET"])
+@bp.response(200, JobSchema(many=True))
+@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
+def get_jobs() -> tuple[Response, int]:
+    """List the background cache jobs (pro players, heroes, teams list) with their state and last run.
+
+    No OpenDota request. A job is due when it never succeeded or its last success is older than its limit
+    (`next_run` is null then); a failed job is retried on its own after 10 minutes.
+    """
+    try:
+        return jsonify(list_job_statuses()), 200
+    except Exception as e:
+        return api_error(500, Errors.FAILED_TO_READ_JOBS, e)
+
+
+@bp.route("/jobs/<string:name>/run", methods=["POST"])
+@bp.response(202, JobSchema)
+@bp.alt_response(
+    404,
+    schema=ErrorSchema,
+    description="No job has this name",
+    example={"status": 404, "code": "JOB_NOT_FOUND", "message": "Job not found", "details": {"name": "x"}},
+)
+@bp.alt_response(
+    409,
+    schema=ErrorSchema,
+    description="The job is already queued or running",
+    example={"status": 409, "code": "JOB_RUNNING", "message": "Job is already queued or running"},
+)
+@bp.alt_response(503, schema=ErrorSchema, description="Redis or the Celery broker could not be reached")
+def run_job_now(name: str) -> tuple[Response, int]:
+    """Queue a background cache job now, even when its data is not stale.
+
+    The job runs on the background worker; GET /api/jobs shows its progress.
+    """
+    try:
+        get_job(name)
+    except UnknownJobError:
+        return api_error(404, Errors.JOB_NOT_FOUND, name=name)
+    try:
+        return jsonify(queue_job(name)), 202
+    except JobRunningError:
+        return api_error(409, Errors.JOB_RUNNING, name=name)
+    except Exception as e:
+        return api_error(503, Errors.FAILED_TO_QUEUE_JOB, e, name=name)
+
+
 @bp.route("/heroes", methods=["GET"])
 @bp.response(200, HeroSchema(many=True))
 @bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
 def get_heroes() -> tuple[Response, int]:
     """List the cached heroes (id, names, icon URL) ordered by display name.
 
-    Reads d2ba.sqlite only, no OpenDota request. The list is filled at startup when empty, or by POST /heroes/sync.
+    Reads d2ba.sqlite only, no OpenDota request. The `heroes` cache job refreshes the list weekly, POST /heroes/sync
+    on demand.
     """
     try:
         return jsonify(list_heroes()), 200

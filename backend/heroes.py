@@ -1,10 +1,9 @@
 """Hero list from OpenDota, cached in d2ba.sqlite.
 
-One request to /constants/heroes fills the table. It is synced at startup only when the table is empty, and by
-POST /api/heroes/sync. New heroes are rare, so there is no TTL.
+One request to /constants/heroes fills the table. The `heroes` cache job (backend.jobs) refreshes it weekly, and
+POST /api/heroes/sync on demand.
 """
 
-import sqlite3
 from typing import Any
 
 from backend.logging_config import setup_logging
@@ -20,7 +19,7 @@ def fetch_heroes_from_api(background: bool = False) -> list[dict[str, Any]]:
     """Fetch the hero list from OpenDota /constants/heroes.
 
     Args:
-        background: True for the startup sync (goes after user requests, stops at the daily OpenDota budget)
+        background: True for the cache job (goes after user requests, stops at the daily OpenDota budget)
 
     Returns:
         Heroes with hero_id, name, localized_name and full icon URL; malformed entries are skipped
@@ -86,33 +85,3 @@ def list_heroes() -> list[dict[str, Any]]:
     """
     rows = get_d2ba_db().execute("SELECT hero_id, name, localized_name, icon FROM heroes ORDER BY localized_name")
     return [dict(row) for row in rows]
-
-
-def sync_heroes_if_empty() -> int:
-    """Fill the heroes table from OpenDota when it is empty; no request when it already has heroes.
-
-    Returns:
-        Number of heroes stored (0 when the table was already filled)
-
-    Raises:
-        ConnectionError: If OpenDota could not be reached
-        ValueError: If the OpenDota answer is invalid
-    """
-    if get_d2ba_db().execute("SELECT 1 FROM heroes LIMIT 1").fetchone() is not None:
-        return 0
-    return store_heroes(fetch_heroes_from_api(background=True))
-
-
-def sync_heroes_on_startup(app) -> None:
-    """Fill the heroes table at startup when it is empty. Errors are logged and don't fail the startup.
-
-    Args:
-        app: Flask app
-    """
-    try:
-        with app.app_context():
-            count = sync_heroes_if_empty()
-            if count:
-                logger.info(f"Stored {count} heroes to d2ba database")
-    except (ConnectionError, ValueError, sqlite3.Error) as e:
-        logger.error(f"Error syncing heroes on startup: {e}")

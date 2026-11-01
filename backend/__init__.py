@@ -202,7 +202,7 @@ def _init_extensions(app):
     db.init_app(app)
 
     # Initialize d2ba database
-    from .pro_players import init_d2ba_app, sync_pro_players_on_startup
+    from .pro_players import init_d2ba_app
 
     init_d2ba_app(app)
 
@@ -218,14 +218,8 @@ def _init_extensions(app):
     api.register_blueprint(dota_bp)
     celery_app.conf.update(app.config or {})
 
-    # Sync pro players on app startup (only in production, not in test mode)
+    # Queue the due cache jobs (pro players, heroes, teams list) on the background worker; not in tests
     if app.config.get("TESTING") is not True:
-        sync_pro_players_on_startup(app)
+        from .jobs import queue_due_jobs_on_startup
 
-        from .heroes import sync_heroes_on_startup
-
-        sync_heroes_on_startup(app)
-
-        from .teams_sync import sync_teams_on_startup
-
-        sync_teams_on_startup(app)
+        queue_due_jobs_on_startup(app)

@@ -5,12 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.heroes import (
-    fetch_heroes_from_api,
-    list_heroes,
-    sync_heroes_if_empty,
-    sync_heroes_on_startup,
-)
+from backend.heroes import fetch_heroes_from_api, list_heroes
 from backend.opendota import OpenDotaError
 
 CONSTANTS_HEROES = {
@@ -64,36 +59,6 @@ def test_fetch_network_error_is_connection_error():
     with patch("backend.heroes.get_json", side_effect=OpenDotaError(503, "NETWORK_ERROR", "down")):
         with pytest.raises(ConnectionError):
             fetch_heroes_from_api()
-
-
-def test_sync_if_empty_fills_table_with_one_request(app, mock_get_json):
-    with app.app_context():
-        assert sync_heroes_if_empty() == 2
-        assert list_heroes()[0] == ANTI_MAGE
-    assert mock_get_json.call_count == 1
-
-
-def test_sync_if_empty_makes_no_request_when_filled(app, mock_get_json):
-    with app.app_context():
-        sync_heroes_if_empty()
-        mock_get_json.reset_mock()
-        assert sync_heroes_if_empty() == 0
-    mock_get_json.assert_not_called()
-
-
-def test_sync_on_startup_fills_empty_table(app, mock_get_json):
-    sync_heroes_on_startup(app)
-
-    with app.app_context():
-        assert len(list_heroes()) == 2
-
-
-def test_sync_on_startup_logs_errors_without_raising(app):
-    with patch("backend.heroes.get_json", side_effect=OpenDotaError(503, "NETWORK_ERROR", "down")):
-        sync_heroes_on_startup(app)
-
-    with app.app_context():
-        assert list_heroes() == []
 
 
 def test_get_heroes_empty(client):

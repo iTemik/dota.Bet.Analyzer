@@ -1,4 +1,4 @@
-"""Tests for the teams list sync: POST /api/teams/sync, full vs incremental, the 24-hour check and automatic syncs."""
+"""Tests for the teams list sync: POST /api/teams/sync, full vs incremental, and queueing the teams job on requests."""
 
 import time
 from unittest.mock import patch
@@ -9,29 +9,16 @@ from backend import teams_sync
 from backend.opendota import OpenDotaError
 from backend.pro_players import get_d2ba_db, store_teams
 from backend.teams_sync import (
-    RETRY_AFTER_FAILURE_SECONDS,
-    TEAMS_MAX_AGE_SECONDS,
     TeamsSyncRunningError,
     fetch_recent_teams,
     get_teams_synced_at,
-    is_teams_sync_due,
     run_teams_sync,
-    sync_teams_if_obsolete,
-    sync_teams_on_startup,
 )
 
 TEAMS = [
     {"team_id": 1, "rating": 1500.0, "name": "Team A", "tag": "TA", "logo_url": None, "last_match_time": 100},
     {"team_id": 2, "rating": 1400.0, "name": "Team B", "tag": "TB", "logo_url": None, "last_match_time": 200},
 ]
-
-
-@pytest.fixture(autouse=True)
-def reset_failure():
-    """No failed automatic sync from another test."""
-    teams_sync._last_failure = None
-    yield
-    teams_sync._last_failure = None
 
 
 @pytest.fixture
@@ -70,14 +57,6 @@ def mock_explorer():
 def store_known_teams(app) -> None:
     with app.app_context():
         store_teams(TEAMS)
-
-
-def set_synced_at(app, synced_at: int) -> None:
-    """Record a past teams sync."""
-    with app.app_context():
-        db = get_d2ba_db()
-        db.execute("INSERT INTO sync_state (name, synced_at) VALUES ('teams', ?)", (synced_at,))
-        db.commit()
 
 
 def team_names(app) -> dict[int, str]:
@@ -154,16 +133,6 @@ def test_run_refuses_a_second_concurrent_sync(app, mock_fetch):
     mock_fetch.assert_not_called()
 
 
-def test_due_when_never_synced_or_24_hours_old(app):
-    now = time.time()
-    with app.app_context():
-        assert is_teams_sync_due(now)
-    set_synced_at(app, int(now) - TEAMS_MAX_AGE_SECONDS + 3600)
-    with app.app_context():
-        assert not is_teams_sync_due(now)
-        assert is_teams_sync_due(now + 3600)
-
-
 def test_sync_endpoint_returns_count_and_time(client, mock_fetch):
     rv = client.post("/api/teams/sync")
     assert rv.status_code == 200
@@ -201,67 +170,21 @@ def test_sync_endpoint_database_error(client, mock_fetch):
     assert rv.get_json()["code"] == "FAILED_TO_STORE_TEAMS"
 
 
-def test_obsolete_data_syncs_in_background(app, mock_fetch):
-    thread = sync_teams_if_obsolete(app)
-    assert thread is not None
-    thread.join(timeout=5)
-    with app.app_context():
-        assert get_teams_synced_at() is not None
-    assert team_names(app) == {1: "Team A", 2: "Team B"}
-
-
-def test_recent_data_makes_no_request(app, mock_fetch):
-    set_synced_at(app, int(time.time()) - 3600)
-    assert sync_teams_if_obsolete(app) is None
-    mock_fetch.assert_not_called()
-
-
-def test_no_automatic_sync_while_one_runs(app, mock_fetch):
-    with teams_sync._sync_lock:
-        assert sync_teams_if_obsolete(app) is None
-    mock_fetch.assert_not_called()
-
-
-def test_failed_automatic_sync_is_logged_and_waits_before_retry(app):
-    with patch("backend.teams_sync.fetch_teams_from_api", side_effect=ConnectionError("down")) as mock:
-        sync_teams_if_obsolete(app).join(timeout=5)
-        assert sync_teams_if_obsolete(app) is None
-        teams_sync._last_failure = time.time() - RETRY_AFTER_FAILURE_SECONDS
-        sync_teams_if_obsolete(app).join(timeout=5)
-    assert mock.call_count == 2
-    with app.app_context():
-        assert get_teams_synced_at() is None
-
-
-def test_startup_syncs_when_obsolete(app, mock_fetch):
-    thread = sync_teams_on_startup(app)
-    assert thread is not None
-    thread.join(timeout=5)
-    mock_fetch.assert_called_once()
-
-
-def test_startup_skips_debug_reloader_parent(app, mock_fetch, monkeypatch):
-    monkeypatch.delenv("WERKZEUG_RUN_MAIN", raising=False)
-    app.debug = True
-    assert sync_teams_on_startup(app) is None
-    mock_fetch.assert_not_called()
-
-
 @pytest.mark.parametrize("url", ["/api/teams/search?q=Team", "/api/matches"])
-def test_requests_start_sync_when_obsolete(app, client, url):
+def test_requests_queue_teams_job_when_due(app, client, url):
     app.config["TESTING"] = False
     try:
         with (
-            patch("backend.dota_bet_analyzer.sync_teams_if_obsolete") as mock_sync,
+            patch("backend.dota_bet_analyzer.queue_job_if_due") as mock_sync,
             patch("backend.dota_bet_analyzer.get_matches", return_value={"upcoming": [], "finished": []}),
         ):
             client.get(url)
     finally:
         app.config["TESTING"] = True
-    mock_sync.assert_called_once()
+    mock_sync.assert_called_once_with("teams")
 
 
-def test_requests_in_tests_never_sync(client):
-    with patch("backend.dota_bet_analyzer.sync_teams_if_obsolete") as mock_sync:
+def test_requests_in_tests_never_queue_jobs(client):
+    with patch("backend.dota_bet_analyzer.queue_job_if_due") as mock_sync:
         client.get("/api/teams/search?q=Team")
     mock_sync.assert_not_called()

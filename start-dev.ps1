@@ -78,6 +78,10 @@ Start-InNewTerminal "Backend (http://localhost:5000)" $backendCmd
 $celeryCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo"
 Start-InNewTerminal "Celery Worker" $celeryCmd
 
+# Celery Worker for background cache jobs
+$celeryBgCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo -Q background -n background"
+Start-InNewTerminal "Celery Background Worker" $celeryBgCmd
+
 # Frontend
 $frontendCmd = "cd `"$scriptDir\frontend`"; npm run dev"
 Start-InNewTerminal "Frontend (http://localhost:5173)" $frontendCmd
