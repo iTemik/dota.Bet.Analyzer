@@ -9,7 +9,7 @@ MATCH = MatchStats(match_id=1, player_slot=0, radiant_win=True, game_mode=22, lo
 
 
 def test_matches_fetched_once_then_cached():
-    from backend import task_store
+    from backend import cache, task_store
 
     store: dict[str, bytes] = {}
     redis = MagicMock()
@@ -17,7 +17,7 @@ def test_matches_fetched_once_then_cached():
     redis.setex.side_effect = lambda key, ttl, value: store.__setitem__(key, value.encode())
 
     with (
-        patch.object(task_store, "redis_client", redis),
+        patch.object(cache, "redis_client", redis),
         patch.object(task_store, "get_matches", return_value=[MATCH]) as fetch,
     ):
         first = task_store.get_matches_cached(42, 20)
@@ -29,23 +29,23 @@ def test_matches_fetched_once_then_cached():
 
 
 def test_rank_none_is_cached_too():
-    from backend import task_store
+    from backend import cache, task_store
 
     redis = MagicMock()
     redis.get.return_value = json.dumps({"rank": None}).encode()
 
-    with patch.object(task_store, "redis_client", redis), patch.object(task_store, "get_rank") as fetch:
+    with patch.object(cache, "redis_client", redis), patch.object(task_store, "get_rank") as fetch:
         assert task_store.get_rank_cached(42) is None
 
     fetch.assert_not_called()
 
 
 def test_cache_errors_fall_through_to_api():
-    from backend import task_store
+    from backend import cache, task_store
 
     redis = MagicMock()
     redis.get.side_effect = ConnectionError("redis down")
     redis.setex.side_effect = ConnectionError("redis down")
 
-    with patch.object(task_store, "redis_client", redis), patch.object(task_store, "get_rank", return_value=7):
+    with patch.object(cache, "redis_client", redis), patch.object(task_store, "get_rank", return_value=7):
         assert task_store.get_rank_cached(42) == 7

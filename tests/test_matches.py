@@ -210,7 +210,7 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis():
     redis = FakeRedis()
-    with patch("backend.matches.redis_client", redis):
+    with patch("backend.cache.redis_client", redis):
         yield redis
 
 
@@ -338,7 +338,7 @@ def test_works_without_redis(client, known_teams):
     broken = MagicMock()
     broken.get.side_effect = ConnectionError("no redis")
     broken.setex.side_effect = ConnectionError("no redis")
-    with patch("backend.matches.redis_client", broken):
+    with patch("backend.cache.redis_client", broken):
         response, get = get_matches(client, liquipedia_response(PAGE))
 
     assert response.status_code == 200
