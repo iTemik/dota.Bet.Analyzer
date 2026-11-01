@@ -1,8 +1,10 @@
 # Claude Rules - Dota Bet Analyzer
 
 **Type hints required, docstrings for public functions, PEP 8 snake_case, PascalCase classes.**
-**Run `python -m pre_commit run --all-files` after ANY Python change. Use PowerShell only (no bash).**
-**Minimize changes in claude.md. Keep it efficient for claude code only**
+**Run `python -m pre_commit run --all-files` after ANY Python change. Windows PC: PowerShell only (no bash); cloud sessions (Linux): bash.**
+**Minimize changes in CLAUDE.md. Keep it efficient for claude code only**
+
+Module map, request/queue rules, caches, recipes: @codebase-map.md
 
 ## CRITICAL: Pre-Commit After Every Python Change
 1. Verify venv: `.venv\Scripts\Activate.ps1` (check for `(.venv)` in prompt)
@@ -40,14 +42,8 @@
 - OpenDota: minimize requests; cache frequent/immutable responses (SQLite for finished matches, Redis TTL for volatile data)
 - PR description: follow [.github/pull_request_template.md](.github/pull_request_template.md): short Before/After, then API (by endpoint and JSON path), Backend, Frontend, DB and Other as separate bullet lists, one item per bullet (list every DB change, it needs owner approval); no player names
 
-## PowerShell Only
+## PowerShell Only (Windows PC)
 NO bash commands. Use: `Get-Content` (cat), `Select-String` (grep), `Get-ChildItem` (ls), `Set-Location` (cd)
-
-## Files
-- Backend: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py), [backend/stats.py](backend/stats.py), [backend/schemas.py](backend/schemas.py)
-- Helpers: [backend/helpers.py](backend/helpers.py) (Errors, ApiError, api_error)
-- Frontend: [frontend/src/App.tsx](frontend/src/App.tsx)
-- Config: [pyproject.toml](pyproject.toml), [.pre-commit-config.yaml](.pre-commit-config.yaml)
 
 ## Commands
 ```powershell
@@ -69,8 +65,5 @@ Redis must be running. **`npm run dev` will check automatically.**
 ## Pre-Commit Checks
 Black (format 120), isort (imports), Ruff (lint E,F,W,I,B,C,RUF), type hints, trailing whitespace, YAML/JSON validation
 
-## DB
-Custom: [backend/d2ba_schema.sql](backend/d2ba_schema.sql) (cache), [backend/predictions_schema.sql](backend/predictions_schema.sql) (user data, separate DB), Session: [backend/db.py](backend/db.py)
-
 ## Error Handling
-Always catch exceptions, return JSON `{error_code, message, details}` with proper HTTP status code
+Always catch exceptions, return `api_error(status, Errors.X, e)` → JSON `{status, code, message, details}`
