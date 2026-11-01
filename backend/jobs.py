@@ -33,8 +33,8 @@ from celery.signals import worker_init  # type: ignore[import-untyped]
 from flask import Flask
 from werkzeug.serving import is_running_from_reloader
 
+from backend import cache
 from backend.celery_app import BACKGROUND_QUEUE, celery
-from backend.config import Config
 from backend.logging_config import setup_logging
 from backend.pro_players import get_d2ba_db
 from backend.rate_limit import report_waits
@@ -45,8 +45,6 @@ LOCK_TTL_SECONDS = 30 * 60  # Longest a job may stay queued or running before it
 RETRY_AFTER_FAILURE_SECONDS = 10 * 60  # No new automatic run this soon after a failed one
 
 IDLE, QUEUED, RUNNING, FAILED = "idle", "queued", "running", "failed"
-
-redis_client = redis.Redis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=1)
 
 _in_worker = False  # True inside a Celery worker, which never queues jobs at startup
 
@@ -189,8 +187,8 @@ def _decode(value: Any) -> Optional[str]:
 def _read_status(name: str) -> dict[str, Any]:
     """Stored status of a job (empty when none or Redis is unavailable)."""
     try:
-        raw = _decode(redis_client.get(_status_key(name)))
-        locked = redis_client.get(_lock_key(name)) is not None
+        raw = _decode(cache.redis_client.get(_status_key(name)))
+        locked = cache.redis_client.get(_lock_key(name)) is not None
     except redis.RedisError as e:
         logger.warning(f"Could not read the status of job {name}: {e}")
         return {}
@@ -203,10 +201,10 @@ def _read_status(name: str) -> dict[str, Any]:
 def _write_status(name: str, **fields: Any) -> None:
     """Merge fields into a job's status; Redis errors are logged."""
     try:
-        raw = _decode(redis_client.get(_status_key(name)))
+        raw = _decode(cache.redis_client.get(_status_key(name)))
         status = json.loads(raw) if raw else {}
         status.update(fields, updated_at=int(time.time()))
-        redis_client.set(_status_key(name), json.dumps(status))
+        cache.redis_client.set(_status_key(name), json.dumps(status))
     except redis.RedisError as e:
         logger.warning(f"Could not save the status of job {name}: {e}")
 
@@ -298,7 +296,7 @@ def queue_job(name: str) -> dict[str, Any]:
     """
     job = get_job(name)
     token = uuid.uuid4().hex
-    if not redis_client.set(_lock_key(name), token, nx=True, ex=LOCK_TTL_SECONDS):
+    if not cache.redis_client.set(_lock_key(name), token, nx=True, ex=LOCK_TTL_SECONDS):
         raise JobRunningError(f"{job.title} update is already running")
     try:
         _write_status(name, state=QUEUED, progress=0, message=f"{job.title} update queued")
@@ -363,8 +361,8 @@ def queue_due_jobs_on_startup(app: Flask) -> list[str]:
 def _release(name: str, token: str) -> None:
     """Release a job lock when this run still holds it."""
     try:
-        if _decode(redis_client.get(_lock_key(name))) == token:
-            redis_client.delete(_lock_key(name))
+        if _decode(cache.redis_client.get(_lock_key(name))) == token:
+            cache.redis_client.delete(_lock_key(name))
     except redis.RedisError as e:
         logger.warning(f"Could not release the lock of job {name}: {e}")
 
@@ -383,7 +381,7 @@ def run_job(name: str, token: str) -> Optional[str]:
     """
     job = get_job(name)
     try:
-        if _decode(redis_client.get(_lock_key(name))) != token:
+        if _decode(cache.redis_client.get(_lock_key(name))) != token:
             logger.info(f"Skipping job {name}: its queueing expired or a newer one holds the lock")
             return None
     except redis.RedisError as e:

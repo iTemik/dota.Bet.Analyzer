@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import redis
 
-from backend import jobs
+from backend import cache, jobs
 from backend.jobs import (
     FAILED,
     IDLE,
@@ -55,7 +55,7 @@ class FakeRedis:
 @pytest.fixture(autouse=True)
 def fake_redis(monkeypatch) -> FakeRedis:
     fake = FakeRedis()
-    monkeypatch.setattr(jobs, "redis_client", fake)
+    monkeypatch.setattr(cache, "redis_client", fake)
     return fake
 
 
@@ -200,7 +200,7 @@ def test_queue_if_due_logs_redis_errors(app, test_job, mock_apply_async):
 def test_redis_down_reads_as_idle(app, test_job, monkeypatch):
     broken = MagicMock()
     broken.get.side_effect = redis.ConnectionError("down")
-    monkeypatch.setattr(jobs, "redis_client", broken)
+    monkeypatch.setattr(cache, "redis_client", broken)
     with app.app_context():
         assert job_status(jobs.JOBS["teams"])["state"] == IDLE
 

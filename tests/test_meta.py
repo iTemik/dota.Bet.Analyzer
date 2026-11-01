@@ -142,7 +142,7 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis():
     redis = FakeRedis()
-    with patch("backend.meta.redis_client", redis):
+    with patch("backend.cache.redis_client", redis):
         yield redis
 
 
@@ -201,7 +201,7 @@ def test_endpoint_works_without_redis(client):
         def setex(self, *args):
             raise ConnectionError("no redis")
 
-    with patch("backend.meta.redis_client", Broken()), patch("backend.meta.get_json", return_value=HERO_STATS):
+    with patch("backend.cache.redis_client", Broken()), patch("backend.meta.get_json", return_value=HERO_STATS):
         response = client.get("/api/heroes/meta")
     assert response.status_code == 200
 
