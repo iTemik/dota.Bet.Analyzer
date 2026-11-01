@@ -35,8 +35,8 @@ from werkzeug.serving import is_running_from_reloader
 
 from backend import cache
 from backend.celery_app import BACKGROUND_QUEUE, celery
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
-from backend.pro_players import get_d2ba_db
 from backend.rate_limit import report_waits
 
 logger = setup_logging(__name__)
@@ -163,12 +163,12 @@ def get_job(name: str) -> Job:
 
 def get_synced_at(name: str) -> Optional[int]:
     """Time of the last success of a job (sync_state), in unix seconds, or None when it never succeeded."""
-    row = get_d2ba_db().execute("SELECT synced_at FROM sync_state WHERE name = ?", (name,)).fetchone()
+    row = get_cache_db().execute("SELECT synced_at FROM sync_state WHERE name = ?", (name,)).fetchone()
     return row["synced_at"] if row else None
 
 
 def _set_synced_at(name: str, synced_at: int) -> None:
-    db = get_d2ba_db()
+    db = get_cache_db()
     db.execute(
         """
         INSERT INTO sync_state (name, synced_at) VALUES (?, ?)

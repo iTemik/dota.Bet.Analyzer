@@ -9,9 +9,9 @@ class TestTeamsSearch:
             teams: List of tuples containing (team_id, rating, name, tag, logo_url, last_match_time)
         """
         with app.app_context():
-            from backend.pro_players import get_d2ba_db
+            from backend.db import get_cache_db
 
-            db = get_d2ba_db()
+            db = get_cache_db()
             cursor = db.cursor()
 
             for team in teams:

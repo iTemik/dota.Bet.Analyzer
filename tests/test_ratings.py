@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.pro_players import get_d2ba_db
+from backend.db import get_cache_db
 from backend.ratings import (
     RATING_K,
     estimate_rating_change,
@@ -53,7 +53,7 @@ def test_games_are_worked_back_newest_first():
 
 def test_window_rating_change_reads_local_ratings(app):
     with app.app_context():
-        db = get_d2ba_db()
+        db = get_cache_db()
         db.executemany("INSERT INTO teams (team_id, name, rating) VALUES (?, ?, ?)", [(7, "a", 1200), (8, "b", 800)])
         db.commit()
         matches = [_match(1, 1, 7, won=True), _match(2, 30, 8, won=False)]  # the second is outside the window

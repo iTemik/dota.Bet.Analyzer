@@ -1,46 +1,62 @@
-import sqlite3
-from datetime import datetime
+"""SQLite connections for both app databases, one per request (closed at app context teardown).
 
-import click
+- d2ba.sqlite: OpenDota/Liquipedia cache, safe to delete (`get_cache_db`)
+- predictions.sqlite: the user's snapshots and predictions, back it up (`get_user_db`)
+
+Both files live in the Flask instance folder. Their tables come from the migrations that `npm run migrate`
+(scripts/init_d2ba_db.py) applies; scripts/migrate.py names each file `<DATABASES key>.sqlite`, matching the names
+below.
+"""
+
+import os
+import sqlite3
+from typing import cast
+
 from flask import Flask, current_app, g
 
-
-def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"], detect_types=sqlite3.PARSE_DECLTYPES)
-        g.db.row_factory = sqlite3.Row
-
-    return g.db
+CACHE_DB_FILENAME = "d2ba.sqlite"
+USER_DB_FILENAME = "predictions.sqlite"
 
 
-def close_db(e=None):
-    db = g.pop("db", None)
+def get_cache_db() -> sqlite3.Connection:
+    """Get the request's connection to the d2ba.sqlite cache.
 
-    if db is not None:
-        db.close()
-
-
-def init_db():
-    db = get_db()
-
-    with current_app.open_resource("opendota_schema.sql") as f:
-        db.executescript(f.read().decode("utf8"))
-
-
-@click.command("init-db")
-def init_db_command():
-    """Clear the existing data and create new tables."""
-    init_db()
-    click.echo("Initialized the database.")
-
-
-sqlite3.register_converter("timestamp", lambda v: datetime.fromisoformat(v.decode()))
-
-
-def init_app(app: Flask):
-    """Initialize the application with DB helpers.
-
-    The `app` parameter is annotated as `Flask` for clarity and tooling.
+    Returns:
+        Connection with rows as sqlite3.Row
     """
-    app.teardown_appcontext(close_db)
-    app.cli.add_command(init_db_command)
+    if "cache_db" not in g:
+        db_path = os.path.join(current_app.instance_path, CACHE_DB_FILENAME)
+        g.cache_db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        g.cache_db.row_factory = sqlite3.Row
+    return cast(sqlite3.Connection, g.cache_db)
+
+
+def get_user_db() -> sqlite3.Connection:
+    """Get the request's connection to predictions.sqlite (user data), with foreign keys on.
+
+    Returns:
+        Connection with rows as sqlite3.Row
+    """
+    if "user_db" not in g:
+        db_path = os.path.join(current_app.instance_path, USER_DB_FILENAME)
+        g.user_db = sqlite3.connect(db_path)
+        g.user_db.row_factory = sqlite3.Row
+        g.user_db.execute("PRAGMA foreign_keys = ON")
+    return cast(sqlite3.Connection, g.user_db)
+
+
+def close_dbs(e: BaseException | None = None) -> None:
+    """Close the connections this app context opened, if any."""
+    for key in ("cache_db", "user_db"):
+        db = g.pop(key, None)
+        if db is not None:
+            db.close()
+
+
+def init_app(app: Flask) -> None:
+    """Close the database connections at the end of each request.
+
+    Args:
+        app: Flask application
+    """
+    app.teardown_appcontext(close_dbs)

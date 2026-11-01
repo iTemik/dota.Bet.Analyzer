@@ -23,16 +23,16 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; models TeamStats, MatchStats, MatchesSummary, StatsResponse, RankTally; `get_matches`, `get_rank` (both raise OpenDotaError on a failed request, so errors are never cached), `get_team_matches_summary` |
 | `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
-| `pro_players.py` | `get_d2ba_db()` (cache DB connection lives HERE), `Player`, pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
+| `db.py` | The ONLY SQLite connections: `get_cache_db()` (instance/d2ba.sqlite), `get_user_db()` (instance/predictions.sqlite, foreign keys on), per app context, closed on teardown |
+| `pro_players.py` | `Player`, pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
 | `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages; only the `teams` job calls it |
 | `heroes.py` | /constants/heroes → `heroes` table, `list_heroes` |
 | `meta.py` | /heroStats → Redis `opendota:hero_stats:v2` (2h, errors 60s), `MetaParams`, `compute_meta`, `get_meta` |
 | `matches.py` | Liquipedia parse → Redis `liquipedia:matches` (30min, errors 60s), `LIQUIPEDIA_LIMITER`, `TeamMatcher` (name → teams table), own `requests.get` (only allowed exception) |
 | `head_to_head.py` | from cached team matches, 0-1 requests |
-| `snapshots.py`, `predictions.py`, `predictions_db.py` | user data in predictions.sqlite; `get_predictions_db()` |
+| `snapshots.py`, `predictions.py` | user data in predictions.sqlite via `db.get_user_db()` |
 | `helpers.py` | `Errors` registry (ErrorDefinition code+message), `ApiError`, `api_error(status, Errors.X, exc=None, **details)` → (Response, status), explorer SQL builder, `ExplorerTeam` |
 | `schemas.py` | marshmallow schemas; `pydantic_to_marshmallow` derives ErrorSchema/TeamStatsSchema/StatsResponseSchema/PlayerSchema from pydantic |
-| `db.py`, `opendota_schema.sql`, `schema.txt` | DEAD (opendota.sqlite, never read). Don't extend |
 | `d2ba_schema.sql`, `predictions_schema.sql` | docs only, not applied; keep in sync with migrations |
 
 ## Request paths (queueing rules; pick one for new work)

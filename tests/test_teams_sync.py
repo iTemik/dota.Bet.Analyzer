@@ -5,9 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
+from backend.db import get_cache_db
 from backend.jobs import get_synced_at
 from backend.opendota import OpenDotaError
-from backend.pro_players import get_d2ba_db, store_teams
+from backend.pro_players import store_teams
 from backend.teams_sync import fetch_recent_teams, run_teams_sync
 
 TEAMS = [
@@ -56,7 +57,7 @@ def store_known_teams(app) -> None:
 
 def team_names(app) -> dict[int, str]:
     with app.app_context():
-        return {row[0]: row[1] for row in get_d2ba_db().execute("SELECT team_id, name FROM teams")}
+        return {row[0]: row[1] for row in get_cache_db().execute("SELECT team_id, name FROM teams")}
 
 
 def test_run_with_empty_table_is_full_and_records_time(app, mock_fetch, mock_explorer):
@@ -85,7 +86,7 @@ def test_run_with_stored_teams_is_incremental(app, mock_fetch, mock_explorer):
     assert "team_id IN (2,3,4)" in mock_explorer.call_args_list[1].kwargs["params"]["sql"]
     assert team_names(app) == {1: "Team A", 2: "Team B2", 3: "Team C"}
     with app.app_context():
-        row = get_d2ba_db().execute("SELECT rating, last_match_time FROM teams WHERE team_id = 2").fetchone()
+        row = get_cache_db().execute("SELECT rating, last_match_time FROM teams WHERE team_id = 2").fetchone()
     assert tuple(row) == (1450.0, 300)
 
 

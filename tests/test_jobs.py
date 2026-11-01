@@ -12,6 +12,7 @@ import pytest
 import redis
 
 from backend import cache, jobs
+from backend.db import get_cache_db
 from backend.jobs import (
     FAILED,
     IDLE,
@@ -29,7 +30,6 @@ from backend.jobs import (
     queue_job_if_due,
     run_job,
 )
-from backend.pro_players import get_d2ba_db
 
 
 class FakeRedis:
@@ -76,7 +76,7 @@ def test_job(monkeypatch) -> MagicMock:
 
 def set_synced_at(app, name: str, synced_at: int) -> None:
     with app.app_context():
-        db = get_d2ba_db()
+        db = get_cache_db()
         db.execute("INSERT INTO sync_state (name, synced_at) VALUES (?, ?)", (name, synced_at))
         db.commit()
 

@@ -122,7 +122,7 @@ Once your environment is set up, these are the commands you'll use most:
 | **Start backend only** | `npm run backend` |
 | **Start frontend only** | `npm run frontend` |
 | **Activate Python venv** | `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (Linux) |
-| **Initialize databases** | `flask --app backend init-db`; `npm run dev` applies d2ba migrations (or `npm run migrate`) |
+| **Initialize databases** | `npm run migrate` (`npm run dev` runs it too) |
 | **View API docs** | Open http://localhost:5000/api/swagger-ui |
 | **Stop Redis** | `docker stop redis-dota && docker rm redis-dota` |
 
@@ -162,13 +162,11 @@ dota.Bet.Analyzer/
 │   │   └── components/     # React components
 │   └── vite.config.ts      # Build configuration
 ├── scripts/                # Utility scripts
-│   ├── generate_schema.py  # Generate DB schema
 │   └── init_d2ba_db.py     # Initialize d2ba and predictions DBs
 ├── tests/                  # Test suite
 │   ├── test_*.py           # Backend tests
 │   └── conftest.py         # Test configuration
 ├── instance/               # Runtime data (git ignored)
-│   ├── opendota.sqlite     # Main database
 │   ├── d2ba.sqlite         # Pro players/teams database (OpenDota cache)
 │   └── predictions.sqlite  # Your snapshots and predictions (back it up)
 ├── package.json            # npm scripts & dependencies
@@ -383,35 +381,10 @@ npm test -- --run # Single run
 
 ## 🗂️ Database initialization
 
-This project uses SQLite for local development with **three separate databases**:
+This project uses SQLite with **two separate databases** in `instance/`, both opened through `backend/db.py`:
 
-1. **opendota.sqlite** - Main OpenDota schema database
-2. **d2ba.sqlite** - Statistics database (OpenDota cache, can be rebuilt)
-3. **predictions.sqlite** - Your own data: team snapshots and predictions. Back it up; it can't be fetched again
-
-### Main Database (opendota.sqlite)
-
-The DB schema is generated from `backend/schema.txt` (which is opendota response for [api/schema](https://api.opendota.com/api/schema)) into `backend/opendota_schema.sql` by the script `scripts/generate_schema.py`.
-
-- Regenerate schema:
-
-```bash
-python scripts/generate_schema.py
-```
-
-- Verify generated schema matches committed file:
-
-```bash
-python scripts/generate_schema.py --check
-```
-
-- Initialize the database (create tables):
-
-Set the Flask app to use the application factory and run the CLI command:
-
-```
-flask --app backend init-db
-```
+1. **d2ba.sqlite** - OpenDota/Liquipedia cache, can be deleted and rebuilt (`get_cache_db()`)
+2. **predictions.sqlite** - Your own data: team snapshots and predictions. Back it up; it can't be fetched again (`get_user_db()`)
 
 ### Pro Players Database (d2ba.sqlite)
 
@@ -813,7 +786,7 @@ Stored/updated 1523 teams in 0.234s (6505.1 records/sec)
 - Cleanup guaranteed even if tests fail
 
 **Database files used:**
-- **Production**: `instance/opendota.sqlite` (main DB), `instance/d2ba.sqlite` (pro players/teams), `instance/predictions.sqlite` (snapshots, predictions)
+- **Production**: `instance/d2ba.sqlite` (OpenDota cache), `instance/predictions.sqlite` (snapshots, predictions)
 - **Testing**: Temporary directories created per test, cleaned up automatically
 
 This isolation ensures:
@@ -923,15 +896,8 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ## 💡 Notes & Tips
 
 ### Database Configuration
-- `app.config['DATABASE_FILENAME']` controls the DB filename (defaults to `opendota.sqlite`)
-- Full path used is `app.instance_path / DATABASE_FILENAME`
-- Pro players stored in separate `d2ba.sqlite` database
-
-### Schema Management
-- The repository contains tests that verify schema correctness
-- Prefer updating `backend/schema.txt` and running `scripts/generate_schema.py` rather than editing `opendota_schema.sql` manually
-- Verify schema: `python scripts/generate_schema.py --check`
-- Add CI checks to ensure schema is up to date on push
+- `instance/d2ba.sqlite` (cache) and `instance/predictions.sqlite` (user data); names in `backend/db.py`
+- Tables come from migrations in `backend/migrations/` (applied by `npm run migrate` and `npm run dev`)
 
 
 # Assumptions

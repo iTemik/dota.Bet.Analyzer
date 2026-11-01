@@ -16,8 +16,8 @@ import requests
 from backend import __version__
 from backend.cache import cache_set, cached_json
 from backend.config import Config
+from backend.db import get_cache_db
 from backend.logging_config import setup_logging
-from backend.pro_players import get_d2ba_db
 from backend.rate_limit import RateLimiter
 
 logger = setup_logging(__name__)
@@ -280,7 +280,7 @@ class TeamMatcher:
         self.by_name: dict[str, tuple[int, Optional[str]]] = {}
         self.by_key: dict[str, tuple[int, Optional[str]]] = {}
         self.by_tag: dict[str, tuple[int, Optional[str]]] = {}
-        rows = get_d2ba_db().execute(
+        rows = get_cache_db().execute(
             "SELECT team_id, name, tag, logo_url FROM teams ORDER BY COALESCE(last_match_time, 0), team_id"
         )
         for team_id, name, tag, logo_url in rows:
