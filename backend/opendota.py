@@ -20,7 +20,7 @@ import requests
 
 from backend.config import Config
 from backend.logging_config import setup_logging
-from backend.rate_limit import DailyLimitReached, RateLimiter
+from backend.rate_limit import DailyLimitReached, RateLimiter, wait_reporter
 
 logger = setup_logging(__name__)
 
@@ -90,7 +90,8 @@ def opendota_get(
         url: URL or API path (e.g. "/teams/123")
         params: Optional query parameters
         timeout: Request timeout in seconds
-        on_wait: Called with the delay in seconds before each repeat or long limiter wait (e.g. to report progress)
+        on_wait: Called with the delay in seconds before each repeat or long limiter wait (e.g. to report progress);
+            defaults to the backend.rate_limit.report_waits callback
         background: True for cache syncs: they let user requests go first and stop at the daily budget
 
     Returns:
@@ -101,6 +102,7 @@ def opendota_get(
         DailyLimitReached: For a background request when the daily budget is used up
     """
     url = opendota_url(url)
+    on_wait = on_wait or wait_reporter()
     kwargs: dict[str, Any] = {"timeout": timeout}
     if params is not None:
         kwargs["params"] = params

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
+import DataStatus from './components/DataStatus'
 import MatchesTables from './components/MatchesTables'
 import MetaTab from './components/MetaTab'
 import InsightsTable, { type PlayerRanks } from './components/InsightsTable'
@@ -291,6 +292,7 @@ function App() {
           ))}
         </nav>
       </div>
+      <DataStatus />
 
       {tab === 'meta' && (
         <div className="tab-panel">

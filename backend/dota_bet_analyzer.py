@@ -13,6 +13,7 @@ from backend.heroes import fetch_heroes_from_api, list_heroes, store_heroes
 from backend.jobs import (
     JobRunningError,
     UnknownJobError,
+    data_status,
     get_job,
     list_job_statuses,
     queue_job,
@@ -853,6 +854,60 @@ def get_jobs() -> tuple[Response, int]:
         return jsonify(list_job_statuses()), 200
     except Exception as e:
         return api_error(500, Errors.FAILED_TO_READ_JOBS, e)
+
+
+# Data status stream: re-read every JOBS_STREAM_INTERVAL s, closed after STREAM_MAX_RUNTIME (the client reopens it)
+JOBS_STREAM_INTERVAL = 2.0
+
+
+def _generate_jobs_stream(max_runtime: float = STREAM_MAX_RUNTIME, interval: float = JOBS_STREAM_INTERVAL):
+    """Yield the jobs and budget status (data_status) as one JSON line each time it changes.
+
+    The first line is sent right away. An error ends the stream with one line {"error": message}.
+
+    Args:
+        max_runtime: Seconds before the stream ends
+        interval: Seconds between two reads
+
+    Yields:
+        JSON lines
+    """
+    start = time.monotonic()
+    last_sent: str | None = None
+    try:
+        while True:
+            line = json.dumps(data_status())
+            if line != last_sent:
+                yield f"{line}\n"
+                last_sent = line
+            if time.monotonic() - start + interval > max_runtime:
+                return
+            time.sleep(interval)
+    except Exception as e:
+        logger.error(f"Jobs stream error: {e}")
+        yield f"{json.dumps({'error': str(e)})}\n"
+
+
+@bp.route("/jobs/stream")
+@bp.response(200, description="Stream of JSON lines with the jobs and OpenDota budget status")
+def stream_jobs() -> Response:
+    """Stream the status of the background cache jobs and today's OpenDota request budget (main page Data line).
+
+    One JSON object per line, sent at once and then each time something changes (checked every 2 s). The stream
+    ends after 120 s; clients reopen it. No OpenDota request.
+
+    Each line:
+        - `jobs`: the same list as GET /api/jobs
+        - `budget.used`: OpenDota requests today (UTC) by every process, null when Redis cannot be reached
+        - `budget.limit`: daily budget; background jobs stop when it is used up (0 = no budget)
+
+    An error ends the stream with a line `{"error": "message"}`.
+    """
+    return Response(
+        stream_with_context(_generate_jobs_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*"},
+    )
 
 
 @bp.route("/jobs/<string:name>/run", methods=["POST"])

@@ -15,7 +15,9 @@ from __future__ import annotations
 import math
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -32,6 +34,28 @@ REPORT_MIN_WAIT = 3  # Waits shorter than this (the normal pace) are not reporte
 DAY_KEY_TTL = 2 * 86400  # Daily counters expire the day after
 
 WaitCallback = Callable[[int], None]
+
+# Reports long waits of requests that pass no on_wait of their own (a cache job shows them in its status)
+_wait_reporter: ContextVar[Optional[WaitCallback]] = ContextVar("wait_reporter", default=None)
+
+
+@contextmanager
+def report_waits(callback: WaitCallback) -> Iterator[None]:
+    """Report the long waits of every request made inside this block that passes no on_wait of its own.
+
+    Args:
+        callback: Called with the wait in whole seconds
+    """
+    token = _wait_reporter.set(callback)
+    try:
+        yield
+    finally:
+        _wait_reporter.reset(token)
+
+
+def wait_reporter() -> Optional[WaitCallback]:
+    """The callback set by report_waits for the current code, or None."""
+    return _wait_reporter.get()
 
 
 class DailyLimitReached(Exception):
@@ -117,16 +141,26 @@ class RateLimiter:
         finally:
             self._unlock(token)
 
+    def used_today(self) -> Optional[int]:
+        """Requests counted today (UTC) by every process, or None when Redis cannot be reached."""
+        try:
+            return int(self.client.get(self._day_key(self._clock())) or 0)
+        except redis.RedisError as exc:
+            logger.warning(f"Could not read today's {self.name} request count: {exc}")
+            return None
+
     def acquire(self, background: bool = False, on_wait: Optional[WaitCallback] = None) -> None:
         """Wait until this process may send one request.
 
         Args:
             background: True for cache syncs, which go after every waiting user request and stop at the daily budget
-            on_wait: Called with the wait in whole seconds when a wait is longer than the normal pace
+            on_wait: Called with the wait in whole seconds when a wait is longer than the normal pace (defaults to
+                the report_waits callback)
 
         Raises:
             DailyLimitReached: For a background request when the daily budget is used up
         """
+        on_wait = on_wait or wait_reporter()
         while True:
             try:
                 wait, reserved = self._try_take(background)
