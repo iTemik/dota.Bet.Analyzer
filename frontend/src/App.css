@@ -779,3 +779,38 @@ pre {
   font-weight: 600;
   background: rgba(255, 255, 255, 0.15);
 }
+
+/* Meta tab */
+.meta-section {
+  text-align: left;
+}
+
+.meta-settings {
+  margin-bottom: 1.5rem;
+}
+
+.meta-settings input[type='number'] {
+  width: 7rem;
+  padding: 0.6rem;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.meta-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.meta-table .meta-hero {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.meta-table .meta-hero img {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}

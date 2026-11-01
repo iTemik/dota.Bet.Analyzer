@@ -650,6 +650,12 @@ Async task for comprehensive player analysis:
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
 - Filled from one `/constants/heroes` request at startup when the table is empty; `POST /heroes/sync` refreshes it
 
+#### Hero Meta (`/heroes/meta`)
+- Pro meta: heroes with Pick + Ban rate in pro matches above 30%; ultra meta: those with win rate above 55% (5+ picks)
+- Pub meta: top 30 heroes by win rate in the Immortal bracket (Divine when OpenDota has no Immortal games)
+- One `/heroStats` request (OpenDota's window, about the last 7 days), cached in Redis for 1 hour
+- Thresholds are query parameters, adjustable on the Meta tab and kept in the browser
+
 #### Matches (`/matches`)
 - `GET /matches` lists upcoming (soonest first) and recently finished (newest first) pro series: time, tournament (name, Liquipedia link, icon), Bo, teams, score
 - Source: Liquipedia's free API (OpenDota has no schedule), one request at most every 10 minutes (Redis cache); credited under the tables as its CC-BY-SA license requires
@@ -727,7 +733,7 @@ npm test          # Run tests
   - Low rank players count (players outside of top 200 in the leaderboards. Lower rank = better)
 
 #### Tabs
-- **Compare** and **Predictions** tabs, kept in the URL hash (`#compare`, `#predictions`) so a refresh stays on the tab
+- **Compare**, **Meta** and **Predictions** tabs, kept in the URL hash (`#compare`, `#meta`, `#predictions`) so a refresh stays on the tab
 
 #### Predictions
 - List of saved predictions, newest first, laid out like the Finished Matches table: time, Bo, each team's logo and name, score (maps won, "-" while pending), then odds, bet and stake, and outcome (won, lost, no bet) with the bet's profit in green and loss in red; 10 per page

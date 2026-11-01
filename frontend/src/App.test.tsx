@@ -39,6 +39,9 @@ describe('App Component', () => {
                 if (url.startsWith('/api/predictions/')) {
                     return Promise.resolve(createMockResponse({ message: 'Prediction not found' }, false, 404))
                 }
+                if (url.startsWith('/api/heroes/meta?')) {
+                    return Promise.resolve(createMockResponse({ message: 'No hero stats in tests' }, false, 503))
+                }
                 // Default response for other endpoints
                 return Promise.resolve(createMockResponse({ teams: [] }))
             })
@@ -1171,6 +1174,19 @@ describe('App Component', () => {
             await waitFor(() => expect(screen.getByRole('link', { name: 'Predictions' })).toHaveAttribute('aria-current', 'page'))
             expect(window.location.hash).toBe('#predictions')
             expect(await screen.findByText(/No predictions yet/i)).toBeVisible()
+            expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
+        })
+
+        it('switches to the Meta tab and loads the meta heroes', async () => {
+            render(<App />)
+            await userEvent.click(screen.getByRole('link', { name: 'Meta' }))
+            await waitFor(() => expect(screen.getByRole('link', { name: 'Meta' })).toHaveAttribute('aria-current', 'page'))
+            expect(window.location.hash).toBe('#meta')
+            await waitFor(() =>
+                expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/heroes\/meta\?/), undefined),
+            )
+            expect(screen.getByRole('form', { name: 'Meta settings' })).toBeVisible()
+            expect(await screen.findByText('Meta: No hero stats in tests')).toBeVisible()
             expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
         })
 
