@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { requestJson } from '../api'
 import { type DataStatus as Status, type JobStatus, budgetNearLimit, followDataStatus, isBusy } from '../dataStatus'
 import { formatShortDateTime } from '../format'
 
@@ -35,17 +36,12 @@ export default function DataStatus() {
     setRunError(null)
     for (const name of names) {
       try {
-        const response = await fetch(`/api/jobs/${name}/run`, { method: 'POST' })
-        const data = await response.json()
-        if (!response.ok) {
-          setRunError(data.message || `Could not start the update (HTTP ${response.status})`)
-          continue
-        }
+        const data = await requestJson<JobStatus>(`/api/jobs/${name}/run`, { method: 'POST' })
         setStatus((current) =>
           current && { ...current, jobs: current.jobs.map((job) => (job.name === name ? data : job)) }
         )
       } catch (err) {
-        setRunError(`Could not start the update: ${err}`)
+        setRunError(err instanceof Error ? err.message : `Could not start the update: ${err}`)
       }
     }
   }

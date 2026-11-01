@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { formatDateTime, formatPercent, formatShortCount } from '../format'
-import { requestJson } from '../predictions'
+import { requestJson } from '../api'
 import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
 import type { Meta, MetaHero, MetaKind, MetaParams } from '../types'
 

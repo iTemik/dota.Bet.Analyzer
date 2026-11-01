@@ -612,19 +612,13 @@ def get_rank(account_id: int, on_wait: Optional[WaitCallback] = None) -> Optiona
         on_wait: Called with the delay in seconds when the request is postponed by the OpenDota limits
 
     Returns:
-        Leaderboard rank value (None if not found or error occurred)
+        Leaderboard rank value, None when the player has no (valid) rank
+
+    Raises:
+        OpenDotaError: When the request fails, so a failed request is never cached as "no rank"
     """
-    url = f"{OPENDOTA_API}/players/{account_id}"
-    data, error = _safe_get_json(url, on_wait=on_wait)
-
-    if error:
-        logger.debug(f"Failed to fetch rank for account {account_id}: {error.code} - {error.message}")
-        return None
-
-    if data is None:
-        return None
-
-    rank = data.get("leaderboard_rank")
+    data = get_json(f"{OPENDOTA_API}/players/{account_id}", timeout=5, on_wait=on_wait)
+    rank = data.get("leaderboard_rank") if isinstance(data, dict) else None
 
     if rank is None:
         logger.debug(f"No leaderboard_rank found for account {account_id}")

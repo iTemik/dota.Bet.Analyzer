@@ -6,6 +6,7 @@ import pytest
 
 from backend import dota_bet_analyzer, task_store
 from backend.dota_bet_analyzer import players_statistics_task
+from backend.opendota import OpenDotaError
 from backend.stats import BAD_RANK_THRESHOLD, MatchesSummary, RankTally
 from backend.task_store import ProgressReporter
 
@@ -15,6 +16,7 @@ def _run_task(
     ranks: dict[int, int | None],
     failing: set[int] | None = None,
     rank_accounts: list[int] | None = None,
+    rank_failing: set[int] | None = None,
 ):
     """Run the task with mocked data sources and return (progress calls, stored results)."""
     failing = failing or set()
@@ -26,6 +28,8 @@ def _run_task(
         return []
 
     def fake_rank(account_id, on_wait=None):
+        if account_id in (rank_failing or set()):
+            raise OpenDotaError(503, "NETWORK_ERROR", "timeout")
         return ranks.get(account_id)
 
     with (
@@ -145,3 +149,14 @@ def test_rank_tally_average_and_bad_ranks():
     assert tally.average == (100 + BAD_RANK_THRESHOLD + BAD_RANK_THRESHOLD + 1) / 3
     assert tally.bad_rank_players == 1
     assert RankTally().average == 0.0
+
+
+def test_task_rank_error_keeps_the_player_matches():
+    """A failed rank request leaves the rank unknown; the player's matches still count."""
+    _, results = _run_task([1, 2], {2: 100}, rank_failing={1})
+    assert results["results"] == [
+        {"account_id": 1, "match_count": 0, "rank": None},
+        {"account_id": 2, "match_count": 0, "rank": 100},
+    ]
+    assert results["successful"] == 2
+    assert results["summary"]["avg_rank"] == 100.0

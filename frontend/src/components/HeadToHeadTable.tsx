@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatDateTime, formatShortDateTime } from '../format'
-import { requestJson } from '../predictions'
+import { requestJson } from '../api'
 import type { HeadToHead } from '../types'
 
 interface HeadToHeadTableProps {

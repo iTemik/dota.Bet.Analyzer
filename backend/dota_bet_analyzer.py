@@ -22,6 +22,7 @@ from backend.jobs import (
 from backend.logging_config import setup_logging
 from backend.matches import get_matches
 from backend.meta import MetaParams, get_meta
+from backend.opendota import OpenDotaError
 from backend.predictions import (
     SnapshotMissingError,
     create_prediction,
@@ -159,7 +160,12 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, 
                     {"account_id": account_id, "match_count": len(player_matches)},
                 )
 
-                player_rank = get_rank_cached(account_id, on_wait=report_wait)
+                try:
+                    player_rank = get_rank_cached(account_id, on_wait=report_wait)
+                except OpenDotaError as e:
+                    # The matches still count; the rank stays unknown and is asked again next time (not cached)
+                    player_rank = None
+                    logger.warning(f"Rank unavailable for account {account_id}: {e.message}")
                 result["rank"] = player_rank
                 ranks.add(player_rank)
                 if player_rank is not None and player_rank > BAD_RANK_THRESHOLD:  # Tysyachniks ruin the games.

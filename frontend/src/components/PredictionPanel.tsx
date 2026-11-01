@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { postJson } from '../api'
 import { teamName } from '../format'
 import { type BetChoice, SERIES_OPTIONS, decisionBody, decisionErrors } from '../predictions'
 import type { StatisticsResult, TeamData } from '../types'
@@ -24,18 +25,6 @@ const snapshotBody = (team: TeamData, result: StatisticsResult | undefined, days
       .filter((r) => !r.error)
       .map((r) => ({ account_id: r.account_id, rank: r.rank ?? null, match_count: r.match_count ?? null })),
   }
-}
-
-// POST a JSON body; returns the response JSON or throws with the backend's message
-const postJson = async (url: string, body: unknown) => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const data = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(data?.message || `HTTP error! status: ${response.status}`)
-  return data
 }
 
 /**
@@ -68,7 +57,7 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
 
   const saveSnapshots = async (): Promise<number[]> => {
     const snapshots = await Promise.all(
-      teams.map((team, i) => postJson('/api/snapshots', snapshotBody(team as TeamData, results[i], days))),
+      teams.map((team, i) => postJson<{ snapshot_id: number }>('/api/snapshots', snapshotBody(team as TeamData, results[i], days))),
     )
     return snapshots.map((s) => s.snapshot_id)
   }
@@ -90,7 +79,7 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
     if (invalid) return
     run(async () => {
       const [team1SnapshotId, team2SnapshotId] = await saveSnapshots()
-      const prediction = await postJson('/api/predictions', {
+      const prediction = await postJson<{ prediction_id: number }>('/api/predictions', {
         team1_snapshot_id: team1SnapshotId,
         team2_snapshot_id: team2SnapshotId,
         ...decisionBody(odds, bestOf, bet, stake, comment),
