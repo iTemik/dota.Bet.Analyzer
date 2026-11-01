@@ -55,7 +55,7 @@ describe('PredictionList', () => {
     await screen.findByRole('table')
     const totals = () => document.querySelector<HTMLElement>('.prediction-totals')!
     expect(totals()).toHaveTextContent(
-      'Bets: 2 · Won: 1 · Lost: 0 · Pending: 1 · net +85 (won +85 lost 0), pending +85/-100 Simulation: not real money',
+      'Bets: 2 (+85) · Won: 1 (+85) · Lost: 0 (0) · Pending: 1 (+85/-100) Simulation: not real money',
     )
     expect(within(totals()).getAllByText('+85')[0]).toHaveClass('money-profit')
     expect(within(totals()).getByText('-100')).toHaveClass('money-loss')
@@ -64,7 +64,7 @@ describe('PredictionList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Settled' }))
     expect(rows()).toHaveLength(2)
     expect(totals()).toHaveTextContent(
-      'Bets: 1 · Won: 1 · Lost: 0 · Pending: 0 · net +85 (won +85 lost 0), pending 0/0 Simulation: not real money',
+      'Bets: 1 (+85) · Won: 1 (+85) · Lost: 0 (0) · Pending: 0 (0/0) Simulation: not real money',
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Pending' }))
