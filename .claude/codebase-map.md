@@ -1,7 +1,6 @@
 # Codebase map (for Claude; terse on purpose, read before exploring)
 
 Update this file in the same PR when a module, endpoint, cache key, table, job or rule below changes.
-Refactoring plan with step IDs (Q1, C1, D2...): `docs/code-review-2026-11.md`; a step PR updates its Status row.
 
 ## Run / check
 - Backend tests: `python -m pytest tests/ -q` (~85 s without Redis: tests retry Redis in update_progress). Frontend: `cd frontend && npx vitest run`. Lint: `python -m pre_commit run --all-files`; frontend `npx eslint` has ~24 old errors, don't chase them.
