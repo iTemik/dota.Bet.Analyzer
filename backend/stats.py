@@ -399,7 +399,7 @@ def compute_statistics(
         - UNEXPECTED_ERROR: Any other unexpected error
     """
     # Import here to avoid circular imports
-    from backend.dota_bet_analyzer import players_statistics_task
+    from backend.tasks import players_statistics_task
 
     # Validate parameters - at least one must be provided
     if (teams is None and team_ids is None) or (not teams and not team_ids):

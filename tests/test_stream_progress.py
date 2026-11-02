@@ -59,7 +59,7 @@ def fake_progress():
     """Patch Redis and the stream clock; call the result with the snapshots to serve."""
     with (
         patch("backend.cache.redis_client") as mock_redis,
-        patch("backend.dota_bet_analyzer.time.monotonic") as mock_monotonic,
+        patch("backend.routes.statistics.time.monotonic") as mock_monotonic,
     ):
         yield lambda snapshots, **kwargs: FakeProgress(mock_redis, mock_monotonic, snapshots, **kwargs)
 
@@ -147,7 +147,7 @@ class TestStreamProgressEndpoint:
         """The stream subscribes before reading, waits on the signal instead of sleeping, and unsubscribes."""
         progress = fake_progress([snapshot(0, 0), snapshot(1, 50), snapshot(2, 100)])
 
-        with patch("backend.dota_bet_analyzer.time.sleep") as mock_sleep:
+        with patch("backend.routes.statistics.time.sleep") as mock_sleep:
             rv = client.get("/api/stream-progress/task_123")
             stream_lines(rv)
 
@@ -255,7 +255,7 @@ def test_players_statistics_queues_task_before_it_is_sent():
     calls = MagicMock()
     app = create_app(test_config={})
     with (
-        patch("backend.dota_bet_analyzer.players_statistics_task") as task,
+        patch("backend.routes.statistics.players_statistics_task") as task,
         patch("backend.task_store.update_progress") as update,
     ):
         calls.attach_mock(update, "update")

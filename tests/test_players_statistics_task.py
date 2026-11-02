@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from backend import dota_bet_analyzer, task_store
-from backend.dota_bet_analyzer import players_statistics_task
+from backend import task_store, tasks
 from backend.models import MatchesSummary
 from backend.opendota import OpenDotaError
 from backend.stats import BAD_RANK_THRESHOLD, RankTally
 from backend.task_store import ProgressReporter
+from backend.tasks import players_statistics_task
 
 
 def _run_task(
@@ -35,11 +35,11 @@ def _run_task(
 
     with (
         patch.object(task_store, "update_progress") as progress,
-        patch.object(dota_bet_analyzer, "store_results") as store,
-        patch.object(dota_bet_analyzer, "get_matches_cached", side_effect=fake_matches),
-        patch.object(dota_bet_analyzer, "get_rank_cached", side_effect=fake_rank),
-        patch.object(dota_bet_analyzer, "get_team_matches_summary", return_value=MatchesSummary()),
-        patch.object(dota_bet_analyzer.time, "sleep"),
+        patch.object(tasks, "store_results") as store,
+        patch.object(tasks, "get_matches_cached", side_effect=fake_matches),
+        patch.object(tasks, "get_rank_cached", side_effect=fake_rank),
+        patch.object(tasks, "get_team_matches_summary", return_value=MatchesSummary()),
+        patch.object(tasks.time, "sleep"),
     ):
         players_statistics_task.run("t1", accounts, 20, rank_accounts=rank_accounts)
     return [c.args for c in progress.call_args_list], store.call_args.args[1]
@@ -116,7 +116,7 @@ def test_task_error_reports_failure():
     """An unexpected error marks the task failed with progress -1 and re-raises."""
     with (
         patch.object(task_store, "update_progress") as progress,
-        patch.object(dota_bet_analyzer, "get_team_matches_summary", side_effect=ValueError("bad")),
+        patch.object(tasks, "get_team_matches_summary", side_effect=ValueError("bad")),
         pytest.raises(ValueError),
     ):
         players_statistics_task.run("t1", [], 20)

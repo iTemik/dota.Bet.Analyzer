@@ -8,13 +8,16 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - Never edit `backend/VERSION`, `frontend/src/version.ts`, package versions: `.github/workflows/version.yml` bumps them on main.
 - Tests never hit the network: everything is mocked (see Tests); a real HTTP request fails the test (`no_real_http`). OpenDota/Liquipedia are blocked from cloud sessions anyway.
 
-## Backend (`backend/`, Flask + flask-smorest, one blueprint `bp` in dota_bet_analyzer.py, prefix /api)
+## Backend (`backend/`, Flask + flask-smorest, one `ApiBlueprint` `bp` per route module, prefix /api)
 | Module | Holds |
 |---|---|
 | `__init__.py` | create_app (singleton unless test_config), 422 handler → ErrorSchema, registers bp, queues due jobs at startup (not in TESTING) |
 | `config.py` | Config from env: REDIS_HOST/PORT, CELERY_BROKER_URL/CELERY_RESULT_BACKEND (default Redis db 0, read by celery_app), OPENDOTA_RATE_LIMIT 50 per OPENDOTA_RATE_WINDOW 60 s, OPENDOTA_DAILY_LIMIT 1800, LIQUIPEDIA_RATE_WINDOW 30 |
-| `dota_bet_analyzer.py` | ALL routes (~1300 lines) + `players_statistics_task` (Celery, default queue) + stream generators |
-| `celery_app.py` | `celery`, BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
+| `routes/__init__.py` | `ApiBlueprint` (/api prefix, `bp.error_response(...)` Swagger helper), `register_routes(api)` (called by create_app) |
+| `routes/statistics.py` | /statistics, /statistics/players, /stream-progress, /results + progress stream generator |
+| `dota_bet_analyzer.py` | the other routes (being split into `routes/`) + jobs stream generator |
+| `tasks.py` | `players_statistics_task` (Celery, default queue) |
+| `celery_app.py` | `celery` (workers: `-A backend.celery_app.celery`, include tasks + jobs), BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
 | `opendota.py` | ONLY OpenDota HTTP: `get_json(path, params, timeout, on_wait, background)` → JSON or raises `OpenDotaError(status, code, message)`; `opendota_get` raw; retry 403/429/timeouts; `OPENDOTA_LIMITER`; `is_radiant(slot)` |
 | `rate_limit.py` | `RateLimiter` (Redis slot+lock+UTC day counter, shared by all processes), `DailyLimitReached`, `report_waits(cb)` ctx |
 | `jobs.py` | Cache job registry `JOBS` filled by `@job(name, title, stale_after, has_full=False)` (pro_players 24h, heroes 7d, teams 24h, hero_meta 1h, matches 10min), `queue_job(name, full)`, `queue_job_if_due`, `run_job`, optional `Job.run_full` (teams), status in Redis, last success in `sync_state` |
@@ -51,11 +54,11 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - `predictions.sqlite` = user data, back up. Migrations `backend/migrations/predictions/`. Tables: team_snapshots (JSON `data`, UNIQUE team+date+days+last_match_time), predictions.
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 
-## API (all in dota_bet_analyzer.py)
+## API (`backend/routes/` and dota_bet_analyzer.py)
 GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run (`?full=true` teams only) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head. Swagger: /api/swagger-ui.
 
 ## Recipes
-- New endpoint: route in dota_bet_analyzer.py with `@bp.arguments(QuerySchema, location="query")`, `@bp.response(200, Schema)`, one `@error_response(status, Errors.X, "description", **example_details)` per error status (builds the ErrorSchema example from `Errors`; `tests/test_error_helpers.py` fails on an error response without one); body returns `jsonify(data), 200` (jsonify bypasses the schema, so the schema is docs only: keep fields in sync by hand); errors `return api_error(status, Errors.X, e, **details)`, add the code to `Errors` in helpers.py; validation errors are 422. Add `frontend/src/types.ts` shape, README Core Features line, tests for 200 + each error status.
+- New endpoint: route in the matching `routes/` module (new module: `bp = ApiBlueprint(...)` + register in `register_routes`) with `@bp.arguments(QuerySchema, location="query")`, `@bp.response(200, Schema)`, one `@bp.error_response(status, Errors.X, "description", **example_details)` per error status (builds the ErrorSchema example from `Errors`; `tests/test_error_helpers.py` fails on an error response without one); body returns `jsonify(data), 200` (jsonify bypasses the schema, so the schema is docs only: keep fields in sync by hand); errors `return api_error(status, Errors.X, e, **details)`, add the code to `Errors` in helpers.py; validation errors are 422. Add `frontend/src/types.ts` shape, README Core Features line, tests for 200 + each error status.
 - New cache job: fetch fn with `background` param using `get_json(..., background=background)`; `@job(name, title, stale_after)` on `_run_x() -> str` in jobs.py (raise on empty data; `has_full=True` when it takes `full`, then it gets `run_full`); list order = declaration order; a sync_state row is written automatically. DataStatus UI lists it with no frontend change.
 - New OpenDota-derived stat: first check if existing payloads already carry it (team matches, lineups, player matches) to avoid new requests; explorer SQL must stay short (`match_id IN (...)` works, joins on matches fail).
 - New user task with progress: copy players_statistics_task pattern (ProgressReporter(task_id, total_steps), `.next()`, `.report()`, `.waiting()`, `.done()`, `.fail()`).
@@ -70,7 +73,7 @@ GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?
 
 ## Tests (`tests/`, pytest)
 - `conftest.py` autouse: resets app singleton; patches `backend.stats.resolve_roster` + `window_rating_change` (except test_rosters); patches `backend.jobs.queue_due_jobs_on_startup` (except test_jobs); no retry sleep; limiter `acquire` patched (except test_rate_limit); `no_real_http` blocks real requests and fails the test at teardown. Fixtures `app` (temp instance with both DBs migrated), `client`.
-- Mock HTTP at `backend.opendota.requests.get` or the module function (`backend.<module>.get_json`); mock Celery with `patch("backend.dota_bet_analyzer.players_statistics_task")`; Redis only via `patch("backend.cache.redis_client")`.
+- Mock HTTP at `backend.opendota.requests.get` or the module function (`backend.<module>.get_json`); mock Celery with `patch("backend.routes.statistics.players_statistics_task")` (route) or `backend.tasks.players_statistics_task` (compute_statistics); patch a route dependency in the route module that imports it; Redis only via `patch("backend.cache.redis_client")`.
 
 ## PR rules (from Artem)
 Small PRs; plan first for big ones. Template `.github/pull_request_template.md`: Before/After, API (by endpoint + JSON path, one field per bullet), Backend, Frontend, DB, Other; empty section = "None."; no "no change" bullets; no player names. UI change → vitest tests in same PR. README Core Features for new features.

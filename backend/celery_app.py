@@ -12,7 +12,8 @@ from backend.config import Config
 BACKGROUND_QUEUE = "background"  # Queue of the cache jobs, served by the second worker of `npm run dev`
 CHECK_DUE_JOBS_INTERVAL = 60  # seconds
 
-celery = Celery("backend.dota_bet_analyzer")
+# Workers import the task modules from `include` (`-A backend.celery_app.celery`)
+celery = Celery("backend", include=["backend.tasks", "backend.jobs"])
 
 celery.conf.update(
     broker_url=Config.CELERY_BROKER_URL,
