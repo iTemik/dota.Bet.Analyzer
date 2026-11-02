@@ -7,6 +7,7 @@ import pytest
 from backend.db import get_cache_db
 from backend.opendota import RATE_LIMIT_RETRIES, opendota_get
 from backend.rosters import (
+    SHORT_LINEUP_TTL,
     TEAM_MATCHES_TTL,
     LineupPlayer,
     TeamMatch,
@@ -308,11 +309,39 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
     assert (128, 1128) in [(p.player_slot, p.account_id) for p in lineup]
 
 
-def test_incomplete_lineup_is_not_cached(ctx):
-    with patch("backend.opendota.requests.get", return_value=_response({"rows": []})) as mock_get:
+def test_incomplete_lineup_is_remembered_for_a_day(ctx, fake_redis):
+    """A short lineup (anonymous player) is kept in Redis, so the next Compare sends no request."""
+    players = [{"player_slot": s, "account_id": 1000 + s} for s in [0, 1, 2, 3, 128, 129, 130, 131, 132]]
+    with patch("backend.opendota.requests.get", return_value=_response({"rows": [], "players": players})) as mock_get:
+        first = get_match_lineup(42)
+        second = get_match_lineup(42)
+
+    assert mock_get.call_count == 2  # explorer + /matches fallback, only the first time
+    assert len(first) == 9
+    assert second == first
+    assert 0 < fake_redis.ttl("opendota:short_lineup:42") <= SHORT_LINEUP_TTL
+    assert get_cache_db().execute("SELECT COUNT(*) FROM match_players WHERE match_id = 42").fetchone()[0] == 0
+
+
+def test_short_lineup_is_fetched_again_after_it_expires(ctx, fake_redis):
+    with patch("backend.opendota.requests.get", return_value=_response({"rows": [], "players": []})) as mock_get:
         assert get_match_lineup(42) == []
+        fake_redis.delete("opendota:short_lineup:42")
         get_match_lineup(42)
     assert mock_get.call_count == 4  # explorer + /matches fallback, twice
+
+
+def test_failed_match_request_is_not_remembered(ctx, fake_redis):
+    """When /matches fails, nothing is remembered, so the next Compare tries again."""
+
+    def fake_get(url, params=None, timeout=None):
+        if url.endswith("/explorer"):
+            return _response({"rows": []})
+        return _response(None, status=500)
+
+    with patch("backend.opendota.requests.get", side_effect=fake_get):
+        assert get_match_lineup(42) == []
+    assert fake_redis.get("opendota:short_lineup:42") is None
 
 
 def test_league_form_counts_wins_on_both_sides():

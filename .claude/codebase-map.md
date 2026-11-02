@@ -22,7 +22,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `task_store.py` | (uses cache.redis_client) `update_progress`, `start_task(task, team_id=None, **kwargs)` → (task_id, celery_id) with ids `task_<team_id>_<uuid hex>` / `task_<uuid hex>`, `ProgressReporter`, `store_results`/`get_results`, `get_matches_cached` (1h), `get_rank_cached` (1d), progress pub/sub |
 | `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; RankTally; `get_matches`, `get_rank` (both raise OpenDotaError on a failed request, so errors are never cached), `get_team_matches_summary` |
 | `models.py` | pydantic data models (imports only helpers + opendota, so no cycles): Player, FarmStats, LeagueForm, TeamRoster, TeamStats, MatchStats, StatsResponse, MatchesSummary; new shared models go here |
-| `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
+| `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20; lineups under 10 players in Redis 1d), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
 | `db.py` | The ONLY SQLite connections: `get_cache_db()` (instance/d2ba.sqlite, WAL mode), `get_user_db()` (instance/predictions.sqlite, foreign keys on, rollback journal), both 15 s busy timeout, per app context, closed on teardown |
 | `pro_players.py` | pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
@@ -44,7 +44,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - Cache TTL rule: Redis TTL for volatile data (key prefix `opendota:` / `liquipedia:`), SQLite for finished matches/immutable data. Cache TTL > job interval so the job refreshes before expiry. Cache errors 60 s (`{"error": ...}` value) to avoid request storms. New Redis cache → `cache.cached_json`, never a new Redis client.
 
 ## Redis (db 0 = Celery broker/results; db 1 = everything else)
-`progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `liquipedia:matches` 30min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
+`progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `opendota:short_lineup:<match>` 1d, `liquipedia:matches` 30min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
 
 ## SQLite (`instance/`)
 - `d2ba.sqlite` = cache, deletable (WAL: delete with its -wal/-shm files). Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm), heroes, sync_state(name, synced_at).
