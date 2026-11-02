@@ -422,8 +422,6 @@ curl -X POST "http://localhost:5000/api/jobs/teams/run?full=true"   # every team
 curl -X POST http://localhost:5000/api/jobs/heroes/run
 ```
 
-See [backend/PRO_PLAYERS_README.md](backend/PRO_PLAYERS_README.md) for detailed documentation.
-
 ---
 
 ## 📡 API Documentation

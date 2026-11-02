@@ -36,7 +36,6 @@ class Errors:
     FAILED_TO_STORE_SNAPSHOT = ErrorDefinition("FAILED_TO_STORE_SNAPSHOT", "Failed to store snapshot to database")
     FAILED_TO_QUEUE_JOB = ErrorDefinition("FAILED_TO_QUEUE_JOB", "Failed to queue the job (is Redis running?)")
     FAILED_TO_READ_JOBS = ErrorDefinition("FAILED_TO_READ_JOBS", "Failed to read the jobs status")
-    INVALID_ACCOUNT_ID = ErrorDefinition("INVALID_ACCOUNT_ID", "Invalid account ID format")
     INVALID_RESULT = ErrorDefinition("INVALID_RESULT", "Map score is not a finished series of this format")
     INVALID_REQUEST = ErrorDefinition("INVALID_REQUEST", "Invalid request")
     INVALID_TEAM_NAME = ErrorDefinition("INVALID_TEAM_NAME", "Invalid team name format")
@@ -44,7 +43,6 @@ class Errors:
     JOB_FULL_NOT_SUPPORTED = ErrorDefinition("JOB_FULL_NOT_SUPPORTED", "This job has no full run")
     JOB_NOT_FOUND = ErrorDefinition("JOB_NOT_FOUND", "Job not found")
     JOB_RUNNING = ErrorDefinition("JOB_RUNNING", "Job is already queued or running")
-    MISSING_ACCOUNT_IDS = ErrorDefinition("MISSING_ACCOUNT_IDS", "Account IDs are required")
     MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
     NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
     PREDICTION_NOT_FOUND = ErrorDefinition("PREDICTION_NOT_FOUND", "Prediction not found")
@@ -52,10 +50,8 @@ class Errors:
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
     SNAPSHOT_NOT_FOUND = ErrorDefinition("SNAPSHOT_NOT_FOUND", "Snapshot not found")
     TEAM_ID_MISMATCH = ErrorDefinition("TEAM_ID_MISMATCH", "team_id does not match team.team_id")
-    TOO_MANY_PLAYERS = ErrorDefinition("TOO_MANY_PLAYERS", "Too many players provided (maximum 10)")
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
     UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")
-    UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
     VALIDATION_ERROR = ErrorDefinition("VALIDATION_ERROR", "Validation failed")
 
 

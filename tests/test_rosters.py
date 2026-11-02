@@ -14,7 +14,7 @@ from backend.rosters import (
     classify_roster,
     compute_farm_stats,
     compute_league_form,
-    get_match_lineup,
+    get_match_lineups,
     get_team_league_matches,
     resolve_roster,
 )
@@ -44,6 +44,11 @@ def _explorer_rows(radiant: list[int], dire: list[int], match_id: int = 0) -> li
     rows = [{"match_id": match_id, "player_slot": i, "account_id": a} for i, a in enumerate(radiant)]
     rows += [{"match_id": match_id, "player_slot": 128 + i, "account_id": a} for i, a in enumerate(dire)]
     return rows
+
+
+def _lineup(match_id: int) -> list[LineupPlayer]:
+    """Lineup of one match through the batch lookup."""
+    return get_match_lineups([match_id]).get(match_id, [])
 
 
 def _response(payload, status: int = 200, headers: dict | None = None) -> MagicMock:
@@ -303,7 +308,7 @@ def test_lineup_falls_back_to_match_endpoint(ctx):
         return _response({"players": players})
 
     with patch("backend.opendota.requests.get", side_effect=fake_get):
-        lineup = get_match_lineup(42)
+        lineup = _lineup(42)
 
     assert len(lineup) == 10
     assert (128, 1128) in [(p.player_slot, p.account_id) for p in lineup]
@@ -313,8 +318,8 @@ def test_incomplete_lineup_is_remembered_for_a_day(ctx, fake_redis):
     """A short lineup (anonymous player) is kept in Redis, so the next Compare sends no request."""
     players = [{"player_slot": s, "account_id": 1000 + s} for s in [0, 1, 2, 3, 128, 129, 130, 131, 132]]
     with patch("backend.opendota.requests.get", return_value=_response({"rows": [], "players": players})) as mock_get:
-        first = get_match_lineup(42)
-        second = get_match_lineup(42)
+        first = _lineup(42)
+        second = _lineup(42)
 
     assert mock_get.call_count == 2  # explorer + /matches fallback, only the first time
     assert len(first) == 9
@@ -325,9 +330,9 @@ def test_incomplete_lineup_is_remembered_for_a_day(ctx, fake_redis):
 
 def test_short_lineup_is_fetched_again_after_it_expires(ctx, fake_redis):
     with patch("backend.opendota.requests.get", return_value=_response({"rows": [], "players": []})) as mock_get:
-        assert get_match_lineup(42) == []
+        assert _lineup(42) == []
         fake_redis.delete("opendota:short_lineup:42")
-        get_match_lineup(42)
+        _lineup(42)
     assert mock_get.call_count == 4  # explorer + /matches fallback, twice
 
 
@@ -340,7 +345,7 @@ def test_failed_match_request_is_not_remembered(ctx, fake_redis):
         return _response(None, status=500)
 
     with patch("backend.opendota.requests.get", side_effect=fake_get):
-        assert get_match_lineup(42) == []
+        assert _lineup(42) == []
     assert fake_redis.get("opendota:short_lineup:42") is None
 
 
@@ -404,8 +409,8 @@ def test_lineup_stats_are_cached(ctx):
         for s in [0, 1, 2, 3, 4, 128, 129, 130, 131, 132]
     ]
     with patch("backend.opendota.requests.get", return_value=_response({"rows": rows})) as mock_get:
-        first = get_match_lineup(42)
-        second = get_match_lineup(42)
+        first = _lineup(42)
+        second = _lineup(42)
     assert mock_get.call_count == 1
     assert "gold_per_min" in mock_get.call_args.kwargs["params"]["sql"]
     assert first == second

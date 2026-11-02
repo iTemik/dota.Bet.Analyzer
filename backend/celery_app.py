@@ -14,10 +14,9 @@ CHECK_DUE_JOBS_INTERVAL = 60  # seconds
 
 celery = Celery("backend.dota_bet_analyzer")
 
-# Redis connection: redis://localhost:6379/0
 celery.conf.update(
-    broker_url=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
-    result_backend=f"redis://{Config.REDIS_HOST}:{Config.REDIS_PORT}/0",
+    broker_url=Config.CELERY_BROKER_URL,
+    result_backend=Config.CELERY_RESULT_BACKEND,
     beat_schedule={
         "check-due-jobs": {
             "task": "backend.jobs.check_due_jobs_task",
