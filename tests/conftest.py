@@ -50,7 +50,7 @@ def no_roster_requests(request):
     if request.module.__name__.endswith("test_rosters"):
         yield None
         return
-    from backend.rosters import TeamRoster
+    from backend.models import TeamRoster
 
     with (
         patch("backend.stats.resolve_roster", return_value=TeamRoster()) as mock_resolve,

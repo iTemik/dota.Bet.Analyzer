@@ -2,23 +2,27 @@ from __future__ import annotations
 
 import sqlite3
 import statistics
-from typing import Any, List, Optional
-
-from pydantic import BaseModel, Field
+from typing import List, Optional
 
 from backend.db import get_cache_db
 from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
+from backend.models import (
+    MatchesSummary,
+    MatchStats,
+    StatsResponse,
+    TeamRoster,
+    TeamStats,
+)
 from backend.opendota import (
     OPENDOTA_API,
     OpenDotaError,
     WaitCallback,
     get_json,
-    is_radiant,
 )
-from backend.pro_players import Player, get_players_by_team
+from backend.pro_players import get_players_by_team
 from backend.ratings import window_rating_change
-from backend.rosters import LeagueForm, TeamRoster, resolve_roster
+from backend.rosters import resolve_roster
 
 LOBBY_TYPE_RATING = [0, 4, 5, 6, 7, 9, 22]
 LOBBY_TYPE_TOURNAMENT = [1, 2]
@@ -27,145 +31,6 @@ GAME_MODE_TOURNAMENT = [2]
 
 # Setup logger
 logger = setup_logging(__name__)
-
-
-class TeamStats(BaseModel):
-    """Statistics and information for a Dota 2 team.
-
-    Attributes:
-        team_id: Unique team identifier (None if error occurred)
-        team: Team name
-        tag: Team tag/abbreviation
-        rating: Team's Elo ranking
-        delta: Recent rating change
-        rating_change: Estimated rating change over the `days` window (see backend.ratings)
-        logo_url: URL to team's logo image
-        players: Main roster; player statistics are calculated from it
-        other_players: Everyone else: players who played league games for the team in the window (with `games`),
-            then players OpenDota lists on the team who did not (`games` 0)
-        roster_source: Where `players` came from: "recent_matches" (players with the most league games in the
-            window) or "pro_players" (OpenDota team membership, may be stale)
-        roster_games: Number of league games in the window the roster was counted from
-        standins_count: Stand-ins: players who played in the window but are outside the core (below 75%, or 50%,
-            of the games)
-        roster_last_match_time: Start time of the latest league match played by most of the roster (unix seconds)
-        latest_match_time: Start time of the team's latest league match (unix seconds)
-        latest_match_standins: Players of the latest league match who are not in the core
-        roster_state: "stable" (only the core played), "standins" (a clear core plus stand-ins) or "new_team"
-            (no clear core); None when unknown
-        league_form: League results over the roster period (pubs excluded)
-        task_id: Celery task ID for fetching player match statistics (None if not initiated)
-        error: Error information if team data fetch failed
-    """
-
-    team_id: Optional[int] = None
-    team: Optional[str] = None
-    tag: Optional[str] = None
-    rating: Optional[float] = None
-    delta: Optional[float] = None
-    rating_change: Optional[float] = None
-    logo_url: Optional[str] = None
-    players: List[Player] = Field(default_factory=list)
-    other_players: List[Player] = Field(default_factory=list)
-    roster_source: Optional[str] = None
-    roster_games: Optional[int] = None
-    standins_count: int = 0
-    roster_last_match_time: Optional[int] = None
-    latest_match_time: Optional[int] = None
-    latest_match_standins: Optional[int] = None
-    roster_state: Optional[str] = None
-    league_form: Optional[LeagueForm] = None
-    task_id: Optional[str] = None
-    error: Optional[ApiError] = None
-
-    def apply_roster(self, roster: TeamRoster, listed_players: List[Player]) -> None:
-        """Take the players and roster details from a roster resolved from recent league matches.
-
-        Args:
-            roster: Roster with at least one player
-            listed_players: Team members from pro_players who did not play in the window (kept last)
-        """
-        self.players = roster.players
-        self.other_players = [*roster.other_players, *listed_players]
-        self.roster_source = "recent_matches"
-        self.roster_games = roster.games_checked
-        self.standins_count = roster.standins_count
-        self.roster_last_match_time = roster.last_match_time
-        self.latest_match_time = roster.latest_match_time
-        self.latest_match_standins = roster.latest_match_standins
-        self.roster_state = roster.roster_state
-
-
-class MatchStats(BaseModel):
-    """Statistics for a single Dota 2 match.
-
-    Attributes:
-        match_id: Unique match identifier
-        player_slot: Player slot number (0-127)
-        radiant_win: Whether the radiant team won
-        game_mode: Game mode ID
-        lobby_type: Lobby type ID
-        hero_id: Hero ID played in the match
-        average_rank: Average rank tier of the match
-    """
-
-    match_id: int
-    player_slot: int
-    radiant_win: bool
-    game_mode: int
-    lobby_type: int
-    hero_id: int
-    average_rank: Optional[int] = None
-
-    @classmethod
-    def from_api(cls, row: dict[str, Any]) -> MatchStats:
-        """Create from a /players/{id}/matches row.
-
-        Raises:
-            pydantic.ValidationError: If the row is malformed
-        """
-        return cls.model_validate(row)
-
-    @property
-    def won(self) -> bool:
-        """Whether the player's side won the match."""
-        return is_radiant(self.player_slot) == self.radiant_win
-
-
-class StatsResponse(BaseModel):
-    """Response containing statistics for multiple teams.
-
-    Attributes:
-        teams: List of team statistics (includes both successful and error results)
-    """
-
-    teams: List[TeamStats]
-
-
-class MatchesSummary(BaseModel):
-    """Summary statistics for a collection of matches.
-
-    Attributes:
-        rating_matches: Number of rating matches
-        tournament_matches: Number of lobby matches (league games and scrims, OpenDota can't tell them apart here)
-        other_matches: Number of all other matches
-        matches_median: Median number of matches per player
-        matches_avg: Average number of matches per player
-        win_percentage: Win percentage across all matches
-        rating_win_percentage: Win percentage in rating (pub) matches only
-        tournament_win_percentage: Win percentage in lobby matches only
-    """
-
-    rating_matches: int = 0
-    tournament_matches: int = 0
-    other_matches: int = 0
-    matches_median: Optional[float] = None
-    matches_avg: Optional[float] = None
-    win_percentage: Optional[float] = None
-    rating_win_percentage: Optional[float] = None
-    tournament_win_percentage: Optional[float] = None
-    avg_rank: Optional[float] = None
-    bad_rank_players: Optional[int] = None
 
 
 # Players ranked worse than this on the leaderboard ruin the games for high rank players

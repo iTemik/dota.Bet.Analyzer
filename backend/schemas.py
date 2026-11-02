@@ -12,8 +12,8 @@ from pydantic import BaseModel
 
 # Import Pydantic models for auto-generation (imported here to avoid circular imports later)
 from backend.meta import MetaParams
-from backend.pro_players import Player
-from backend.stats import ApiError, StatsResponse, TeamStats
+from backend.models import Player, StatsResponse, TeamStats
+from backend.stats import ApiError
 
 # Cache for generated schemas to avoid duplicates
 _schema_cache: dict[type[BaseModel], type[Schema]] = {}

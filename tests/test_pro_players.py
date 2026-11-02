@@ -405,8 +405,8 @@ def test_get_players_by_team_integration_with_stats(app):
     """Test that get_players_by_team works within stats computation."""
     with app.app_context():
         from backend.db import get_cache_db
+        from backend.models import TeamStats
         from backend.pro_players import get_players_by_team
-        from backend.stats import TeamStats
 
         # Insert test pro players into database
         db = get_cache_db()

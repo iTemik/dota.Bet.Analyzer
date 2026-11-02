@@ -3,9 +3,9 @@
 import pytest
 
 from backend.helpers import ExplorerTeam
+from backend.models import MatchStats
 from backend.opendota import is_radiant
 from backend.rosters import TeamMatch, window_start
-from backend.stats import MatchStats
 
 
 def test_match_stats_from_api_and_won():

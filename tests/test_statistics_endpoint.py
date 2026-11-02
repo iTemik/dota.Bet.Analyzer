@@ -3,7 +3,7 @@ from backend import create_app
 
 def fake_compute_with_kwargs(**kwargs):
     """Mock compute_statistics that handles both teams and team_ids."""
-    from backend.stats import Player, StatsResponse, TeamStats
+    from backend.models import Player, StatsResponse, TeamStats
 
     teams = kwargs.get("teams") or []
     team_ids = kwargs.get("team_ids") or []
@@ -94,7 +94,7 @@ def test_get_statistics_numbered_params(monkeypatch):
 def test_get_trims_and_filters_teams(monkeypatch):
     # Whitespace should be trimmed
     def fake_compute(teams=None, team_ids=None, days=20):
-        from backend.stats import Player, StatsResponse, TeamStats
+        from backend.models import Player, StatsResponse, TeamStats
 
         items = team_ids if team_ids else (teams or [])
         return StatsResponse(
@@ -263,7 +263,7 @@ def test_compute_statistics_value_error_returns_400(monkeypatch):
 
 def test_days_defaults_to_20_and_is_forwarded(monkeypatch):
     """The roster/match-history window comes from `days` (default 20) and reaches compute_statistics."""
-    from backend.stats import StatsResponse
+    from backend.models import StatsResponse
 
     seen = []
 

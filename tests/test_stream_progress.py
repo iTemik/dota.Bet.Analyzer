@@ -231,9 +231,7 @@ def test_team_task_is_queued_before_it_is_sent():
     from unittest.mock import MagicMock
 
     from backend import stats
-    from backend.pro_players import Player
-    from backend.rosters import TeamRoster
-    from backend.stats import TeamStats
+    from backend.models import Player, TeamRoster, TeamStats
 
     calls = MagicMock()
     task = MagicMock()

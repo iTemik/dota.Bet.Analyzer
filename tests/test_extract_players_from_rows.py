@@ -7,8 +7,8 @@ Unicode that previously caused logging errors.
 
 from typing import Any
 
+from backend.models import Player
 from backend.pro_players import _extract_players_from_rows
-from backend.stats import Player
 
 
 class TestExtractPlayersFromRows:
