@@ -31,7 +31,7 @@ class TestComputeStatisticsByNames:
         )
         # Mock Celery task
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(teams=["Spirit"])
 
@@ -98,7 +98,7 @@ class TestComputeStatisticsById:
             [],
         )
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(team_ids=[39])
 
@@ -134,7 +134,7 @@ class TestComputeStatisticsById:
         ]
         mock_get_players.return_value = ([], [])
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(team_ids=[39, 26])
 
@@ -186,7 +186,7 @@ class TestComputeStatisticsValidation:
         ]
         mock_get_players.return_value = ([], [])
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(teams=["Spirit"], team_ids=[123])
 
@@ -247,7 +247,7 @@ class TestComputeStatisticsErrorHandling:
         ]
         mock_get_players.return_value = ([], [])
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(teams=["Spirit", "Failed"])
 
@@ -309,7 +309,7 @@ class TestComputeStatisticsTaskInitiation:
         mock_task = MagicMock()
         mock_delay = MagicMock()
         mock_task.delay = mock_delay
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(teams=["Spirit"])
 
@@ -334,7 +334,7 @@ class TestComputeStatisticsTaskInitiation:
         monkeypatch.setattr("backend.stats.resolve_roster", lambda *args, **kwargs: roster)
 
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         compute_statistics(teams=["Spirit"])
 
@@ -356,7 +356,7 @@ class TestComputeStatisticsTaskInitiation:
         mock_get_players.return_value = ([], [])  # No players
 
         mock_task = MagicMock()
-        monkeypatch.setattr("backend.dota_bet_analyzer.players_statistics_task", mock_task)
+        monkeypatch.setattr("backend.tasks.players_statistics_task", mock_task)
 
         result = compute_statistics(teams=["Spirit"])
 

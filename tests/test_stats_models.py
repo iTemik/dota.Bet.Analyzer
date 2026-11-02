@@ -43,13 +43,13 @@ def test_compute_statistics_returns_model(monkeypatch):
         "backend.stats._fetch_team_info", lambda team_id: ({"logo_url": "https://example.com/alpha_logo.png"}, None)
     )
     monkeypatch.setattr("backend.stats._local_logo_url", lambda team_id: None)
-    # Mock the import inside compute_statistics by patching dota_bet_analyzer module
+    # Mock the import inside compute_statistics by patching the tasks module
     import sys
     from unittest.mock import MagicMock
 
     mock_dota_bet = MagicMock()
     mock_dota_bet.players_statistics_task = MockPlayersStatisticsTask()
-    monkeypatch.setitem(sys.modules, "backend.dota_bet_analyzer", mock_dota_bet)
+    monkeypatch.setitem(sys.modules, "backend.tasks", mock_dota_bet)
 
     res = compute_statistics(["A"])
     assert isinstance(res, StatsResponse)

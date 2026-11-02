@@ -24,7 +24,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_returns_200_status_on_success(self, client):
         """Test that endpoint returns 200 status code on successful request."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-id-123")
 
             rv = client.get("/api/statistics/players?account_id=123&account_id=456")
@@ -35,7 +35,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_returns_task_id_in_response(self, client):
         """Test that response includes task_id and celery_task_id."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-123")
 
             rv = client.get("/api/statistics/players?account_id=789")
@@ -101,7 +101,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_converts_string_account_ids_to_integers(self, client):
         """Test that string account_ids are converted to integers."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-456")
 
             rv = client.get("/api/statistics/players?account_id=123&account_id=456&account_id=789")
@@ -116,7 +116,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_accepts_days_parameter(self, client):
         """Test that 'days' parameter is accepted and passed to task."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-789")
 
             rv = client.get("/api/statistics/players?account_id=123&days=30")
@@ -128,7 +128,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_days_parameter_defaults_to_20(self, client):
         """Test that days parameter defaults to 20 when not provided."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-000")
 
             rv = client.get("/api/statistics/players?account_id=123")
@@ -140,7 +140,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_returns_500_on_task_start_failure(self, client):
         """Test that endpoint returns 500 when task fails to start."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.side_effect = Exception("Celery connection failed")
 
             rv = client.get("/api/statistics/players?account_id=123")
@@ -152,7 +152,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_handles_whitespace_in_account_ids(self, client):
         """Test that whitespace in account_ids is properly trimmed."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-111")
 
             # Test with spaces around account IDs
@@ -166,7 +166,7 @@ class TestPlayersStatisticsEndpoint:
 
     def test_response_json_contains_required_fields(self, client):
         """Test that successful response JSON contains all required fields."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-task-222")
 
             rv = client.get("/api/statistics/players?account_id=123&account_id=456")
@@ -186,7 +186,7 @@ class TestPlayersStatisticsIntegration:
 
     def test_multiple_valid_account_ids_at_boundary(self, client):
         """Test with exactly 10 account_ids (boundary case)."""
-        with patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task:
+        with patch("backend.routes.statistics.players_statistics_task") as mock_task:
             mock_task.delay.return_value = MagicMock(id="celery-boundary")
 
             account_ids = "&".join([f"account_id={i}" for i in range(1, 11)])
@@ -211,7 +211,7 @@ class TestPlayersStatisticsIntegration:
 def test_two_starts_in_the_same_second_get_different_task_ids(client):
     """Two Compares in one second used to share task_{time} and read each other's progress."""
     with (
-        patch("backend.dota_bet_analyzer.players_statistics_task") as mock_task,
+        patch("backend.routes.statistics.players_statistics_task") as mock_task,
         patch("time.time", return_value=1_700_000_000.0),
     ):
         mock_task.delay.return_value = MagicMock(id="celery-task-1")

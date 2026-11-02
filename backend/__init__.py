@@ -200,10 +200,10 @@ def _init_extensions(app):
     db.init_app(app)
 
     # Register blueprints
-    from .dota_bet_analyzer import bp as dota_bp
-    from .dota_bet_analyzer import celery as celery_app
+    from .celery_app import celery as celery_app
+    from .routes import register_routes
 
-    api.register_blueprint(dota_bp)
+    register_routes(api)
     celery_app.conf.update(app.config or {})
 
     # Queue the due cache jobs on the background worker; not in tests

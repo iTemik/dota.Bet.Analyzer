@@ -29,7 +29,7 @@ def fake_compute_with_kwargs(**kwargs):
 
 def test_get_statistics_query_params(monkeypatch):
     # Mock compute_statistics for endpoint tests to avoid network calls
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -46,7 +46,7 @@ def test_get_statistics_query_params(monkeypatch):
 
 def test_get_statistics_by_team_id(monkeypatch):
     """Test statistics endpoint with team_id parameters."""
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -62,7 +62,7 @@ def test_get_statistics_by_team_id(monkeypatch):
 
 def test_get_statistics_with_both_team_and_team_id(monkeypatch):
     """Test that both team and team_id can be provided together."""
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -78,7 +78,7 @@ def test_get_statistics_with_both_team_and_team_id(monkeypatch):
 
 
 def test_get_statistics_numbered_params(monkeypatch):
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     # Support team1=Alpha&team2=Beta style as well
     app = create_app(test_config={})
@@ -109,7 +109,7 @@ def test_get_trims_and_filters_teams(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -166,7 +166,7 @@ def test_combined_teams_and_ids_at_limit_returns_200(monkeypatch):
     This validates the edge case where combining teams and team_ids equals
     exactly 10, which should be allowed.
     """
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -193,7 +193,7 @@ def test_no_teams_returns_422():
 
 
 def test_response_shape_contains_expected_fields(monkeypatch):
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_with_kwargs)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_with_kwargs)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -219,7 +219,7 @@ def test_compute_statistics_exception_returns_500(monkeypatch):
     def fake_compute_raises(teams=None, team_ids=None, days=20):
         raise RuntimeError("Database connection failed")
 
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_raises)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -244,7 +244,7 @@ def test_compute_statistics_value_error_returns_400(monkeypatch):
     def fake_compute_raises(teams=None, team_ids=None, days=20):
         raise ValueError("Invalid parameter")
 
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute_raises)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_raises)
 
     app = create_app(test_config={})
     client = app.test_client()
@@ -271,7 +271,7 @@ def test_days_defaults_to_20_and_is_forwarded(monkeypatch):
         seen.append(days)
         return StatsResponse(teams=[])
 
-    monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
+    monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute)
     client = create_app(test_config={}).test_client()
 
     assert client.get("/api/statistics?team=A").status_code == 200

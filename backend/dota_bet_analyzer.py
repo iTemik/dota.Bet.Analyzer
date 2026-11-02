@@ -1,16 +1,12 @@
 import json
 import os
 import time
-from collections.abc import Callable
-from typing import Any
 
-from flask import Response, current_app, jsonify, request, stream_with_context
-from flask_smorest import Blueprint
+from flask import Response, current_app, jsonify, stream_with_context
 
 from backend import __version__
-from backend.celery_app import celery
 from backend.head_to_head import get_head_to_head
-from backend.helpers import ErrorDefinition, Errors, api_error
+from backend.helpers import Errors, api_error
 from backend.heroes import list_heroes
 from backend.jobs import (
     JobRunningError,
@@ -24,7 +20,6 @@ from backend.jobs import (
 from backend.logging_config import setup_logging
 from backend.matches import get_matches
 from backend.meta import MetaParams, get_meta
-from backend.opendota import OpenDotaError
 from backend.predictions import (
     SnapshotMissingError,
     create_prediction,
@@ -34,8 +29,9 @@ from backend.predictions import (
     save_review,
     update_decision,
 )
+from backend.routes import ApiBlueprint
+from backend.routes.statistics import STREAM_MAX_RUNTIME
 from backend.schemas import (
-    ErrorSchema,
     HeadToHeadSchema,
     HeroSchema,
     JobRunQuerySchema,
@@ -43,7 +39,6 @@ from backend.schemas import (
     MatchesSchema,
     MetaQuerySchema,
     MetaSchema,
-    PlayerStatisticsQuerySchema,
     PredictionCreateSchema,
     PredictionDecisionSchema,
     PredictionDetailSchema,
@@ -54,211 +49,17 @@ from backend.schemas import (
     SnapshotDetailSchema,
     SnapshotListQuerySchema,
     SnapshotSchema,
-    StatisticsResultSchema,
-    StatsResponseSchema,
-    TaskResponseSchema,
     TeamSchema,
     TeamSearchQuerySchema,
-    TeamStatisticsQuerySchema,
     VersionSchema,
 )
 from backend.snapshots import get_snapshot, list_snapshots, save_snapshot
-from backend.stats import (
-    BAD_RANK_THRESHOLD,
-    RankTally,
-    compute_statistics,
-    get_team_matches_summary,
-)
-from backend.task_store import (
-    ProgressReporter,
-    get_matches_cached,
-    get_rank_cached,
-    load_results,
-    progress_exists,
-    read_progress,
-    start_task,
-    store_results,
-    subscribe_progress,
-    wait_for_progress,
-)
 
 # Setup logger
 logger = setup_logging(__name__)
 
 
-bp = Blueprint("dota", __name__, url_prefix="/api", description="Dota 2 Bet Analyzer API")
-
-
-def error_response(status: int, error: ErrorDefinition, description: str, **details: Any) -> Callable:
-    """Swagger doc for an `api_error` response: ErrorSchema with an example built from the Errors entry.
-
-    Args:
-        status: HTTP status code
-        error: ErrorDefinition from Errors (gives the example's code and message)
-        description: What causes this response
-        **details: Example `details` besides `url`, which every error carries
-
-    Returns:
-        The flask-smorest `alt_response` decorator
-    """
-    example = {
-        "status": status,
-        "code": error.code,
-        "message": error.message,
-        "details": {"url": "/api/...", **details},
-    }
-    decorator: Callable = bp.alt_response(status, schema=ErrorSchema, description=description, example=example)
-    return decorator
-
-
-def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response, int] | None]:
-    """Parse and validate team IDs from query arguments.
-
-    Args:
-        team_ids: List of team ID values from query parameters
-
-    Returns:
-        Tuple of (parsed_team_ids_int, error_response) where:
-        - parsed_team_ids_int is the list of validated integer team IDs
-        - error_response is an api_error response tuple if validation failed, None otherwise
-    """
-    team_ids_int: list[int] = []
-    for tid in team_ids:
-        value = tid.strip() if isinstance(tid, str) else tid
-        if value is None or value == "":
-            continue
-        if isinstance(value, int):
-            team_ids_int.append(value)
-        elif isinstance(value, str) and value.isdigit():
-            team_ids_int.append(int(value))
-        else:
-            # Not a number, or an unsupported type
-            return [], api_error(422, Errors.INVALID_REQUEST, invalid_team_id=tid)
-
-    return team_ids_int, None
-
-
-@celery.task(bind=True)
-def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, rank_accounts: list[int] | None = None):
-    """Celery task to fetch match statistics for multiple players.
-
-    Saves one payload under `results:{task_id}` (read by GET /api/results/{task_id}, StatisticsResultSchema):
-    - `summary`: team totals from get_team_matches_summary plus rank values; the only part the
-      Team Comparison table reads (frontend getSummaryForTeam and the rows marked `summary: true`)
-    - `results`: one entry per account with its match count and leaderboard rank, or its error
-      (raw matches are not stored; the Team Insights table shows each player's rank from here).
-      Accounts in `rank_accounts` get only `rank` (or `error`): they are not in `summary` or `successful`
-    - `successful` / `total`: how many accounts were fetched; also sent in the final progress message
-
-    Args:
-        task_id: Unique task identifier for progress tracking
-        accounts: List of account IDs to fetch statistics for
-        days: Number of days of match history to fetch
-        rank_accounts: Account IDs to fetch only the leaderboard rank for (stand-ins, no matches)
-    """
-    rank_accounts = rank_accounts or []
-    progress = ProgressReporter(task_id, 2 + 2 * len(accounts) + len(rank_accounts))  # Initial + per-account + final
-    try:
-        logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
-        progress.start(f"Initializing match history fetch for {len(accounts)} players")
-
-        results: list[dict[str, int | str | None]] = []  # Per player: match_count and rank, or the fetch error
-        matches_stats = []  # List of lists: each inner list is matches for one player
-        ranks = RankTally()
-        for account_id in accounts:
-            progress.next()
-
-            def report_wait(delay: int, account_id: int = account_id) -> None:
-                progress.waiting(delay, account_id)
-
-            try:
-                # Fetch match data for this account
-                player_matches = get_matches_cached(account_id=account_id, days=days, on_wait=report_wait)
-                matches_stats.append(player_matches)  # Append as a list per player
-
-                # Only the count and rank are kept per player; the matches themselves feed `summary`
-                result: dict[str, int | str | None] = {"account_id": account_id, "match_count": len(player_matches)}
-                results.append(result)
-                progress.report(
-                    f"Fetched {len(player_matches)} matches for account {account_id}",
-                    {"account_id": account_id, "match_count": len(player_matches)},
-                )
-
-                try:
-                    player_rank = get_rank_cached(account_id, on_wait=report_wait)
-                except OpenDotaError as e:
-                    # The matches still count; the rank stays unknown and is asked again next time (not cached)
-                    player_rank = None
-                    logger.warning(f"Rank unavailable for account {account_id}: {e.message}")
-                result["rank"] = player_rank
-                ranks.add(player_rank)
-                if player_rank is not None and player_rank > BAD_RANK_THRESHOLD:  # Tysyachniks ruin the games.
-                    logger.info(f"Account {account_id} is tysyachnik and will ruin the games for high rank players")
-                progress.report(
-                    f"Got Player rank {player_rank} for account {account_id}",
-                    {"account_id": account_id, "player_rank": player_rank},
-                )
-
-            except Exception as e:
-                # Handle per-account errors gracefully
-                # The player is left out of `summary`; the error stays visible in the results payload
-                results.append({"account_id": account_id, "error": str(e)})
-                progress.report(
-                    f"Error fetching data for account {account_id}: {e!s}",
-                    {"account_id": account_id, "error": str(e)},
-                )
-
-            time.sleep(0.01)  # Short sleep to prevent overwhelming the API
-
-        summary = get_team_matches_summary(matches_stats)  # This is heavy logic. To check.
-        summary.avg_rank = ranks.average
-        summary.bad_rank_players = ranks.bad_rank_players
-
-        successful = len([r for r in results if "error" not in r])
-
-        for account_id in rank_accounts:
-            progress.next()
-
-            def report_wait(delay: int, account_id: int = account_id) -> None:
-                progress.waiting(delay, account_id)
-
-            try:
-                player_rank = get_rank_cached(account_id, on_wait=report_wait)
-                results.append({"account_id": account_id, "rank": player_rank})
-                progress.report(
-                    f"Got Player rank {player_rank} for account {account_id}",
-                    {"account_id": account_id, "player_rank": player_rank},
-                )
-            except Exception as e:
-                results.append({"account_id": account_id, "error": str(e)})
-                progress.report(
-                    f"Error fetching rank for account {account_id}: {e!s}",
-                    {"account_id": account_id, "error": str(e)},
-                )
-
-            time.sleep(0.01)
-
-        # Store heavy results separately (not in progress stream)
-        store_results(
-            task_id,
-            {
-                "results": results,
-                "successful": successful,
-                "total": len(accounts),
-                "summary": summary.model_dump(),
-            },
-        )
-
-        # Lightweight final message (no heavy data)
-        progress.done(
-            f"Completed: fetched data for {successful}/{len(accounts)} players",
-            {"successful": successful, "total": len(accounts)},
-        )
-
-    except Exception as exc:
-        logger.error(f"Task error for task_id={task_id}: {exc}", exc_info=True)
-        progress.fail(exc)
-        raise
+bp = ApiBlueprint("dota", __name__, description="Dota 2 Bet Analyzer API")
 
 
 @bp.route("/version", methods=["GET"])
@@ -291,334 +92,6 @@ def _full_version() -> str:
     return f"{__version__}.{_build_number()}"
 
 
-@bp.route("/statistics", methods=["GET"])
-@bp.arguments(TeamStatisticsQuerySchema, location="query")
-@bp.response(200, StatsResponseSchema)
-@error_response(400, Errors.INVALID_REQUEST, "Invalid request")
-@error_response(
-    422, Errors.MISSING_TEAMS, "Validation failed - missing teams, too many teams (>10), or invalid parameter format"
-)
-@error_response(500, Errors.COMPUTATION_ERROR, "Computation failed")
-def statistics(args) -> tuple[Response, int]:
-    """Compute team statistics.
-
-    Query parameters:
-    - team_id: Team ID (supports multiple values: `?team_id=123&team_id=456`)
-    - team: Team name (supports multiple values: `?team=Alpha&team=Beta`)
-    - team1, team2, ...: Alternative numbered format
-
-    Returns computed statistics for the specified teams (1-10 teams combined).
-    Includes team ratings, tags, IDs, rating deltas, player lists, and a `task_id`
-    for asynchronous player statistics computation.
-    """
-    try:
-        # Get team IDs
-        team_ids = args.get("team_id", []) if args else []
-        team_ids_int, parse_error = _parse_team_ids_from_args(team_ids)
-        if parse_error:
-            return parse_error
-
-        # Get team names
-        teams = args.get("team", []) if args else []
-        if not teams:
-            teams = [v for k, v in sorted(request.args.items()) if k.startswith("team") and not k.endswith("_id")]
-
-        # Normalize team names
-        teams = [t.strip() for t in teams if isinstance(t, str) and t.strip()]
-
-        # Validate at least one is provided
-        if not teams and not team_ids_int:
-            return api_error(422, Errors.MISSING_TEAMS)
-
-        # Validate total count doesn't exceed limit
-        total_teams = len(teams) + len(team_ids_int)
-        if total_teams > 10:
-            return api_error(422, Errors.TOO_MANY_TEAMS, limit=10)
-
-        # Compute statistics with both lists
-        stats = compute_statistics(
-            teams=teams if teams else None,
-            team_ids=team_ids_int if team_ids_int else None,
-            days=args.get("days", 20),
-        )
-        return jsonify(stats.model_dump()), 200
-
-    except ValueError as e:
-        logger.error(f"Validation error in compute_statistics: {e}")
-        return api_error(400, Errors.INVALID_REQUEST, e)
-    except Exception as e:
-        logger.error(f"Unexpected error in statistics computation: {e}", exc_info=True)
-        return api_error(500, Errors.COMPUTATION_ERROR, e)
-
-
-@bp.route("/statistics/players", methods=["GET"])
-@bp.arguments(PlayerStatisticsQuerySchema, location="query")
-@bp.response(
-    200,
-    TaskResponseSchema,
-    description="Task started successfully",
-    example={"status": "started", "task_id": "task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813", "celery_task_id": "abc-123-def"},
-)
-@error_response(400, Errors.INVALID_REQUEST, "Invalid request parameters")
-@error_response(422, Errors.VALIDATION_ERROR, "Schema validation failed")
-@error_response(500, Errors.FAILED_TO_START_TASK, "Task start failed")
-def players_statistics(args) -> tuple[Response, int]:
-    """Start asynchronous player statistics computation task.
-
-    Initiates a background task to fetch and analyze match history for the specified players.
-    The computation typically takes 10-20 seconds as it collects individual match statistics
-    for each team player from the OpenDota API.
-
-    Account List Sources:
-        The account list can be populated in two ways:
-        1. **Direct Frontend Call**: Account IDs passed directly via query parameters
-           (`GET /api/statistics/players?account_id=123&account_id=456`)
-        2. **Indirect via Team Statistics**: Account IDs gathered from `compute_statistics()`
-           which fetches team data and calls `_create_team_stats()` -> `get_players_by_team()`
-           to extract player account IDs from team roster data
-           (`GET /api/statistics?team=Alliance` internally triggers player stats collection)
-
-    Query Parameters:
-        - `account_id`: List of player account IDs (1-10 players, required)
-        - `days`: Number of days of match history to analyze (1-365, default: 20)
-
-    Returns:
-        TaskResponseSchema containing `status`, `task_id` for progress tracking, and `celery_task_id`
-
-    Workflow:
-
-        1. Call this endpoint to start the task → receive `task_id`
-        2. Monitor progress via `/api/stream-progress/{task_id}` (Server-Sent Events)
-        3. Retrieve final results via `/api/results/{task_id}` once complete
-
-
-    Example:
-        `GET /api/statistics/players?account_id=12345&account_id=67890&days=30`
-
-        Response (200):
-
-        {
-            "status": "started",
-            "task_id": "task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813",
-            "celery_task_id": "abc-123-def-456"
-        }
-
-    """
-    try:
-        accounts = args["account_id"]
-        days = args.get("days", 20)
-
-        # Schema already validates: 1-10 accounts, valid integers, days 1-365
-        # Convert to int list if needed
-        accounts_int = [int(a) if not isinstance(a, int) else a for a in accounts]
-
-        try:
-            task_id, celery_task_id = start_task(players_statistics_task, accounts=accounts_int, days=days)
-            return jsonify({"status": "started", "task_id": task_id, "celery_task_id": celery_task_id}), 200
-        except Exception as e:
-            return api_error(500, Errors.FAILED_TO_START_TASK, e)
-
-    except Exception as e:
-        return api_error(400, Errors.INVALID_REQUEST, e)
-
-
-def _create_error_message(message: str, timeout: bool = False) -> str:
-    """Create formatted error message for SSE stream.
-
-    Args:
-        message: Error message text
-        timeout: Whether this is a timeout error
-
-    Returns:
-        JSON-formatted error message string
-    """
-    error_msg = {
-        "step": -1,
-        "message": message,
-        "progress": -1,
-        "data": {"error": True, "timeout": timeout} if timeout else {"error": True},
-    }
-    return f"{json.dumps(error_msg)}\n"
-
-
-# Progress stream limits (seconds). A stream that ends early is reopened by the client.
-STREAM_MAX_RUNTIME = 120
-STREAM_IDLE_TIMEOUT = 30
-# Safety net: re-read the snapshot this often even if a progress signal is missed
-STREAM_RECHECK_INTERVAL = 1.0
-
-
-def _check_timeouts(start_time: float, last_update_time: float) -> str | None:
-    """Check for timeout conditions.
-
-    Args:
-        start_time: Stream start time (time.monotonic)
-        last_update_time: Time of the last sent update (time.monotonic)
-
-    Returns:
-        Error message string if timeout occurred, None otherwise
-    """
-    now = time.monotonic()
-    if now - start_time > STREAM_MAX_RUNTIME:
-        return _create_error_message(f"Task exceeded maximum runtime ({STREAM_MAX_RUNTIME}s)", timeout=True)
-
-    if now - last_update_time > STREAM_IDLE_TIMEOUT:
-        return _create_error_message(f"Task timed out - no progress updates for {STREAM_IDLE_TIMEOUT}s", timeout=True)
-
-    return None
-
-
-def _generate_progress_stream(task_id: str):
-    """Generate progress updates stream for a task.
-
-    Sends the task's progress snapshot from Redis each time it changes, until the task
-    reaches completion or an error state. Between changes it waits for the task's
-    progress signal instead of polling Redis.
-
-    Args:
-        task_id: Task identifier
-
-    Yields:
-        JSON-formatted progress updates or error messages
-    """
-    start_time = time.monotonic()
-    last_update_time = start_time
-    last_sent: bytes | None = None
-    subscription = None
-
-    try:
-        # Subscribe before the first read, so a change between the two is not missed
-        subscription = subscribe_progress(task_id)
-        while True:
-            snapshot = read_progress(task_id)
-            if snapshot is not None and snapshot != last_sent:
-                progress_data = json.loads(snapshot)
-                yield f"{json.dumps(progress_data)}\n"
-                last_sent = snapshot
-                last_update_time = time.monotonic()
-                if progress_data["progress"] >= 100 or progress_data["progress"] == -1:
-                    return
-
-            timeout_error = _check_timeouts(start_time, last_update_time)
-            if timeout_error:
-                yield timeout_error
-                return
-
-            wait_for_progress(subscription, STREAM_RECHECK_INTERVAL)
-
-    except json.JSONDecodeError as e:
-        yield _create_error_message(f"Invalid progress data: {e}")
-    except Exception as e:
-        yield _create_error_message(f"Stream error: {e}")
-    finally:
-        if subscription is not None:
-            subscription.close()
-
-
-@bp.route("/stream-progress/<task_id>")
-@bp.response(200, description="Server-Sent Events stream of progress updates")
-@error_response(404, Errors.RESULTS_NOT_FOUND, "Task not found", task_id="task_123")
-@error_response(500, Errors.FAILED_TO_RETRIEVE_RESULTS, "Redis connection error")
-def stream_progress(task_id: str) -> tuple[Response, int] | Response:
-    """Stream progress updates via Server-Sent Events.
-
-    Returns a continuous stream of progress data for the specified task, one JSON object
-    per line, sent as soon as the task's progress changes. The stream ends when the task
-    completes (100) or fails (-1), or with a timeout line after 30s without changes or 120s
-    in total; clients reopen it until the task completes.
-
-    Path Parameters:
-        - `task_id`: Task identifier returned from `/api/statistics/players`
-
-    Returns:
-        Server-Sent Events stream with progress updates (200) or error response (404, 500)
-
-    Example:
-        `GET /api/stream-progress/task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813`
-
-        Stream (200):
-
-        {"step": 1, "message": "Fetching matches...", "progress": 25, "data": {...}}
-        {"step": 2, "message": "Processing...", "progress": 50, "data": {...}}
-        {"step": 3, "message": "Completed", "progress": 100, "data": {...}}
-
-    """
-    # Verify task exists before starting stream
-    try:
-        if not progress_exists(task_id):
-            return api_error(404, Errors.RESULTS_NOT_FOUND, task_id=task_id)
-    except Exception as e:
-        logger.error(f"Redis error checking task {task_id}: {e}")
-        return api_error(500, Errors.FAILED_TO_RETRIEVE_RESULTS, e)
-
-    return Response(
-        stream_with_context(_generate_progress_stream(task_id)),
-        mimetype="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*"},
-    )
-
-
-@bp.route("/results/<task_id>")
-@bp.response(200, StatisticsResultSchema)
-@error_response(404, Errors.RESULTS_NOT_FOUND, "Results not found", task_id="task_123")
-@error_response(500, Errors.FAILED_TO_RETRIEVE_RESULTS, "Failed to retrieve results")
-def get_results(task_id: str) -> tuple[Response, int]:
-    """Retrieve final computation results for a completed task.
-
-    Returns the complete results of a background player statistics computation task.
-    Results include detailed match statistics, player performance metrics, and aggregated summaries.
-
-    Path Parameters:
-        - `task_id`: Task identifier returned from `/api/statistics/players`
-
-    Returns:
-        **StatisticsResultSchema** with complete results (200), or error response (404, 500)
-
-
-    Workflow:
-
-        1. Start task via `/api/statistics/players` → receive `task_id`
-        2. Monitor progress via `/api/stream-progress/{task_id}` until complete
-        3. Retrieve results via this endpoint once task reaches 100% progress
-
-
-    Results include:
-
-        - Per-player match statistics (wins, losses, hero picks, performance metrics)
-        - Team summary statistics (average rank, win rates, common heroes)
-        - Error details for any failed player data fetches
-
-
-    Notes:
-
-        - Results expire after 1 hour (Redis TTL)
-        - Returns 404 if task not found, expired, or still in progress
-        - Results only available after task completion (progress = 100%)
-
-
-    Example:
-        `GET /api/results/task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813`
-
-        Response (200):
-        {
-            "results": [...],
-            "successful": 5,
-            "total": 5,
-            "summary": {...}
-        }
-
-    """
-    try:
-        results = load_results(task_id)
-        if results is None:
-            return api_error(404, Errors.RESULTS_NOT_FOUND, task_id=task_id)
-
-        return jsonify(results), 200
-    except Exception as e:
-        logger.error(f"Error retrieving results for task {task_id}: {e}")
-        return api_error(500, Errors.FAILED_TO_RETRIEVE_RESULTS, e)
-
-
 def _sync_teams_if_obsolete() -> None:
     """Update the teams list in the background when it is obsolete (not in tests, which never reach OpenDota)."""
     if not current_app.config.get("TESTING"):
@@ -627,7 +100,7 @@ def _sync_teams_if_obsolete() -> None:
 
 @bp.route("/jobs", methods=["GET"])
 @bp.response(200, JobSchema(many=True))
-@error_response(500, Errors.FAILED_TO_READ_JOBS, "Database operation failed")
+@bp.error_response(500, Errors.FAILED_TO_READ_JOBS, "Database operation failed")
 def get_jobs() -> tuple[Response, int]:
     """List the background cache jobs with their state and last run.
 
@@ -697,12 +170,12 @@ def stream_jobs() -> Response:
 @bp.route("/jobs/<string:name>/run", methods=["POST"])
 @bp.arguments(JobRunQuerySchema, location="query")
 @bp.response(202, JobSchema)
-@error_response(
+@bp.error_response(
     400, Errors.JOB_FULL_NOT_SUPPORTED, "`full=true` was given for a job that has no full run", name="heroes"
 )
-@error_response(404, Errors.JOB_NOT_FOUND, "No job has this name", name="x")
-@error_response(409, Errors.JOB_RUNNING, "The job is already queued or running", name="teams")
-@error_response(503, Errors.FAILED_TO_QUEUE_JOB, "Redis or the Celery broker could not be reached", name="teams")
+@bp.error_response(404, Errors.JOB_NOT_FOUND, "No job has this name", name="x")
+@bp.error_response(409, Errors.JOB_RUNNING, "The job is already queued or running", name="teams")
+@bp.error_response(503, Errors.FAILED_TO_QUEUE_JOB, "Redis or the Celery broker could not be reached", name="teams")
 def run_job_now(args: dict, name: str) -> tuple[Response, int]:
     """Queue a background cache job now, even when its data is not stale.
 
@@ -725,7 +198,7 @@ def run_job_now(args: dict, name: str) -> tuple[Response, int]:
 
 @bp.route("/heroes", methods=["GET"])
 @bp.response(200, HeroSchema(many=True))
-@error_response(500, Errors.FAILED_TO_READ_HEROES, "Database operation failed")
+@bp.error_response(500, Errors.FAILED_TO_READ_HEROES, "Database operation failed")
 def get_heroes() -> tuple[Response, int]:
     """List the cached heroes (id, names, icon URL) ordered by display name.
 
@@ -741,7 +214,7 @@ def get_heroes() -> tuple[Response, int]:
 @bp.route("/heroes/meta", methods=["GET"])
 @bp.arguments(MetaQuerySchema, location="query")
 @bp.response(200, MetaSchema)
-@error_response(503, Errors.FAILED_TO_FETCH_HERO_STATS, "OpenDota could not be reached or its answer was invalid")
+@bp.error_response(503, Errors.FAILED_TO_FETCH_HERO_STATS, "OpenDota could not be reached or its answer was invalid")
 def get_hero_meta(args: dict) -> tuple[Response, int]:
     """Pro meta, ultra meta and pub meta heroes from OpenDota /heroStats (about the last 7 days).
 
@@ -757,8 +230,8 @@ def get_hero_meta(args: dict) -> tuple[Response, int]:
 
 @bp.route("/matches", methods=["GET"])
 @bp.response(200, MatchesSchema)
-@error_response(503, Errors.FAILED_TO_FETCH_MATCHES, "Liquipedia could not be reached or its page could not be read")
-@error_response(500, Errors.UNEXPECTED_ERROR, "Database error")
+@bp.error_response(503, Errors.FAILED_TO_FETCH_MATCHES, "Liquipedia could not be reached or its page could not be read")
+@bp.error_response(500, Errors.UNEXPECTED_ERROR, "Database error")
 def list_matches() -> tuple[Response, int]:
     """Upcoming (soonest first) and recently finished (newest first) pro series from Liquipedia.
 
@@ -778,8 +251,8 @@ def list_matches() -> tuple[Response, int]:
 @bp.route("/teams/search", methods=["GET"])
 @bp.arguments(TeamSearchQuerySchema, location="query")
 @bp.response(200, TeamSchema(many=True))
-@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
-@error_response(503, Errors.SEARCH_ERROR, "Database connection error")
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@bp.error_response(503, Errors.SEARCH_ERROR, "Database connection error")
 def search_teams(args):
     """Search for teams by name or tag for autocomplete.
 
@@ -849,8 +322,8 @@ def search_teams(args):
 @bp.arguments(SnapshotCreateSchema)
 @bp.response(201, SnapshotSchema, description="New snapshot saved")
 @bp.alt_response(200, schema=SnapshotSchema, description="Snapshot with the same key refreshed")
-@error_response(422, Errors.TEAM_ID_MISMATCH, "Invalid body, or team_id differs from team.team_id")
-@error_response(500, Errors.FAILED_TO_STORE_SNAPSHOT, "Database error")
+@bp.error_response(422, Errors.TEAM_ID_MISMATCH, "Invalid body, or team_id differs from team.team_id")
+@bp.error_response(500, Errors.FAILED_TO_STORE_SNAPSHOT, "Database error")
 def create_snapshot(args) -> tuple[Response, int]:
     """Save what the Compare page shows for one team.
 
@@ -873,8 +346,8 @@ def create_snapshot(args) -> tuple[Response, int]:
 @bp.route("/snapshots", methods=["GET"])
 @bp.arguments(SnapshotListQuerySchema, location="query")
 @bp.response(200, SnapshotSchema(many=True))
-@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
-@error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@bp.error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
 def get_snapshots(args) -> tuple[Response, int]:
     """List saved team snapshots without their data, newest first.
 
@@ -890,8 +363,8 @@ def get_snapshots(args) -> tuple[Response, int]:
 
 @bp.route("/snapshots/<int:snapshot_id>", methods=["GET"])
 @bp.response(200, SnapshotDetailSchema)
-@error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
-@error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
+@bp.error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
+@bp.error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
 def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
     """Get one saved team snapshot with its data (`team`, `summary`, `players`)."""
     try:
@@ -907,9 +380,9 @@ def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
 @bp.route("/predictions", methods=["POST"])
 @bp.arguments(PredictionCreateSchema)
 @bp.response(201, PredictionSchema, description="Prediction saved")
-@error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
-@error_response(422, Errors.VALIDATION_ERROR, "Invalid body")
-@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
+@bp.error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Invalid body")
+@bp.error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def post_prediction(args) -> tuple[Response, int]:
     """Save a series-win prediction made from two saved team snapshots.
 
@@ -929,8 +402,8 @@ def post_prediction(args) -> tuple[Response, int]:
 @bp.route("/predictions", methods=["GET"])
 @bp.arguments(PredictionListQuerySchema, location="query")
 @bp.response(200, PredictionSchema(many=True))
-@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
-@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@bp.error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_predictions(args) -> tuple[Response, int]:
     """List predictions, newest first, with team names and logos from their snapshots and computed `bet_won`.
 
@@ -945,8 +418,8 @@ def get_predictions(args) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>", methods=["GET"])
 @bp.response(200, PredictionDetailSchema)
-@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
-@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
+@bp.error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@bp.error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
     """Get one prediction with both snapshots and their data, for the review page."""
     try:
@@ -961,8 +434,8 @@ def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>/head-to-head", methods=["GET"])
 @bp.response(200, HeadToHeadSchema)
-@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
-@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
+@bp.error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@bp.error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_prediction_head_to_head(prediction_id: int) -> tuple[Response, int]:
     """League matches between the prediction's two teams, from `days` before the prediction up to now.
 
@@ -981,9 +454,9 @@ def get_prediction_head_to_head(prediction_id: int) -> tuple[Response, int]:
 @bp.route("/predictions/<int:prediction_id>", methods=["PATCH"])
 @bp.arguments(PredictionReviewSchema)
 @bp.response(200, PredictionSchema, description="Review saved")
-@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
-@error_response(422, Errors.INVALID_RESULT, "Invalid body, or the score does not fit best_of")
-@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
+@bp.error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@bp.error_response(422, Errors.INVALID_RESULT, "Invalid body, or the score does not fit best_of")
+@bp.error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
     """Save the review: the actual result as maps won by each team, and a review note.
 
@@ -1012,9 +485,9 @@ def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
 @bp.route("/predictions/<int:prediction_id>", methods=["PUT"])
 @bp.arguments(PredictionDecisionSchema)
 @bp.response(200, PredictionSchema, description="Prediction updated")
-@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
-@error_response(422, Errors.INVALID_RESULT, "Invalid body, or the saved result does not fit the new best_of")
-@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
+@bp.error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@bp.error_response(422, Errors.INVALID_RESULT, "Invalid body, or the saved result does not fit the new best_of")
+@bp.error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def put_prediction(args, prediction_id: int) -> tuple[Response, int]:
     """Edit a saved prediction: odds, `best_of`, bet, stake and comment, all replaced together.
 
@@ -1034,8 +507,8 @@ def put_prediction(args, prediction_id: int) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>", methods=["DELETE"])
 @bp.response(204, description="Prediction deleted, its snapshots stay")
-@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
-@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
+@bp.error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@bp.error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def remove_prediction(prediction_id: int) -> tuple[Response, int] | tuple[str, int]:
     """Delete a prediction made by mistake. Its snapshots stay (and stay locked if another prediction uses them)."""
     try:

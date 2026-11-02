@@ -525,10 +525,10 @@ npm run celery:beat         # Queues due cache jobs every minute
 
 # Or direct celery command:
 # Development (Windows-compatible solo pool):
-python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo
+python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=solo
 
 # Production (Unix-compatible process pool):
-python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=prefork
+python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=prefork
 ```
 
 **Note:** Development uses `solo` pool for Windows compatibility. Windows does not support `prefork`.

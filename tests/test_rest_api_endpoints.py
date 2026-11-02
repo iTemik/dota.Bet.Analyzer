@@ -142,7 +142,7 @@ class TestStatisticsEndpoint:
                 ]
             )
 
-        monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
+        monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute)
 
         app = create_app(test_config={})
         client = app.test_client()
@@ -169,7 +169,7 @@ class TestStatisticsEndpoint:
         def fake_compute(teams):
             return StatsResponse(teams=[])
 
-        monkeypatch.setattr("backend.dota_bet_analyzer.compute_statistics", fake_compute)
+        monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute)
 
         app = create_app(test_config={})
         client = app.test_client()
