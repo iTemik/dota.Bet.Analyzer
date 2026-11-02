@@ -7,6 +7,8 @@ Requests are kept low by caching in d2ba.sqlite:
 - `/teams/{team_id}/matches` (one request returns the whole league history) is cached for TEAM_MATCHES_TTL.
 - Match lineups never change once a match is finished, so they are cached forever. Missing lineups are
   fetched with one explorer `match_id IN (...)` query per batch of matches.
+- A lineup with fewer than 10 players (anonymous accounts) is kept in Redis for SHORT_LINEUP_TTL, so it is not
+  asked again on every Compare while OpenDota may still fill it in.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from typing import Any, NamedTuple, Optional
 
 from pydantic import BaseModel
 
+from backend.cache import cache_get, cache_set
 from backend.db import get_cache_db
 from backend.logging_config import setup_logging
 from backend.models import FarmStats, LeagueForm, Player, TeamRoster
@@ -40,6 +43,8 @@ ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
 DAY_SECONDS = 24 * 60 * 60
 REQUEST_TIMEOUT = 30
 LINEUP_STATS = ("gold_per_min", "xp_per_min")  # Player match stats kept with a lineup
+SHORT_LINEUP_TTL = DAY_SECONDS  # A lineup with fewer than 10 players is not asked again for this long
+SHORT_LINEUP_KEY = "opendota:short_lineup:{match_id}"
 
 
 def window_start(days: int, now: int) -> int:
@@ -250,6 +255,22 @@ def _store_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
         logger.warning(f"Failed to cache lineup for match {match_id}: {exc}")
 
 
+def _load_short_lineup(match_id: int) -> Optional[list[LineupPlayer]]:
+    """Return the remembered short lineup of a match, or None if it is not in Redis."""
+    rows = cache_get(SHORT_LINEUP_KEY.format(match_id=int(match_id)))
+    if not isinstance(rows, list):
+        return None
+    try:
+        return [LineupPlayer(*row) for row in rows]
+    except TypeError:
+        return None
+
+
+def _store_short_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
+    """Remember a lineup with fewer than 10 players for SHORT_LINEUP_TTL."""
+    cache_set(SHORT_LINEUP_KEY.format(match_id=int(match_id)), SHORT_LINEUP_TTL, [list(p) for p in lineup])
+
+
 def _optional_int(value: Any) -> Optional[int]:
     """The value when it is an int, otherwise None."""
     return value if isinstance(value, int) else None
@@ -288,6 +309,7 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[LineupPlayer]]
 
     Matches missing from the cache are fetched with one explorer query per LINEUP_BATCH_SIZE matches.
     A match the explorer returns incomplete falls back to /matches/{id}, which is much larger.
+    When /matches answers and the lineup is still short, it is remembered in Redis for SHORT_LINEUP_TTL.
     Both teams are cached, so the opponent's lineup of the same match costs nothing later.
 
     Args:
@@ -300,6 +322,8 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[LineupPlayer]]
     missing: list[int] = []
     for match_id in dict.fromkeys(match_ids):
         cached = _load_cached_lineup(match_id)
+        if cached is None:
+            cached = _load_short_lineup(match_id)
         if cached is not None:
             lineups[match_id] = cached
         else:
@@ -310,13 +334,17 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[LineupPlayer]]
         grouped = _fetch_lineup_batch(batch)
         for match_id in batch:
             lineup = _rows_to_lineup(grouped.get(match_id))
+            answered = True
             if len(lineup) < 10:
                 payload = _get_json(f"{OPENDOTA_API}/matches/{int(match_id)}")
-                fallback = _rows_to_lineup(payload.get("players") if isinstance(payload, dict) else None)
+                answered = isinstance(payload, dict)
+                fallback = _rows_to_lineup(payload.get("players") if answered else None)
                 if len(fallback) > len(lineup):
                     lineup = fallback
             if len(lineup) >= 10:
                 _store_lineup(match_id, lineup)
+            elif answered:
+                _store_short_lineup(match_id, lineup)
             lineups[match_id] = lineup
     return lineups
 
