@@ -40,8 +40,7 @@ python -m venv .venv
 # 5. Install dependencies
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-npm install
-npm install --prefix frontend
+npm install   # also installs frontend packages
 
 # 6. Start Redis (Docker Desktop must be running)
 docker run -d --name redis-dota -p 6379:6379 redis:latest
@@ -75,8 +74,7 @@ source .venv/bin/activate
 # 4. Install dependencies
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-npm install
-npm install --prefix frontend
+npm install   # also installs frontend packages
 
 # 5. Start Redis
 docker run -d --name redis-dota -p 6379:6379 redis:latest
@@ -891,8 +889,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Check for leftover temp files in `tests/` directory
 
 **"vitest not found"**
-- Ensure frontend dependencies installed: `cd frontend && npm install`
-- Reinstall: `npm install` in workspace root
+- Reinstall dependencies: `npm install` in workspace root (installs frontend too)
 
 ---
 
