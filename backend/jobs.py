@@ -1,7 +1,8 @@
 """Background jobs that keep the caches (pro players, heroes, teams list, hero meta, Liquipedia matches) up to date.
 
-Each job is declared once in JOBS with how old its data may get (`stale_after`). A due job is queued as a Celery
-task on the `background` queue, served by its own worker, so Compare never waits behind it. Jobs are queued:
+Each job is declared once with @job(name, title, stale_after) on its run function, which adds it to JOBS. A due
+job is queued as a Celery task on the `background` queue, served by its own worker, so Compare never waits behind it.
+Jobs are queued:
 - every minute by Celery Beat (check_due_jobs_task) for every due job
 - at startup (Flask server only) for every due job
 - on team search and matches requests for the teams list
@@ -26,7 +27,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar
 
 import redis
 from celery.signals import worker_init  # type: ignore[import-untyped]
@@ -64,48 +65,6 @@ class UnknownJobError(Exception):
     """No job has this name."""
 
 
-def _run_pro_players() -> str:
-    from backend.pro_players import fetch_pro_players_from_api, store_pro_players
-
-    players = fetch_pro_players_from_api(background=True)
-    if not players:
-        raise ValueError("OpenDota returned no pro players")
-    return f"Stored {store_pro_players(players)} pro players"
-
-
-def _run_heroes() -> str:
-    from backend.heroes import fetch_heroes_from_api, store_heroes
-
-    heroes = fetch_heroes_from_api(background=True)
-    if not heroes:
-        raise ValueError("OpenDota returned no heroes")
-    return f"Stored {store_heroes(heroes)} heroes"
-
-
-def _run_hero_meta() -> str:
-    from backend.meta import refresh_hero_stats
-
-    heroes, _ = refresh_hero_stats(background=True)
-    if not heroes:
-        raise ValueError("OpenDota returned no hero stats")
-    return f"Cached stats of {len(heroes)} heroes"
-
-
-def _run_matches() -> str:
-    from backend.matches import refresh_matches
-
-    return f"Cached {len(refresh_matches(background=True))} series"
-
-
-def _run_teams(full: bool = False) -> str:
-    from backend.teams_sync import run_teams_sync
-
-    count = run_teams_sync(full=full)
-    if not count and get_synced_at("teams") is None:
-        raise ValueError("OpenDota returned no teams")
-    return f"Stored {count} teams" if count else "No new teams data"
-
-
 @dataclass(frozen=True)
 class Job:
     """A cache job.
@@ -126,27 +85,84 @@ class Job:
     run_full: Optional[Callable[[], str]] = None
 
 
-JOBS: dict[str, Job] = {
-    job.name: job
-    for job in (
-        # Team assignments of players change often, and the whole list is one request
-        Job(name="pro_players", title="Pro players", run=_run_pro_players, stale_after=24 * 3600),
-        # New heroes are rare; one request
-        Job(name="heroes", title="Heroes", run=_run_heroes, stale_after=7 * 86400),
-        # Incremental: 2 explorer requests (full ~22 only when the table is empty)
-        Job(
-            name="teams",
-            title="Teams list",
-            run=_run_teams,
-            stale_after=24 * 3600,
-            run_full=lambda: _run_teams(full=True),  # ~22 requests: every /teams page
-        ),
-        # One /heroStats request; OpenDota recomputes it a few times a day (Meta tab)
-        Job(name="hero_meta", title="Hero meta", run=_run_hero_meta, stale_after=3600),
-        # One Liquipedia parse (their limit: 1 per 30 s); upcoming and finished series of the main page
-        Job(name="matches", title="Matches", run=_run_matches, stale_after=10 * 60),
-    )
-}
+JOBS: dict[str, Job] = {}  # Filled by @job below, in declaration order (the Data status UI lists them so)
+
+RunFn = TypeVar("RunFn", bound=Callable[..., str])
+
+
+def job(name: str, title: str, stale_after: int, has_full: bool = False) -> Callable[[RunFn], RunFn]:
+    """Register the decorated function as the `run` of a cache job in JOBS.
+
+    Args:
+        name: Job name, also its `sync_state.name`
+        title: Shown to the user
+        stale_after: Seconds after the last success when the job is due again
+        has_full: The function takes `full: bool`; `full=True` becomes the job's `run_full`
+
+    Returns:
+        A decorator that returns the function unchanged
+    """
+
+    def register(run: RunFn) -> RunFn:
+        if name in JOBS:
+            raise ValueError(f"Job {name} is already registered")
+        run_full = (lambda: run(full=True)) if has_full else None
+        JOBS[name] = Job(name=name, title=title, run=run, stale_after=stale_after, run_full=run_full)
+        return run
+
+    return register
+
+
+# Team assignments of players change often, and the whole list is one request
+@job("pro_players", "Pro players", stale_after=24 * 3600)
+def _run_pro_players() -> str:
+    from backend.pro_players import fetch_pro_players_from_api, store_pro_players
+
+    players = fetch_pro_players_from_api(background=True)
+    if not players:
+        raise ValueError("OpenDota returned no pro players")
+    return f"Stored {store_pro_players(players)} pro players"
+
+
+# New heroes are rare; one request
+@job("heroes", "Heroes", stale_after=7 * 86400)
+def _run_heroes() -> str:
+    from backend.heroes import fetch_heroes_from_api, store_heroes
+
+    heroes = fetch_heroes_from_api(background=True)
+    if not heroes:
+        raise ValueError("OpenDota returned no heroes")
+    return f"Stored {store_heroes(heroes)} heroes"
+
+
+# Incremental: 2 explorer requests (full ~22 only when the table is empty); full run: every /teams page, ~22 requests
+@job("teams", "Teams list", stale_after=24 * 3600, has_full=True)
+def _run_teams(full: bool = False) -> str:
+    from backend.teams_sync import run_teams_sync
+
+    count = run_teams_sync(full=full)
+    if not count and get_synced_at("teams") is None:
+        raise ValueError("OpenDota returned no teams")
+    return f"Stored {count} teams" if count else "No new teams data"
+
+
+# One /heroStats request; OpenDota recomputes it a few times a day (Meta tab)
+@job("hero_meta", "Hero meta", stale_after=3600)
+def _run_hero_meta() -> str:
+    from backend.meta import refresh_hero_stats
+
+    heroes, _ = refresh_hero_stats(background=True)
+    if not heroes:
+        raise ValueError("OpenDota returned no hero stats")
+    return f"Cached stats of {len(heroes)} heroes"
+
+
+# One Liquipedia parse (their limit: 1 per 30 s); upcoming and finished series of the main page
+@job("matches", "Matches", stale_after=10 * 60)
+def _run_matches() -> str:
+    from backend.matches import refresh_matches
+
+    return f"Cached {len(refresh_matches(background=True))} series"
 
 
 def get_job(name: str) -> Job:
