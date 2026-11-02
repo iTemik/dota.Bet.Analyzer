@@ -109,8 +109,8 @@ describe('MetaTab', () => {
     expect(fetchMock).toHaveBeenCalledWith(DEFAULT_URL, undefined)
     expect(within(table()).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
       'Hero',
-      'Meta▲',
-      'Pro P+B',
+      'Meta',
+      'Pro P+B▼',
       'Pro Win',
       'Pub Picks',
       'Pub Win',
@@ -148,6 +148,17 @@ describe('MetaTab', () => {
     expect(cells[3]).toHaveAttribute('title', '25 wins in 40 pro picks')
     expect(cells[4]).toHaveAttribute('title', '1,234,567 picks, 49.4% of 2,500,000 Imm/Div/Anc matches')
     expect(cells[5]).toHaveAttribute('title', '650,000 wins in 1,234,567 Imm/Div/Anc picks')
+  })
+
+  it('sorts by Pro P+B, highest first, by default', async () => {
+    // An ultra hero with a lower Pick + Ban rate than a pro hero comes after it
+    const data = { ...meta, heroes: meta.heroes.map((h) => (h.localized_name === 'Delta' ? { ...h, pro_pick_ban_rate: 35 } : h)) }
+    mockFetch(data)
+    render(<MetaTab />)
+    await screen.findByRole('table', { name: 'Meta heroes' })
+    expect(names()).toEqual(['Alpha', 'Delta', 'Beta'])
+    expect(screen.getByRole('columnheader', { name: /Pro P\+B/ })).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByRole('columnheader', { name: /Meta/ })).toHaveAttribute('aria-sort', 'none')
   })
 
   it('sorts by a clicked column, highest first, and reverses on a second click', async () => {
