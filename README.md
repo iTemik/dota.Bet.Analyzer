@@ -40,7 +40,7 @@ python -m venv .venv
 # 5. Install dependencies
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-npm install   # also installs frontend packages
+npm install
 
 # 6. Start Redis (Docker Desktop must be running)
 docker run -d --name redis-dota -p 6379:6379 redis:latest
@@ -74,7 +74,7 @@ source .venv/bin/activate
 # 4. Install dependencies
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-npm install   # also installs frontend packages
+npm install
 
 # 5. Start Redis
 docker run -d --name redis-dota -p 6379:6379 redis:latest
