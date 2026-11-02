@@ -349,18 +349,6 @@ def get_match_lineups(match_ids: Iterable[int]) -> dict[int, list[LineupPlayer]]
     return lineups
 
 
-def get_match_lineup(match_id: int) -> list[LineupPlayer]:
-    """Get all players of one match with their match stats (cached forever).
-
-    Args:
-        match_id: Match identifier
-
-    Returns:
-        Lineup players (empty if unavailable)
-    """
-    return get_match_lineups([match_id]).get(match_id, [])
-
-
 def _team_side(lineup: list[LineupPlayer], radiant: bool) -> list[LineupPlayer]:
     """Players on the given side with a known account, ordered by slot."""
     return [p for p in sorted(lineup) if is_radiant(p.player_slot) == radiant and p.account_id]

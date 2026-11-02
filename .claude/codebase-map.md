@@ -12,7 +12,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | Module | Holds |
 |---|---|
 | `__init__.py` | create_app (singleton unless test_config), 422 handler → ErrorSchema, registers bp, queues due jobs at startup (not in TESTING) |
-| `config.py` | Config from env: REDIS_HOST/PORT, OPENDOTA_MIN_INTERVAL 1.2, OPENDOTA_DAILY_LIMIT 1800, LIQUIPEDIA_MIN_INTERVAL 30 |
+| `config.py` | Config from env: REDIS_HOST/PORT, CELERY_BROKER_URL/CELERY_RESULT_BACKEND (default Redis db 0, read by celery_app), OPENDOTA_RATE_LIMIT 50 per OPENDOTA_RATE_WINDOW 60 s, OPENDOTA_DAILY_LIMIT 1800, LIQUIPEDIA_RATE_WINDOW 30 |
 | `dota_bet_analyzer.py` | ALL routes (~1300 lines) + `players_statistics_task` (Celery, default queue) + stream generators |
 | `celery_app.py` | `celery`, BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
 | `opendota.py` | ONLY OpenDota HTTP: `get_json(path, params, timeout, on_wait, background)` → JSON or raises `OpenDotaError(status, code, message)`; `opendota_get` raw; retry 403/429/timeouts; `OPENDOTA_LIMITER`; `is_radiant(slot)` |
