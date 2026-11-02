@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import ComparisonTable from './components/ComparisonTable'
 import Bar from './components/Bar'
+import Collapsible from './components/Collapsible'
 import DataStatus from './components/DataStatus'
 import MatchesTables from './components/MatchesTables'
 import MetaTab from './components/MetaTab'
@@ -52,8 +53,6 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
-  const [showRawStats, setShowRawStats] = useState(false)
-  const [showSummaryData, setShowSummaryData] = useState(false)
   const [hash, setHash] = useState(() => window.location.hash)
   const tab = tabFromHash(hash)
   const predictionId = predictionIdFromHash(hash)
@@ -363,24 +362,13 @@ function App() {
         {/* Raw JSON stays at the very bottom, below the matches */}
         {statistics && (
           <div className="results-section raw-json-section">
-            <div className="collapsible-header" onClick={() => setShowRawStats(!showRawStats)}>
-              <h2>Raw team stats JSON</h2>
-              <span className={`collapsible-toggle ${showRawStats ? 'expanded' : ''}`}>▼</span>
-            </div>
-            <div className={`collapsible-content ${showRawStats ? 'expanded' : ''}`}>
+            <Collapsible title="Raw team stats JSON">
               <pre>{JSON.stringify(statistics, null, 2)}</pre>
-            </div>
-
+            </Collapsible>
             {summaryData && (
-              <>
-                <div className="collapsible-header" onClick={() => setShowSummaryData(!showSummaryData)}>
-                  <h2>Match Statistics Summary</h2>
-                  <span className={`collapsible-toggle ${showSummaryData ? 'expanded' : ''}`}>▼</span>
-                </div>
-                <div className={`collapsible-content ${showSummaryData ? 'expanded' : ''}`}>
-                  <pre>{JSON.stringify(summaryData, null, 2)}</pre>
-                </div>
-              </>
+              <Collapsible title="Match Statistics Summary">
+                <pre>{JSON.stringify(summaryData, null, 2)}</pre>
+              </Collapsible>
             )}
           </div>
         )}
