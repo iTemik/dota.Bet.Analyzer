@@ -89,7 +89,7 @@ def test_unknown_prediction_returns_404(client):
 
 
 def test_database_error_returns_500(client):
-    with patch("backend.dota_bet_analyzer.get_head_to_head", side_effect=sqlite3.OperationalError("locked")):
+    with patch("backend.routes.predictions.get_head_to_head", side_effect=sqlite3.OperationalError("locked")):
         response = client.get("/api/predictions/1/head-to-head")
 
     assert response.status_code == 500

@@ -121,7 +121,7 @@ class TestCreatePrediction:
         assert post_prediction(client, body).status_code == 422
 
     def test_database_error_returns_500(self, client, snapshots):
-        with patch("backend.dota_bet_analyzer.create_prediction", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.create_prediction", side_effect=sqlite3.OperationalError("locked")):
             response = client.post("/api/predictions", json=prediction_body(snapshots))
 
         assert response.status_code == 500
@@ -192,7 +192,7 @@ class TestListPredictions:
         assert client.get("/api/predictions?status=won").status_code == 422
 
     def test_database_error_returns_500(self, client):
-        with patch("backend.dota_bet_analyzer.list_predictions", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.list_predictions", side_effect=sqlite3.OperationalError("locked")):
             response = client.get("/api/predictions")
 
         assert response.status_code == 500
@@ -408,7 +408,7 @@ class TestEditPrediction:
     def test_database_error_returns_500(self, client, snapshots):
         prediction_id = self.create(client, snapshots)
 
-        with patch("backend.dota_bet_analyzer.update_decision", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.update_decision", side_effect=sqlite3.OperationalError("locked")):
             response = client.put(f"/api/predictions/{prediction_id}", json=decision_body())
 
         assert response.status_code == 500

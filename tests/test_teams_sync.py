@@ -127,8 +127,8 @@ def test_requests_queue_teams_job_when_due(app, client, url):
     app.config["TESTING"] = False
     try:
         with (
-            patch("backend.dota_bet_analyzer.queue_job_if_due") as mock_sync,
-            patch("backend.dota_bet_analyzer.get_matches", return_value={"upcoming": [], "finished": []}),
+            patch("backend.routes.catalog.queue_job_if_due") as mock_sync,
+            patch("backend.routes.catalog.get_matches", return_value={"upcoming": [], "finished": []}),
         ):
             client.get(url)
     finally:
@@ -137,6 +137,6 @@ def test_requests_queue_teams_job_when_due(app, client, url):
 
 
 def test_requests_in_tests_never_queue_jobs(client):
-    with patch("backend.dota_bet_analyzer.queue_job_if_due") as mock_sync:
+    with patch("backend.routes.catalog.queue_job_if_due") as mock_sync:
         client.get("/api/teams/search?q=Team")
     mock_sync.assert_not_called()

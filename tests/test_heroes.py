@@ -84,7 +84,7 @@ def test_get_heroes_sorted_by_name(app, client, mock_get_json):
 
 
 def test_get_heroes_database_error(client):
-    with patch("backend.dota_bet_analyzer.list_heroes", side_effect=sqlite3.OperationalError("no such table")):
+    with patch("backend.routes.catalog.list_heroes", side_effect=sqlite3.OperationalError("no such table")):
         response = client.get("/api/heroes")
 
     assert response.status_code == 500

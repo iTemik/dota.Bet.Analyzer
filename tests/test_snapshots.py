@@ -148,7 +148,7 @@ class TestCreateSnapshot:
         assert response.get_json()["code"] == "TEAM_ID_MISMATCH"
 
     def test_database_error_returns_500(self, client):
-        with patch("backend.dota_bet_analyzer.save_snapshot", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.save_snapshot", side_effect=sqlite3.OperationalError("locked")):
             response = client.post("/api/snapshots", json=snapshot_body())
 
         assert response.status_code == 500
@@ -200,7 +200,7 @@ class TestListSnapshots:
         assert client.get(f"/api/snapshots?{query}").status_code == 422
 
     def test_database_error_returns_500(self, client):
-        with patch("backend.dota_bet_analyzer.list_snapshots", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.list_snapshots", side_effect=sqlite3.OperationalError("locked")):
             response = client.get("/api/snapshots")
 
         assert response.status_code == 500
@@ -228,7 +228,7 @@ class TestGetSnapshot:
         assert response.get_json()["code"] == "SNAPSHOT_NOT_FOUND"
 
     def test_database_error_returns_500(self, client):
-        with patch("backend.dota_bet_analyzer.get_snapshot", side_effect=sqlite3.OperationalError("locked")):
+        with patch("backend.routes.predictions.get_snapshot", side_effect=sqlite3.OperationalError("locked")):
             response = client.get("/api/snapshots/1")
 
         assert response.status_code == 500

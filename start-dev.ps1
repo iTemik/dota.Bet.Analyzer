@@ -75,11 +75,11 @@ $backendCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; flask --app back
 Start-InNewTerminal "Backend (http://localhost:5000)" $backendCmd
 
 # Celery Worker
-$celeryCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo"
+$celeryCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=solo"
 Start-InNewTerminal "Celery Worker" $celeryCmd
 
 # Celery Worker for background cache jobs
-$celeryBgCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo -Q background -n background"
+$celeryBgCmd = "cd `"$scriptDir`"; .\.venv\Scripts\Activate.ps1; python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=solo -Q background -n background"
 Start-InNewTerminal "Celery Background Worker" $celeryBgCmd
 
 # Celery Beat: queues due cache jobs every minute
