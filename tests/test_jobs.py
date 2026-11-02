@@ -91,6 +91,33 @@ def test_registry_has_every_cache_job():
         jobs.get_job("nope")
 
 
+def test_job_decorator_registers_job(monkeypatch):
+    monkeypatch.setattr(jobs, "JOBS", {})
+
+    @jobs.job("simple", "Simple", stale_after=60)
+    def run_simple() -> str:
+        return "simple done"
+
+    @jobs.job("with_full", "With full", stale_after=120, has_full=True)
+    def run_with_full(full: bool = False) -> str:
+        return "full done" if full else "quick done"
+
+    simple, with_full = jobs.JOBS["simple"], jobs.JOBS["with_full"]
+    assert (simple.title, simple.stale_after, simple.run_full) == ("Simple", 60, None)
+    assert simple.run is run_simple
+    assert simple.run() == "simple done"
+    assert (with_full.title, with_full.stale_after) == ("With full", 120)
+    assert with_full.run() == "quick done"
+    assert with_full.run_full is not None
+    assert with_full.run_full() == "full done"
+    with pytest.raises(ValueError, match="already registered"):
+        jobs.job("simple", "Again", stale_after=1)(run_simple)
+
+
+def test_only_teams_job_has_full_run():
+    assert [name for name, job in jobs.JOBS.items() if job.run_full] == ["teams"]
+
+
 def test_never_run_job_is_idle_and_due(app, test_job):
     with app.app_context():
         status = job_status(jobs.JOBS["teams"])
