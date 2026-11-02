@@ -27,7 +27,7 @@ Get the project running **from scratch**. Choose your platform:
 # - Docker Desktop: https://www.docker.com/products/docker-desktop/
 
 # 2. Clone and navigate
-git clone <repository-url>
+git clone https://github.com/iTemik/dota.Bet.Analyzer.git
 cd dota.Bet.Analyzer
 
 # 3. Set execution policy (once per machine)
@@ -42,12 +42,14 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 npm install
 
-# 6. Start Redis (in a new terminal)
+# 6. Start Redis (Docker Desktop must be running)
 docker run -d --name redis-dota -p 6379:6379 redis:latest
 
-# 7. Run all services ⭐
+# 7. Run all services ⭐ (applies DB migrations; Ctrl+C stops all)
 npm run dev
 ```
+
+Next times: `docker start redis-dota`, then `npm run dev` in the project folder.
 
 ✅ Open browser to **http://localhost:5173**
 - Backend: http://localhost:5000
@@ -62,7 +64,7 @@ npm run dev
 # Linux: sudo apt install python3.14 nodejs docker.io
 
 # 2. Clone and navigate
-git clone <repository-url>
+git clone https://github.com/iTemik/dota.Bet.Analyzer.git
 cd dota.Bet.Analyzer
 
 # 3. Create virtual environment
@@ -74,8 +76,9 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 npm install
 
-# 5. Start Redis (in a new terminal)
+# 5. Start Redis
 docker run -d --name redis-dota -p 6379:6379 redis:latest
+# Next times: docker start redis-dota
 
 # 6. Run all services ⭐
 npm run dev
@@ -124,7 +127,7 @@ Once your environment is set up, these are the commands you'll use most:
 | **Activate Python venv** | `.\.venv\Scripts\Activate.ps1` (Windows) or `source .venv/bin/activate` (Linux) |
 | **Initialize databases** | `npm run migrate` (`npm run dev` runs it too) |
 | **View API docs** | Open http://localhost:5000/api/swagger-ui |
-| **Stop Redis** | `docker stop redis-dota && docker rm redis-dota` |
+| **Stop Redis** | `docker stop redis-dota` |
 
 ---
 
@@ -886,8 +889,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Check for leftover temp files in `tests/` directory
 
 **"vitest not found"**
-- Ensure frontend dependencies installed: `cd frontend && npm install`
-- Reinstall: `npm install` in workspace root
+- Reinstall dependencies: `npm install` in workspace root (installs frontend too)
 
 ---
 
