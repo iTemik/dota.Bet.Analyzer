@@ -56,8 +56,7 @@ def register_routes(api: Api) -> None:
     Args:
         api: The flask-smorest Api of the app
     """
-    from backend.dota_bet_analyzer import bp as dota_bp
-    from backend.routes.statistics import bp as statistics_bp
+    from backend.routes import catalog, jobs, predictions, statistics
 
-    api.register_blueprint(statistics_bp)
-    api.register_blueprint(dota_bp)
+    for module in (statistics, predictions, catalog, jobs):
+        api.register_blueprint(module.bp)

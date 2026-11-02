@@ -55,12 +55,12 @@ BACKEND_PID=$!
 
 # Celery Worker
 echo "✓ Starting Celery Worker"
-python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo &
+python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=solo &
 CELERY_PID=$!
 
 # Celery Worker for background cache jobs
 echo "✓ Starting Celery Background Worker"
-python -m celery -A backend.dota_bet_analyzer.celery worker --loglevel=info --pool=solo -Q background -n background &
+python -m celery -A backend.celery_app.celery worker --loglevel=info --pool=solo -Q background -n background &
 CELERY_BG_PID=$!
 
 # Celery Beat: queues due cache jobs every minute

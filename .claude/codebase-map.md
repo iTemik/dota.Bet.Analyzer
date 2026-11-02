@@ -11,11 +11,13 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 ## Backend (`backend/`, Flask + flask-smorest, one `ApiBlueprint` `bp` per route module, prefix /api)
 | Module | Holds |
 |---|---|
-| `__init__.py` | create_app (singleton unless test_config), 422 handler → ErrorSchema, registers bp, queues due jobs at startup (not in TESTING) |
+| `__init__.py` | create_app (singleton unless test_config), 422 handler → ErrorSchema, calls `routes.register_routes`, queues due jobs at startup (not in TESTING) |
 | `config.py` | Config from env: REDIS_HOST/PORT, CELERY_BROKER_URL/CELERY_RESULT_BACKEND (default Redis db 0, read by celery_app), OPENDOTA_RATE_LIMIT 50 per OPENDOTA_RATE_WINDOW 60 s, OPENDOTA_DAILY_LIMIT 1800, LIQUIPEDIA_RATE_WINDOW 30 |
 | `routes/__init__.py` | `ApiBlueprint` (/api prefix, `bp.error_response(...)` Swagger helper), `register_routes(api)` (called by create_app) |
 | `routes/statistics.py` | /statistics, /statistics/players, /stream-progress, /results + progress stream generator |
-| `dota_bet_analyzer.py` | the other routes (being split into `routes/`) + jobs stream generator |
+| `routes/jobs.py` | /jobs, /jobs/stream (+ `_generate_jobs_stream`), /jobs/<name>/run |
+| `routes/catalog.py` | /version (`full_version()`), /heroes, /heroes/meta, /matches, /teams/search (both queue the teams job when due) |
+| `routes/predictions.py` | /snapshots, /predictions, /predictions/<id>/head-to-head |
 | `tasks.py` | `players_statistics_task` (Celery, default queue) |
 | `celery_app.py` | `celery` (workers: `-A backend.celery_app.celery`, include tasks + jobs), BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
 | `opendota.py` | ONLY OpenDota HTTP: `get_json(path, params, timeout, on_wait, background)` → JSON or raises `OpenDotaError(status, code, message)`; `opendota_get` raw; retry 403/429/timeouts; `OPENDOTA_LIMITER`; `is_radiant(slot)` |
@@ -54,7 +56,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - `predictions.sqlite` = user data, back up. Migrations `backend/migrations/predictions/`. Tables: team_snapshots (JSON `data`, UNIQUE team+date+days+last_match_time), predictions.
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 
-## API (`backend/routes/` and dota_bet_analyzer.py)
+## API (`backend/routes/`; Swagger sections Statistics, Predictions, Catalog, Jobs)
 GET /version · GET /statistics?team=|team_id=&days= · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run (`?full=true` teams only) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head. Swagger: /api/swagger-ui.
 
 ## Recipes

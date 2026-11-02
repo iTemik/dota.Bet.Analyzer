@@ -308,7 +308,7 @@ def test_get_jobs_endpoint(client):
 
 
 def test_get_jobs_database_error(client):
-    with patch("backend.dota_bet_analyzer.list_job_statuses", side_effect=RuntimeError("disk")):
+    with patch("backend.routes.jobs.list_job_statuses", side_effect=RuntimeError("disk")):
         rv = client.get("/api/jobs")
     assert rv.status_code == 500
     assert rv.get_json()["code"] == "FAILED_TO_READ_JOBS"
@@ -398,31 +398,31 @@ def test_data_status_has_jobs_and_budget(app):
 
 
 def test_jobs_stream_sends_status_lines(app):
-    from backend.dota_bet_analyzer import _generate_jobs_stream
+    from backend.routes.jobs import _generate_jobs_stream
 
     statuses = [{"jobs": [], "budget": {"used": 1, "limit": 10}}] * 2 + [
         {"jobs": [], "budget": {"used": 2, "limit": 10}}
     ]
     with (
         app.app_context(),
-        patch("backend.dota_bet_analyzer.data_status", side_effect=statuses),
-        patch("backend.dota_bet_analyzer.time.sleep"),
-        patch("backend.dota_bet_analyzer.time.monotonic", side_effect=[0, 0, 1, 2.5]),
+        patch("backend.routes.jobs.data_status", side_effect=statuses),
+        patch("backend.routes.jobs.time.sleep"),
+        patch("backend.routes.jobs.time.monotonic", side_effect=[0, 0, 1, 2.5]),
     ):
         lines = list(_generate_jobs_stream(max_runtime=3, interval=1))
     assert [json.loads(line)["budget"]["used"] for line in lines] == [1, 2]  # unchanged status not sent again
 
 
 def test_jobs_stream_error_line(app):
-    from backend.dota_bet_analyzer import _generate_jobs_stream
+    from backend.routes.jobs import _generate_jobs_stream
 
-    with app.app_context(), patch("backend.dota_bet_analyzer.data_status", side_effect=RuntimeError("disk")):
+    with app.app_context(), patch("backend.routes.jobs.data_status", side_effect=RuntimeError("disk")):
         lines = list(_generate_jobs_stream())
     assert json.loads(lines[0]) == {"error": "disk"}
 
 
 def test_jobs_stream_endpoint(client):
-    with patch("backend.dota_bet_analyzer._generate_jobs_stream", return_value=iter(['{"jobs": []}\n'])):
+    with patch("backend.routes.jobs._generate_jobs_stream", return_value=iter(['{"jobs": []}\n'])):
         rv = client.get("/api/jobs/stream")
     assert rv.status_code == 200
     assert rv.mimetype == "text/event-stream"

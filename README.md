@@ -109,7 +109,7 @@ After running the commands above:
 1. **Explore the UI** - Try searching for teams like "Liquid" or "Alliance"
 2. **Check the API** - Visit http://localhost:5000/api/swagger-ui to see all endpoints
 3. **Run the tests** - `npm test` to ensure everything works
-4. **Read the code** - Start with [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py) and [frontend/src/App.tsx](frontend/src/App.tsx)
+4. **Read the code** - Start with [backend/routes/](backend/routes/) and [frontend/src/App.tsx](frontend/src/App.tsx)
 5. **Check git workflow** - See **[VERSIONING.md](VERSIONING.md)** for development practices
 
 ---
@@ -154,7 +154,9 @@ Once your environment is set up, these are the commands you'll use most:
 ```
 dota.Bet.Analyzer/
 ├── backend/                 # Flask API + Celery tasks
-│   ├── dota_bet_analyzer.py # Main app & routes
+│   ├── __init__.py         # App factory (create_app)
+│   ├── routes/             # API routes, one module per area
+│   ├── tasks.py            # Celery task for Compare
 │   ├── task_store.py       # Redis progress, results & player cache
 │   ├── stats.py            # Statistics logic
 │   ├── pro_players.py      # Pro player management
@@ -178,7 +180,7 @@ dota.Bet.Analyzer/
 ```
 
 **Key files to explore:**
-- **Backend entry**: [backend/dota_bet_analyzer.py](backend/dota_bet_analyzer.py)
+- **Backend entry**: [backend/__init__.py](backend/__init__.py) (create_app) and [backend/routes/](backend/routes/)
 - **Frontend entry**: [frontend/src/App.tsx](frontend/src/App.tsx)
 - **Tests config**: [tests/conftest.py](tests/conftest.py)
 
