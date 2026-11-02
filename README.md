@@ -725,7 +725,7 @@ npm test          # Run tests
 
 #### Meta
 - One compact table of pro, ultra and pub meta heroes, like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B, Pro Win, Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
-- Click a column header to sort (highest first, click again to reverse); hover a number for the picks, bans and wins behind it
+- Sorted by Pro P+B (highest first) by default; click a column header to sort (highest first, click again to reverse); hover a number for the picks, bans and wins behind it
 - Thresholds, Apply, Defaults and Refresh data sit below the table; thresholds are kept in the browser
 
 #### Predictions

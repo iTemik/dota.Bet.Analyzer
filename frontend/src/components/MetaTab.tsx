@@ -172,8 +172,8 @@ interface Sort {
   key: string
   dir: 'asc' | 'desc'
 }
-// The backend order: ultra, pro, then pub only, each by pro Pick + Ban
-const DEFAULT_SORT: Sort = { key: 'meta', dir: 'asc' }
+// Most picked and banned in pro matches first
+const DEFAULT_SORT: Sort = { key: 'pro_pick_ban_rate', dir: 'desc' }
 
 // Sorted copy; empty values last, ties keep the backend order
 const sortHeroes = (heroes: MetaHero[], sort: Sort): MetaHero[] => {
