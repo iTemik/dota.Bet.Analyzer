@@ -56,6 +56,7 @@ class Errors:
     TOO_MANY_TEAMS = ErrorDefinition("TOO_MANY_TEAMS", "Too many teams (maximum 10)")
     UNEXPECTED_ERROR = ErrorDefinition("UNEXPECTED_ERROR", "An unexpected error occurred")
     UNSUPPORTED_METHOD = ErrorDefinition("UNSUPPORTED_METHOD", "HTTP method not supported")
+    VALIDATION_ERROR = ErrorDefinition("VALIDATION_ERROR", "Validation failed")
 
 
 class ApiError(BaseModel):
