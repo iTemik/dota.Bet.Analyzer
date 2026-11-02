@@ -20,11 +20,12 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `jobs.py` | Cache job registry `JOBS` (pro_players 24h, heroes 7d, teams 24h, hero_meta 1h, matches 10min), `queue_job(name, full)`, `queue_job_if_due`, `run_job`, optional `Job.run_full` (teams), status in Redis, last success in `sync_state` |
 | `cache.py` | The app's ONE Redis db1 client `redis_client` (jobs, meta, matches, task_store, RateLimiter default use it); `cache_get`, `cache_set`, `cached_json(key, ttl, fetch, error_ttl=None, use=None)`: with error_ttl a ConnectionError/ValueError from fetch is cached as `{"error": msg}` and raised again as ConnectionError; `use(value)` False refetches |
 | `task_store.py` | (uses cache.redis_client) `update_progress`, `start_task(task, team_id=None, **kwargs)` → (task_id, celery_id) with ids `task_<team_id>_<uuid hex>` / `task_<uuid hex>`, `ProgressReporter`, `store_results`/`get_results`, `get_matches_cached` (1h), `get_rank_cached` (1d), progress pub/sub |
-| `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; models TeamStats, MatchStats, MatchesSummary, StatsResponse, RankTally; `get_matches`, `get_rank` (both raise OpenDotaError on a failed request, so errors are never cached), `get_team_matches_summary` |
+| `stats.py` | Compare: `compute_statistics` (sync, in request) → per team explorer lookup, team info, roster, rating change, starts `players_statistics_task`; RankTally; `get_matches`, `get_rank` (both raise OpenDotaError on a failed request, so errors are never cached), `get_team_matches_summary` |
+| `models.py` | pydantic data models (imports only helpers + opendota, so no cycles): Player, FarmStats, LeagueForm, TeamRoster, TeamStats, MatchStats, StatsResponse, MatchesSummary; new shared models go here |
 | `rosters.py` | `resolve_roster`, `classify_roster` (core rule), `get_team_league_matches` (SQLite, 2h TTL), `get_match_lineups` (SQLite forever, explorer batches of 20), `window_start`, `DAY_SECONDS` |
 | `ratings.py` | `window_rating_change` Elo back-calc, no requests |
 | `db.py` | The ONLY SQLite connections: `get_cache_db()` (instance/d2ba.sqlite, WAL mode), `get_user_db()` (instance/predictions.sqlite, foreign keys on, rollback journal), both 15 s busy timeout, per app context, closed on teardown |
-| `pro_players.py` | `Player`, pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
+| `pro_players.py` | pro players fetch/store, `get_players_by_team`, teams fetch/store (full /teams pages) |
 | `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages; only the `teams` job calls it |
 | `heroes.py` | /constants/heroes → `heroes` table, `list_heroes` |
 | `meta.py` | /heroStats → Redis `opendota:hero_stats:v2` (2h, errors 60s), `MetaParams`, `compute_meta`, `get_meta` |

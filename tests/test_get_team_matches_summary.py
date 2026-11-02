@@ -2,7 +2,8 @@
 
 import pytest
 
-from backend.stats import MatchesSummary, MatchStats, get_team_matches_summary
+from backend.models import MatchesSummary, MatchStats
+from backend.stats import get_team_matches_summary
 
 
 class TestGetTeamMatchesSummary:

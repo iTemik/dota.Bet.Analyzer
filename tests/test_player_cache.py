@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.stats import MatchStats
+from backend.models import MatchStats
 
 MATCH = MatchStats(match_id=1, player_slot=0, radiant_win=True, game_mode=22, lobby_type=7, hero_id=5)
 

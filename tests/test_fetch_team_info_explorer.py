@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.stats import ApiError, TeamStats, _fetch_team
+from backend.models import TeamStats
+from backend.stats import ApiError, _fetch_team
 
 
 @pytest.fixture(autouse=True)

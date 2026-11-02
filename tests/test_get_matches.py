@@ -3,8 +3,9 @@
 import pytest
 import requests
 
+from backend.models import MatchStats
 from backend.opendota import OpenDotaError
-from backend.stats import MatchStats, get_matches
+from backend.stats import get_matches
 
 
 class DummyResponse:

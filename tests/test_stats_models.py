@@ -2,7 +2,8 @@ import re
 
 import requests
 
-from backend.stats import Player, StatsResponse, compute_statistics
+from backend.models import Player, StatsResponse
+from backend.stats import compute_statistics
 
 
 class DummyResponse:

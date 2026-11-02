@@ -7,8 +7,8 @@ import pytest
 
 def test_stats_response_schema_fields_match_pydantic():
     """Verify StatsResponseSchema has same fields as StatsResponse Pydantic model."""
+    from backend.models import StatsResponse
     from backend.schemas import StatsResponseSchema
-    from backend.stats import StatsResponse
 
     pydantic_fields = set(StatsResponse.model_fields.keys())
     schema_fields = set(StatsResponseSchema().fields.keys())
@@ -24,8 +24,8 @@ def test_stats_response_schema_fields_match_pydantic():
 
 def test_team_stats_schema_fields_match_pydantic():
     """Verify TeamStatsSchema has same fields as TeamStats Pydantic model."""
+    from backend.models import TeamStats
     from backend.schemas import TeamStatsSchema
-    from backend.stats import TeamStats
 
     pydantic_fields = set(TeamStats.model_fields.keys())
     schema_fields = set(TeamStatsSchema().fields.keys())
@@ -41,7 +41,7 @@ def test_team_stats_schema_fields_match_pydantic():
 
 def test_player_schema_fields_match_pydantic():
     """Verify PlayerSchema has same fields as Player Pydantic model."""
-    from backend.pro_players import Player
+    from backend.models import Player
     from backend.schemas import PlayerSchema
 
     pydantic_fields = set(Player.model_fields.keys())
@@ -58,9 +58,8 @@ def test_player_schema_fields_match_pydantic():
 
 def test_stats_response_serialization_compatibility():
     """Verify Marshmallow schema can serialize Pydantic model output."""
-    from backend.pro_players import Player
+    from backend.models import Player, StatsResponse, TeamStats
     from backend.schemas import StatsResponseSchema
-    from backend.stats import StatsResponse, TeamStats
 
     # Create sample Pydantic instance
     sample_response = StatsResponse(
@@ -97,8 +96,8 @@ def test_stats_response_serialization_compatibility():
 
 def test_pydantic_to_marshmallow_utility():
     """Test the pydantic_to_marshmallow() auto-generation utility."""
+    from backend.models import Player
     from backend.schemas import pydantic_to_marshmallow
-    from backend.stats import Player
 
     # Auto-generate schema
     PlayerSchemaGenerated = pydantic_to_marshmallow(Player)
@@ -292,9 +291,9 @@ def test_team_stats_error_field_nested_schema() -> None:
 
 def test_stats_response_with_api_error_serialization() -> None:
     """Verify StatsResponse correctly serializes TeamStats with ApiError."""
-    from backend.pro_players import Player
+    from backend.models import Player, StatsResponse, TeamStats
     from backend.schemas import StatsResponseSchema
-    from backend.stats import ApiError, StatsResponse, TeamStats
+    from backend.stats import ApiError
 
     # Create response with error
     sample_response = StatsResponse(

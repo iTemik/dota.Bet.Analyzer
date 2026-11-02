@@ -10,8 +10,9 @@ from redis.client import PubSub
 from backend import cache
 from backend.cache import cached_json
 from backend.logging_config import setup_logging
+from backend.models import MatchStats
 from backend.opendota import WaitCallback
-from backend.stats import MatchStats, get_matches, get_rank
+from backend.stats import get_matches, get_rank
 
 logger = setup_logging(__name__)
 

@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.rosters import TeamRoster
-from backend.stats import ApiError, Player, StatsResponse, TeamStats, compute_statistics
+from backend.models import Player, StatsResponse, TeamRoster, TeamStats
+from backend.stats import ApiError, compute_statistics
 
 
 class TestComputeStatisticsByNames:

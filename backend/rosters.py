@@ -15,14 +15,14 @@ import sqlite3
 import statistics
 import time
 from collections.abc import Iterable
-from typing import Any, List, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from backend.db import get_cache_db
 from backend.logging_config import setup_logging
+from backend.models import FarmStats, LeagueForm, Player, TeamRoster
 from backend.opendota import OPENDOTA_API, OpenDotaError, get_json, is_radiant
-from backend.pro_players import Player
 
 logger = setup_logging(__name__)
 
@@ -113,88 +113,6 @@ class LineupPlayer(NamedTuple):
     account_id: int
     gold_per_min: Optional[int] = None
     xp_per_min: Optional[int] = None
-
-
-class FarmStats(BaseModel):
-    """Medians of the team's highest and second highest GPM and XPM per league game.
-
-    GPM and XPM are ranked separately: the top GPM and the top XPM of a game can belong to different players.
-
-    Attributes:
-        games: Number of games with known GPM and XPM
-        gold_per_min_top1: Median of the highest gold per minute
-        gold_per_min_top2: Median of the second highest gold per minute
-        xp_per_min_top1: Median of the highest experience per minute
-        xp_per_min_top2: Median of the second highest experience per minute
-    """
-
-    games: int
-    gold_per_min_top1: float
-    gold_per_min_top2: float
-    xp_per_min_top1: float
-    xp_per_min_top2: float
-
-
-class LeagueForm(BaseModel):
-    """League results of a team over a recent period.
-
-    Attributes:
-        days: Length of the period in days
-        matches: Number of league matches in the period
-        wins: Number of league wins
-        losses: Number of league losses
-        win_percentage: Wins share in percent (None when there are no matches)
-        last_match_time: Start time of the latest league match (unix seconds)
-        radiant_matches: League matches played on Radiant
-        radiant_wins: League wins on Radiant
-        radiant_win_percentage: Radiant wins share in percent (None when the team never played on Radiant)
-        duration_median: Median match length in seconds (None when no duration is known)
-        farm: Top 1 and top 2 GPM and XPM medians (None when no game has known GPM and XPM)
-    """
-
-    days: int
-    matches: int = 0
-    wins: int = 0
-    losses: int = 0
-    win_percentage: Optional[float] = None
-    last_match_time: Optional[int] = None
-    radiant_matches: int = 0
-    radiant_wins: int = 0
-    radiant_win_percentage: Optional[float] = None
-    duration_median: Optional[float] = None
-    farm: Optional[FarmStats] = None
-
-
-class TeamRoster(BaseModel):
-    """Active roster resolved from the team's recent league matches.
-
-    Attributes:
-        players: Main roster: the ROSTER_SIZE players with the most league games in the activity window
-            (empty when there was no league match in the window or the API failed)
-        other_players: Other active players: played league games for the team in the window but not enough
-            for the main roster (a backup, a replaced player). Players without games in the window are not included.
-        standins_count: Stand-ins: players who played in the window but are outside the core (`is_core` False);
-            without a clear core, the players outside the main roster
-        games_checked: Number of league games in the window whose lineup was looked at
-        last_match_id: Latest league match played by at least ROSTER_MAJORITY main roster players
-        last_match_time: Start time of that match (unix seconds)
-        latest_match_time: Start time of the team's latest league match (unix seconds)
-        latest_match_standins: Players of the latest league match who are not in the core
-        roster_state: ROSTER_STABLE, ROSTER_STANDINS or ROSTER_NEW_TEAM;
-            see classify_roster
-        league_form: League results over the activity window
-    """
-
-    players: List[Player] = Field(default_factory=list)
-    other_players: List[Player] = Field(default_factory=list)
-    standins_count: int = 0
-    games_checked: int = 0
-    last_match_id: Optional[int] = None
-    last_match_time: Optional[int] = None
-    latest_match_time: Optional[int] = None
-    latest_match_standins: Optional[int] = None
-    roster_state: Optional[str] = None
-    league_form: Optional[LeagueForm] = None
 
 
 def _get_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:

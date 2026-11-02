@@ -5,30 +5,12 @@ import time
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional, cast
 
-from pydantic import BaseModel
-
 from backend.db import get_cache_db
 from backend.logging_config import setup_logging
+from backend.models import Player
 from backend.opendota import OpenDotaError, get_json
 
 logger = setup_logging(__name__)
-
-
-class Player(BaseModel):
-    """Represents a Dota 2 player.
-
-    Attributes:
-        name: Player name
-        id: Unique player ID
-        games: League games played for the team in the roster window (only set for rosters from recent matches)
-        is_core: Played enough of the window games to be in the core, 75% (or 50%); players outside the core
-            are stand-ins (only set for rosters from recent matches)
-    """
-
-    name: str
-    id: int
-    games: Optional[int] = None
-    is_core: Optional[bool] = None
 
 
 def fetch_pro_players_from_api(background: bool = False) -> list[dict[str, Any]]:
@@ -132,9 +114,6 @@ def _extract_players_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[list[
         - pro_players: List of Player objects where is_pro=1
         - other_players: List of Player objects where is_pro is missing or != 1 (any non-1 value is treated as non-pro)
     """
-    # Import here to avoid circular imports
-    from backend.stats import Player
-
     pro_players: list[Player] = []
     other_players: list[Player] = []
     total_rows = 0

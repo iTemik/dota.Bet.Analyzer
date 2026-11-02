@@ -6,8 +6,9 @@ import pytest
 
 from backend import dota_bet_analyzer, task_store
 from backend.dota_bet_analyzer import players_statistics_task
+from backend.models import MatchesSummary
 from backend.opendota import OpenDotaError
-from backend.stats import BAD_RANK_THRESHOLD, MatchesSummary, RankTally
+from backend.stats import BAD_RANK_THRESHOLD, RankTally
 from backend.task_store import ProgressReporter
 
 

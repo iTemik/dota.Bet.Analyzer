@@ -127,7 +127,7 @@ class TestStatisticsEndpoint:
 
     def test_statistics_get_returns_200_on_success(self, monkeypatch):
         """Test that GET /statistics returns 200 on success."""
-        from backend.stats import Player, StatsResponse, TeamStats
+        from backend.models import Player, StatsResponse, TeamStats
 
         def fake_compute(teams=None, team_ids=None, days=20):
             items = (team_ids or []) + (teams or [])
@@ -164,7 +164,7 @@ class TestStatisticsEndpoint:
 
     def test_statistics_returns_422_when_too_many_teams(self, monkeypatch):
         """Test that /statistics returns 422 when more than 10 teams (schema validation)."""
-        from backend.stats import StatsResponse
+        from backend.models import StatsResponse
 
         def fake_compute(teams):
             return StatsResponse(teams=[])

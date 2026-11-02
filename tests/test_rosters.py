@@ -384,9 +384,8 @@ def test_lineup_stats_are_cached(ctx):
 
 
 def test_create_team_stats_uses_recent_lineup(ctx):
-    from backend.pro_players import Player
-    from backend.rosters import LeagueForm, TeamRoster
-    from backend.stats import TeamStats, _create_team_stats
+    from backend.models import LeagueForm, Player, TeamRoster, TeamStats
+    from backend.stats import _create_team_stats
 
     roster = TeamRoster(
         players=[Player(id=1, name="a", games=3), Player(id=2, name="b", games=2)],
@@ -423,9 +422,8 @@ def test_create_team_stats_uses_recent_lineup(ctx):
 
 
 def test_create_team_stats_falls_back_to_pro_players(ctx):
-    from backend.pro_players import Player
-    from backend.rosters import TeamRoster
-    from backend.stats import TeamStats, _create_team_stats
+    from backend.models import Player, TeamRoster, TeamStats
+    from backend.stats import _create_team_stats
 
     task = MagicMock()
     with (
@@ -452,9 +450,8 @@ def test_roster_window_follows_days_argument(ctx):
 
 
 def test_create_team_stats_passes_days_to_roster_and_task(ctx):
-    from backend.pro_players import Player
-    from backend.rosters import TeamRoster
-    from backend.stats import TeamStats, _create_team_stats
+    from backend.models import Player, TeamRoster, TeamStats
+    from backend.stats import _create_team_stats
 
     task = MagicMock()
     with (
