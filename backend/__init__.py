@@ -157,6 +157,8 @@ def _register_validation_error_handler(app):
     from flask import jsonify, request
     from werkzeug.exceptions import UnprocessableEntity
 
+    from backend.helpers import Errors
+
     @app.errorhandler(422)
     @app.errorhandler(UnprocessableEntity)
     def handle_validation_error(error):
@@ -164,7 +166,7 @@ def _register_validation_error_handler(app):
         original_errors = _get_validation_errors(error)
 
         # Format human-readable message from validation errors
-        message = "Validation failed"
+        message = Errors.VALIDATION_ERROR.message
         if original_errors:
             first_field, first_error = _extract_first_error(original_errors)
             if first_field and first_error:
@@ -173,7 +175,7 @@ def _register_validation_error_handler(app):
         # Transform to our ErrorSchema format
         response_data = {
             "status": 422,
-            "code": "VALIDATION_ERROR",
+            "code": Errors.VALIDATION_ERROR.code,
             "message": message,
             "details": {"url": request.path, "errors": original_errors},
         }

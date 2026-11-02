@@ -1,6 +1,8 @@
 import json
 import os
 import time
+from collections.abc import Callable
+from typing import Any
 
 from flask import Response, current_app, jsonify, request, stream_with_context
 from flask_smorest import Blueprint
@@ -8,7 +10,7 @@ from flask_smorest import Blueprint
 from backend import __version__
 from backend.celery_app import celery
 from backend.head_to_head import get_head_to_head
-from backend.helpers import Errors, api_error
+from backend.helpers import ErrorDefinition, Errors, api_error
 from backend.heroes import list_heroes
 from backend.jobs import (
     JobRunningError,
@@ -85,6 +87,28 @@ logger = setup_logging(__name__)
 
 
 bp = Blueprint("dota", __name__, url_prefix="/api", description="Dota 2 Bet Analyzer API")
+
+
+def error_response(status: int, error: ErrorDefinition, description: str, **details: Any) -> Callable:
+    """Swagger doc for an `api_error` response: ErrorSchema with an example built from the Errors entry.
+
+    Args:
+        status: HTTP status code
+        error: ErrorDefinition from Errors (gives the example's code and message)
+        description: What causes this response
+        **details: Example `details` besides `url`, which every error carries
+
+    Returns:
+        The flask-smorest `alt_response` decorator
+    """
+    example = {
+        "status": status,
+        "code": error.code,
+        "message": error.message,
+        "details": {"url": "/api/...", **details},
+    }
+    decorator: Callable = bp.alt_response(status, schema=ErrorSchema, description=description, example=example)
+    return decorator
 
 
 def _parse_team_ids_from_args(team_ids: list) -> tuple[list[int], tuple[Response, int] | None]:
@@ -270,39 +294,11 @@ def _full_version() -> str:
 @bp.route("/statistics", methods=["GET"])
 @bp.arguments(TeamStatisticsQuerySchema, location="query")
 @bp.response(200, StatsResponseSchema)
-@bp.alt_response(
-    400,
-    schema=ErrorSchema,
-    description="Invalid request",
-    example={
-        "status": 400,
-        "code": "INVALID_REQUEST",
-        "message": "Invalid request",
-        "details": {"url": "/api/statistics", "exception": "Invalid team data"},
-    },
+@error_response(400, Errors.INVALID_REQUEST, "Invalid request")
+@error_response(
+    422, Errors.MISSING_TEAMS, "Validation failed - missing teams, too many teams (>10), or invalid parameter format"
 )
-@bp.alt_response(
-    422,
-    schema=ErrorSchema,
-    description="Validation failed - missing teams, too many teams (>10), or invalid parameter format",
-    example={
-        "status": 422,
-        "code": "MISSING_TEAMS",
-        "message": "No teams provided",
-        "details": {"url": "/api/statistics"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Computation failed",
-    example={
-        "status": 500,
-        "code": "COMPUTATION_ERROR",
-        "message": "An unexpected error occurred during statistics computation",
-        "details": {"url": "/api/statistics", "exception": "Database connection failed"},
-    },
-)
+@error_response(500, Errors.COMPUTATION_ERROR, "Computation failed")
 def statistics(args) -> tuple[Response, int]:
     """Compute team statistics.
 
@@ -363,42 +359,9 @@ def statistics(args) -> tuple[Response, int]:
     description="Task started successfully",
     example={"status": "started", "task_id": "task_3f9c2a7e5b8d4c1fa6e0b2d9c4f7a813", "celery_task_id": "abc-123-def"},
 )
-@bp.alt_response(
-    400,
-    schema=ErrorSchema,
-    description="Invalid request parameters",
-    example={
-        "status": 400,
-        "code": "INVALID_REQUEST",
-        "message": "Invalid request",
-        "details": {"url": "/api/statistics/players", "exception": "Invalid account_id format"},
-    },
-)
-@bp.alt_response(
-    422,
-    schema=ErrorSchema,
-    description="Schema validation failed",
-    example={
-        "status": 422,
-        "code": "VALIDATION_ERROR",
-        "message": "Invalid parameter: account_id must be between 1 and 10 items",
-        "details": {"url": "/api/statistics/players"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Task start failed",
-    example={
-        "status": 500,
-        "code": "FAILED_TO_START_TASK",
-        "message": "Failed to start background task",
-        "details": {
-            "url": "/api/statistics/players",
-            "exception": "Celery connection failed",
-        },
-    },
-)
+@error_response(400, Errors.INVALID_REQUEST, "Invalid request parameters")
+@error_response(422, Errors.VALIDATION_ERROR, "Schema validation failed")
+@error_response(500, Errors.FAILED_TO_START_TASK, "Task start failed")
 def players_statistics(args) -> tuple[Response, int]:
     """Start asynchronous player statistics computation task.
 
@@ -554,28 +517,8 @@ def _generate_progress_stream(task_id: str):
 
 @bp.route("/stream-progress/<task_id>")
 @bp.response(200, description="Server-Sent Events stream of progress updates")
-@bp.alt_response(
-    404,
-    schema=ErrorSchema,
-    description="Task not found",
-    example={
-        "status": 404,
-        "code": "RESULTS_NOT_FOUND",
-        "message": "Results not found",
-        "details": {"url": "/api/stream-progress/invalid_task_id", "task_id": "invalid_task_id"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Redis connection error",
-    example={
-        "status": 500,
-        "code": "FAILED_TO_RETRIEVE_RESULTS",
-        "message": "Failed to retrieve results",
-        "details": {"url": "/api/stream-progress/task_123", "exception": "Redis connection failed"},
-    },
-)
+@error_response(404, Errors.RESULTS_NOT_FOUND, "Task not found", task_id="task_123")
+@error_response(500, Errors.FAILED_TO_RETRIEVE_RESULTS, "Redis connection error")
 def stream_progress(task_id: str) -> tuple[Response, int] | Response:
     """Stream progress updates via Server-Sent Events.
 
@@ -617,28 +560,8 @@ def stream_progress(task_id: str) -> tuple[Response, int] | Response:
 
 @bp.route("/results/<task_id>")
 @bp.response(200, StatisticsResultSchema)
-@bp.alt_response(
-    404,
-    schema=ErrorSchema,
-    description="Results not found",
-    example={
-        "status": 404,
-        "code": "RESULTS_NOT_FOUND",
-        "message": "Results not found",
-        "details": {"url": "/api/results/task_123", "task_id": "task_123"},
-    },
-)
-@bp.alt_response(
-    500,
-    schema=ErrorSchema,
-    description="Failed to retrieve results",
-    example={
-        "status": 500,
-        "code": "FAILED_TO_RETRIEVE_RESULTS",
-        "message": "Failed to retrieve results",
-        "details": {"url": "/api/results/task_123", "exception": "Redis connection failed"},
-    },
-)
+@error_response(404, Errors.RESULTS_NOT_FOUND, "Results not found", task_id="task_123")
+@error_response(500, Errors.FAILED_TO_RETRIEVE_RESULTS, "Failed to retrieve results")
 def get_results(task_id: str) -> tuple[Response, int]:
     """Retrieve final computation results for a completed task.
 
@@ -704,7 +627,7 @@ def _sync_teams_if_obsolete() -> None:
 
 @bp.route("/jobs", methods=["GET"])
 @bp.response(200, JobSchema(many=True))
-@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
+@error_response(500, Errors.FAILED_TO_READ_JOBS, "Database operation failed")
 def get_jobs() -> tuple[Response, int]:
     """List the background cache jobs with their state and last run.
 
@@ -774,25 +697,12 @@ def stream_jobs() -> Response:
 @bp.route("/jobs/<string:name>/run", methods=["POST"])
 @bp.arguments(JobRunQuerySchema, location="query")
 @bp.response(202, JobSchema)
-@bp.alt_response(
-    400,
-    schema=ErrorSchema,
-    description="`full=true` was given for a job that has no full run",
-    example={"status": 400, "code": "JOB_FULL_NOT_SUPPORTED", "message": "This job has no full run"},
+@error_response(
+    400, Errors.JOB_FULL_NOT_SUPPORTED, "`full=true` was given for a job that has no full run", name="heroes"
 )
-@bp.alt_response(
-    404,
-    schema=ErrorSchema,
-    description="No job has this name",
-    example={"status": 404, "code": "JOB_NOT_FOUND", "message": "Job not found", "details": {"name": "x"}},
-)
-@bp.alt_response(
-    409,
-    schema=ErrorSchema,
-    description="The job is already queued or running",
-    example={"status": 409, "code": "JOB_RUNNING", "message": "Job is already queued or running"},
-)
-@bp.alt_response(503, schema=ErrorSchema, description="Redis or the Celery broker could not be reached")
+@error_response(404, Errors.JOB_NOT_FOUND, "No job has this name", name="x")
+@error_response(409, Errors.JOB_RUNNING, "The job is already queued or running", name="teams")
+@error_response(503, Errors.FAILED_TO_QUEUE_JOB, "Redis or the Celery broker could not be reached", name="teams")
 def run_job_now(args: dict, name: str) -> tuple[Response, int]:
     """Queue a background cache job now, even when its data is not stale.
 
@@ -815,7 +725,7 @@ def run_job_now(args: dict, name: str) -> tuple[Response, int]:
 
 @bp.route("/heroes", methods=["GET"])
 @bp.response(200, HeroSchema(many=True))
-@bp.alt_response(500, schema=ErrorSchema, description="Database operation failed")
+@error_response(500, Errors.FAILED_TO_READ_HEROES, "Database operation failed")
 def get_heroes() -> tuple[Response, int]:
     """List the cached heroes (id, names, icon URL) ordered by display name.
 
@@ -831,7 +741,7 @@ def get_heroes() -> tuple[Response, int]:
 @bp.route("/heroes/meta", methods=["GET"])
 @bp.arguments(MetaQuerySchema, location="query")
 @bp.response(200, MetaSchema)
-@bp.alt_response(503, schema=ErrorSchema, description="OpenDota could not be reached or its answer was invalid")
+@error_response(503, Errors.FAILED_TO_FETCH_HERO_STATS, "OpenDota could not be reached or its answer was invalid")
 def get_hero_meta(args: dict) -> tuple[Response, int]:
     """Pro meta, ultra meta and pub meta heroes from OpenDota /heroStats (about the last 7 days).
 
@@ -847,8 +757,8 @@ def get_hero_meta(args: dict) -> tuple[Response, int]:
 
 @bp.route("/matches", methods=["GET"])
 @bp.response(200, MatchesSchema)
-@bp.alt_response(503, schema=ErrorSchema, description="Liquipedia could not be reached or its page could not be read")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(503, Errors.FAILED_TO_FETCH_MATCHES, "Liquipedia could not be reached or its page could not be read")
+@error_response(500, Errors.UNEXPECTED_ERROR, "Database error")
 def list_matches() -> tuple[Response, int]:
     """Upcoming (soonest first) and recently finished (newest first) pro series from Liquipedia.
 
@@ -868,8 +778,8 @@ def list_matches() -> tuple[Response, int]:
 @bp.route("/teams/search", methods=["GET"])
 @bp.arguments(TeamSearchQuerySchema, location="query")
 @bp.response(200, TeamSchema(many=True))
-@bp.alt_response(400, schema=ErrorSchema, description="Invalid query parameters")
-@bp.alt_response(503, schema=ErrorSchema, description="Database connection error")
+@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@error_response(503, Errors.SEARCH_ERROR, "Database connection error")
 def search_teams(args):
     """Search for teams by name or tag for autocomplete.
 
@@ -939,8 +849,8 @@ def search_teams(args):
 @bp.arguments(SnapshotCreateSchema)
 @bp.response(201, SnapshotSchema, description="New snapshot saved")
 @bp.alt_response(200, schema=SnapshotSchema, description="Snapshot with the same key refreshed")
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or team_id differs from team.team_id")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(422, Errors.TEAM_ID_MISMATCH, "Invalid body, or team_id differs from team.team_id")
+@error_response(500, Errors.FAILED_TO_STORE_SNAPSHOT, "Database error")
 def create_snapshot(args) -> tuple[Response, int]:
     """Save what the Compare page shows for one team.
 
@@ -963,8 +873,8 @@ def create_snapshot(args) -> tuple[Response, int]:
 @bp.route("/snapshots", methods=["GET"])
 @bp.arguments(SnapshotListQuerySchema, location="query")
 @bp.response(200, SnapshotSchema(many=True))
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid query parameters")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
 def get_snapshots(args) -> tuple[Response, int]:
     """List saved team snapshots without their data, newest first.
 
@@ -980,8 +890,8 @@ def get_snapshots(args) -> tuple[Response, int]:
 
 @bp.route("/snapshots/<int:snapshot_id>", methods=["GET"])
 @bp.response(200, SnapshotDetailSchema)
-@bp.alt_response(404, schema=ErrorSchema, description="Snapshot not found")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
+@error_response(500, Errors.FAILED_TO_READ_SNAPSHOTS, "Database error")
 def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
     """Get one saved team snapshot with its data (`team`, `summary`, `players`)."""
     try:
@@ -997,9 +907,9 @@ def get_snapshot_by_id(snapshot_id: int) -> tuple[Response, int]:
 @bp.route("/predictions", methods=["POST"])
 @bp.arguments(PredictionCreateSchema)
 @bp.response(201, PredictionSchema, description="Prediction saved")
-@bp.alt_response(404, schema=ErrorSchema, description="Snapshot not found")
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid body")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.SNAPSHOT_NOT_FOUND, "Snapshot not found", snapshot_id=1)
+@error_response(422, Errors.VALIDATION_ERROR, "Invalid body")
+@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def post_prediction(args) -> tuple[Response, int]:
     """Save a series-win prediction made from two saved team snapshots.
 
@@ -1019,8 +929,8 @@ def post_prediction(args) -> tuple[Response, int]:
 @bp.route("/predictions", methods=["GET"])
 @bp.arguments(PredictionListQuerySchema, location="query")
 @bp.response(200, PredictionSchema(many=True))
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid query parameters")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(422, Errors.VALIDATION_ERROR, "Invalid query parameters")
+@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_predictions(args) -> tuple[Response, int]:
     """List predictions, newest first, with team names and logos from their snapshots and computed `bet_won`.
 
@@ -1035,8 +945,8 @@ def get_predictions(args) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>", methods=["GET"])
 @bp.response(200, PredictionDetailSchema)
-@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
     """Get one prediction with both snapshots and their data, for the review page."""
     try:
@@ -1051,8 +961,8 @@ def get_prediction_by_id(prediction_id: int) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>/head-to-head", methods=["GET"])
 @bp.response(200, HeadToHeadSchema)
-@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@error_response(500, Errors.FAILED_TO_READ_PREDICTIONS, "Database error")
 def get_prediction_head_to_head(prediction_id: int) -> tuple[Response, int]:
     """League matches between the prediction's two teams, from `days` before the prediction up to now.
 
@@ -1071,9 +981,9 @@ def get_prediction_head_to_head(prediction_id: int) -> tuple[Response, int]:
 @bp.route("/predictions/<int:prediction_id>", methods=["PATCH"])
 @bp.arguments(PredictionReviewSchema)
 @bp.response(200, PredictionSchema, description="Review saved")
-@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or the score does not fit best_of")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@error_response(422, Errors.INVALID_RESULT, "Invalid body, or the score does not fit best_of")
+@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
     """Save the review: the actual result as maps won by each team, and a review note.
 
@@ -1102,9 +1012,9 @@ def patch_prediction(args, prediction_id: int) -> tuple[Response, int]:
 @bp.route("/predictions/<int:prediction_id>", methods=["PUT"])
 @bp.arguments(PredictionDecisionSchema)
 @bp.response(200, PredictionSchema, description="Prediction updated")
-@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
-@bp.alt_response(422, schema=ErrorSchema, description="Invalid body, or the saved result does not fit the new best_of")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@error_response(422, Errors.INVALID_RESULT, "Invalid body, or the saved result does not fit the new best_of")
+@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def put_prediction(args, prediction_id: int) -> tuple[Response, int]:
     """Edit a saved prediction: odds, `best_of`, bet, stake and comment, all replaced together.
 
@@ -1124,8 +1034,8 @@ def put_prediction(args, prediction_id: int) -> tuple[Response, int]:
 
 @bp.route("/predictions/<int:prediction_id>", methods=["DELETE"])
 @bp.response(204, description="Prediction deleted, its snapshots stay")
-@bp.alt_response(404, schema=ErrorSchema, description="Prediction not found")
-@bp.alt_response(500, schema=ErrorSchema, description="Database error")
+@error_response(404, Errors.PREDICTION_NOT_FOUND, "Prediction not found", prediction_id=1)
+@error_response(500, Errors.FAILED_TO_STORE_PREDICTION, "Database error")
 def remove_prediction(prediction_id: int) -> tuple[Response, int] | tuple[str, int]:
     """Delete a prediction made by mistake. Its snapshots stay (and stay locked if another prediction uses them)."""
     try:

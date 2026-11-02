@@ -1,6 +1,6 @@
 """Tests for the error helpers in backend.helpers."""
 
-from backend.helpers import ApiError, Errors, api_error
+from backend.helpers import ApiError, ErrorDefinition, Errors, api_error
 
 
 def test_api_error_of_uses_definition():
@@ -18,4 +18,46 @@ def test_api_error_adds_url_and_exception(app):
         "code": "FAILED_TO_FETCH_HERO_STATS",
         "message": Errors.FAILED_TO_FETCH_HERO_STATS.message,
         "details": {"url": "/api/heroes/meta", "exception": "down", "page": 2},
+    }
+
+
+def _error_responses(client) -> list[tuple[str, str, str, dict]]:
+    """(path, method, status, response) for every ErrorSchema response in the OpenAPI spec."""
+    spec = client.get("/api/openapi.json").get_json()
+    found = []
+    for path, methods in spec["paths"].items():
+        for method, operation in methods.items():
+            if not isinstance(operation, dict):
+                continue
+            for status, response in operation.get("responses", {}).items():
+                content = response.get("content", {}).get("application/json", {})
+                if content.get("schema", {}).get("$ref", "").endswith("/ApiError"):
+                    found.append((path, method, status, content))
+    return found
+
+
+def test_every_documented_error_has_an_example_from_errors(client):
+    known = {
+        definition.code: definition.message
+        for definition in vars(Errors).values()
+        if isinstance(definition, ErrorDefinition)
+    }
+    responses = _error_responses(client)
+    assert len(responses) >= 40
+    for path, method, status, content in responses:
+        example = content.get("example")
+        assert example, f"{method.upper()} {path} {status} has no example"
+        assert example["status"] == int(status), (path, method, status)
+        assert known.get(example["code"]) == example["message"], (path, method, status)
+        assert example["details"]["url"] == "/api/..."
+
+
+def test_error_response_example_carries_details(client):
+    by_key = {(path, method, status): content for path, method, status, content in _error_responses(client)}
+    example = by_key[("/api/jobs/{name}/run", "post", "404")]["example"]
+    assert example == {
+        "status": 404,
+        "code": "JOB_NOT_FOUND",
+        "message": Errors.JOB_NOT_FOUND.message,
+        "details": {"url": "/api/...", "name": "x"},
     }
