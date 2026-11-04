@@ -45,7 +45,7 @@ def _hero(hero_id: int, picks: int, bans: int, wins: int) -> dict:
 
 
 # 55 pro matches: heroes 1-5 have (100 + 50) / 55 pick + ban rate (meta), heroes 6-10 have 10 / 55 (not meta)
-HERO_STATS = [_hero(1, 100, 50, 60)] + [_hero(h, 100, 50, 50) for h in META[1:]] + [_hero(h, 10, 0, 5) for h in OTHER]
+HERO_STATS = [_hero(1, 100, 50, 60), *[_hero(h, 100, 50, 50) for h in META[1:]], *[_hero(h, 10, 0, 5) for h in OTHER]]
 
 
 def _game(match_id: int, days_ago: float, heroes: list[int], players: list[int] = CORE) -> dict:
@@ -61,14 +61,19 @@ def _games(count: int, heroes: list[int], start_days: float = 0.5, step_days: fl
 
 
 def _team_games(games: list[dict], recent_days: int = 20, deep_days: int = 60) -> dict:
-    return {"recent_start": NOW - recent_days * DAY, "deep_start": NOW - deep_days * DAY, "patch": "7.39", "games": games}
+    return {
+        "recent_start": NOW - recent_days * DAY,
+        "deep_start": NOW - deep_days * DAY,
+        "patch": "7.39",
+        "games": games,
+    }
 
 
 def _meta(games: list[dict], player_heroes: dict | None = None, **params) -> dict:
     return compute_team_meta(
         _team_games(games),
         CORE,
-        player_heroes if player_heroes is not None else dict.fromkeys(CORE, {}),
+        player_heroes if player_heroes is not None else {a: {} for a in CORE},
         HERO_STATS,
         MetaParams(),
         TeamMetaParams(**params),
@@ -154,7 +159,7 @@ def test_no_info_without_games():
 
 
 def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
-    games = _games(2, THREE_META) + [_game(50, 40, [4, 2, 6, 7, 8])]
+    games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]
 
     heroes = {h["hero_id"]: h for h in _meta(games)["heroes"]}
 

@@ -31,7 +31,12 @@ from backend.cache import cached_json
 from backend.logging_config import setup_logging
 from backend.meta import MetaParams, compute_meta
 from backend.opendota import OpenDotaError, WaitCallback, get_json, is_radiant
-from backend.rosters import DAY_SECONDS, get_match_lineups, get_team_league_matches, window_start
+from backend.rosters import (
+    DAY_SECONDS,
+    get_match_lineups,
+    get_team_league_matches,
+    window_start,
+)
 
 logger = setup_logging(__name__)
 
@@ -172,9 +177,7 @@ def _fetch_player_heroes(account_id: int, days: int, on_wait: Optional[WaitCallb
     return games
 
 
-def get_player_heroes_cached(
-    account_id: int, days: int, on_wait: Optional[WaitCallback] = None
-) -> dict[int, int]:
+def get_player_heroes_cached(account_id: int, days: int, on_wait: Optional[WaitCallback] = None) -> dict[int, int]:
     """Games per hero of a player over the last `days` days (league + pubs), cached PLAYER_HEROES_TTL.
 
     Args:
@@ -217,6 +220,76 @@ def _passes(window: dict[str, Any], params: TeamMetaParams) -> bool:
     return window["games"] >= params.meta_min_games and (window["meta_games_pct"] or 0) >= params.meta_min_games_pct
 
 
+def _player_practice(
+    games: list[dict[str, Any]],
+    core: list[int],
+    player_heroes: dict[int, Optional[dict[int, int]]],
+    meta_ids: set[int],
+    params: TeamMetaParams,
+) -> list[dict[str, Any]]:
+    """Per core player: the meta heroes they practise (league picks in `games` or all games from player_heroes)."""
+    players = []
+    for account_id in core:
+        league: dict[int, int] = {}
+        for game in games:
+            for player, hero in game["picks"]:
+                if player == account_id:
+                    league[hero] = league.get(hero, 0) + 1
+        total = player_heroes.get(account_id)
+        practised = sorted(
+            hero
+            for hero in meta_ids
+            if league.get(hero, 0) >= params.practice_league_games
+            or (total is not None and total.get(hero, 0) >= params.practice_total_games)
+        )
+        players.append({"account_id": account_id, "meta_heroes": practised, "pub_known": total is not None})
+    return players
+
+
+def _state(recent: dict[str, Any], deep: dict[str, Any], knowers: int, params: TeamMetaParams) -> str:
+    """Team meta state from both windows and the number of core players practising a meta hero."""
+    if _passes(recent, params):
+        return STATE_ACTIVELY
+    if _passes(deep, params):
+        return STATE_TRIES
+    if knowers >= params.players_know_min:
+        return STATE_PLAYERS_KNOW
+    if deep["games"] >= params.meta_min_games:
+        return STATE_DOESNT_PLAY
+    return STATE_NO_INFO
+
+
+def _picked_heroes(
+    games: list[dict[str, Any]],
+    recent_start: int,
+    meta_by_id: dict[int, dict[str, Any]],
+    practice_players: dict[int, int],
+) -> list[dict[str, Any]]:
+    """Meta heroes the team picked or a core player practises, most games first."""
+    picked: dict[int, int] = {}
+    picked_recent: dict[int, int] = {}
+    for game in games:
+        for _, hero in game["picks"]:
+            if hero in meta_by_id:
+                picked[hero] = picked.get(hero, 0) + 1
+                if game["start_time"] >= recent_start:
+                    picked_recent[hero] = picked_recent.get(hero, 0) + 1
+    heroes = [
+        {
+            "hero_id": hero,
+            "localized_name": meta_by_id[hero]["localized_name"],
+            "icon": meta_by_id[hero]["icon"],
+            "ultra": "ultra" in meta_by_id[hero]["meta"],
+            "games": picked.get(hero, 0),
+            "recent_games": picked_recent.get(hero, 0),
+            "practice_players": practice_players.get(hero, 0),
+        }
+        for hero in set(picked) | set(practice_players)
+    ]
+    heroes.sort(key=lambda h: (-h["games"], -h["recent_games"], -h["practice_players"], h["localized_name"]))
+    return heroes
+
+
 def compute_team_meta(
     team_games: dict[str, Any],
     core: list[int],
@@ -252,59 +325,13 @@ def compute_team_meta(
     recent = {**_window(recent_games, meta_ids, params.meta_min_heroes), "start": team_games["recent_start"]}
     deep = {**_window(deep_games, meta_ids, params.meta_min_heroes), "start": team_games["deep_start"]}
 
-    # Per player: league games per hero from the team's games, plus all games from /players/{id}/heroes
-    players = []
+    players = _player_practice(deep_games, core, player_heroes, meta_ids, params)
+    state = _state(recent, deep, sum(1 for p in players if p["meta_heroes"]), params)
     practice_players: dict[int, int] = {}
-    for account_id in core:
-        league: dict[int, int] = {}
-        for game in deep_games:
-            for player, hero in game["picks"]:
-                if player == account_id:
-                    league[hero] = league.get(hero, 0) + 1
-        total = player_heroes.get(account_id)
-        practised = sorted(
-            hero
-            for hero in meta_ids
-            if league.get(hero, 0) >= params.practice_league_games
-            or (total is not None and total.get(hero, 0) >= params.practice_total_games)
-        )
-        for hero in practised:
+    for player in players:
+        for hero in player["meta_heroes"]:
             practice_players[hero] = practice_players.get(hero, 0) + 1
-        players.append({"account_id": account_id, "meta_heroes": practised, "pub_known": total is not None})
-    knowers = sum(1 for p in players if p["meta_heroes"])
-
-    if _passes(recent, params):
-        state = STATE_ACTIVELY
-    elif _passes(deep, params):
-        state = STATE_TRIES
-    elif knowers >= params.players_know_min:
-        state = STATE_PLAYERS_KNOW
-    elif deep["games"] >= params.meta_min_games:
-        state = STATE_DOESNT_PLAY
-    else:
-        state = STATE_NO_INFO
-
-    picked: dict[int, int] = {}
-    picked_recent: dict[int, int] = {}
-    for game in deep_games:
-        for _, hero in game["picks"]:
-            if hero in meta_ids:
-                picked[hero] = picked.get(hero, 0) + 1
-                if game["start_time"] >= team_games["recent_start"]:
-                    picked_recent[hero] = picked_recent.get(hero, 0) + 1
-    heroes = [
-        {
-            "hero_id": hero,
-            "localized_name": meta_by_id[hero]["localized_name"],
-            "icon": meta_by_id[hero]["icon"],
-            "ultra": "ultra" in meta_by_id[hero]["meta"],
-            "games": picked.get(hero, 0),
-            "recent_games": picked_recent.get(hero, 0),
-            "practice_players": practice_players.get(hero, 0),
-        }
-        for hero in set(picked) | set(practice_players)
-    ]
-    heroes.sort(key=lambda h: (-h["games"], -h["recent_games"], -h["practice_players"], h["localized_name"]))
+    heroes = _picked_heroes(deep_games, team_games["recent_start"], meta_by_id, practice_players)
 
     return {
         "state": state,
