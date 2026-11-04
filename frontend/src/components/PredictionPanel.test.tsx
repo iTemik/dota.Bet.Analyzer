@@ -197,4 +197,34 @@ describe('PredictionPanel', () => {
     expect(screen.queryByText(/Prediction saved/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save prediction' })).toBeEnabled()
   })
+
+  it('fills both coefficients from Pari', async () => {
+    const fetchMock = vi.fn(() =>
+      jsonResponse(
+        { team1_odds: 1.3, team2_odds: 3.2, start_time: 1793819700, tournament: 'Dota 2. EPL. Bo3', live: true, names: ['A', 'B'] },
+        true,
+        200,
+      ),
+    )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    render(<PredictionPanel teams={teams} results={results} days={20} />)
+
+    await userEvent.click(within(bookmakerBox()).getByRole('button', { name: 'Get odds from Pari' }))
+
+    expect(await screen.findByText('Pari: A vs B, Dota 2. EPL. Bo3, live')).toBeInTheDocument()
+    expect(within(bookmakerBox()).getAllByRole('textbox').map((i) => (i as HTMLInputElement).value)).toEqual(['1.3', '3.2'])
+    expect(fetchMock).toHaveBeenCalledWith('/api/odds/pari?team1=Team+A&team2=Team+B&tag1=T&tag2=T', undefined)
+  })
+
+  it('shows the backend message when Pari has no series of the teams', async () => {
+    globalThis.fetch = vi.fn(() =>
+      jsonResponse({ message: 'The bookmaker has no upcoming series of these teams' }, false, 404),
+    ) as unknown as typeof fetch
+    render(<PredictionPanel teams={teams} results={results} days={20} />)
+
+    await userEvent.click(within(bookmakerBox()).getByRole('button', { name: 'Get odds from Pari' }))
+
+    expect(await screen.findByText('The bookmaker has no upcoming series of these teams')).toBeInTheDocument()
+    expect(within(bookmakerBox()).getAllByRole('textbox').map((i) => (i as HTMLInputElement).value)).toEqual(['', ''])
+  })
 })

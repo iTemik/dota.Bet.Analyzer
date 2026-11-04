@@ -167,6 +167,16 @@ export interface HeadToHead {
   matches: HeadToHeadMatch[]
 }
 
+// GET /api/odds/{bookmaker}: match-winner odds of the soonest series, in the requested team order
+export interface BookmakerOdds {
+  team1_odds: number
+  team2_odds: number
+  start_time: number | null
+  tournament: string
+  live: boolean
+  names: string[] // team names as the bookmaker spells them
+}
+
 // GET /api/matches: a team of a Liquipedia series (team_id and logo_url are null when the name is not in the teams table)
 export interface MatchTeam {
   name: string

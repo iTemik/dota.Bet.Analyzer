@@ -585,6 +585,18 @@ pre {
   align-items: flex-start;
 }
 
+.odds-fetch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.odds-fetch .secondary-btn {
+  margin-top: 0;
+}
+
 .prediction-field {
   display: flex;
   flex-direction: column;

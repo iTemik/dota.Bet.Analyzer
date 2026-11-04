@@ -8,8 +8,9 @@ import requests
 
 BACKEND = Path(__file__).parent.parent / "backend"
 
-# Only these modules send HTTP: opendota.py (OpenDota retries + limiter), matches.py (Liquipedia limiter)
-HTTP_CLIENT_MODULES = {"opendota.py", "matches.py"}
+# Only these modules send HTTP: opendota.py (OpenDota retries + limiter), matches.py (Liquipedia limiter),
+# bookmakers.py (bookmaker lines, one request per button press at most every few minutes)
+HTTP_CLIENT_MODULES = {"opendota.py", "matches.py", "bookmakers.py"}
 HTTP_LIBRARIES = {"requests", "urllib3", "httpx", "aiohttp", "http.client", "urllib.request"}
 
 
@@ -45,7 +46,7 @@ def test_only_shared_clients_import_http_libraries():
 
 
 def test_shared_clients_are_found_by_the_import_check():
-    """The check above would notice requests in the two client modules, so it is not passing by accident."""
+    """The check above would notice requests in the client modules, so it is not passing by accident."""
     for name in HTTP_CLIENT_MODULES:
         assert "requests" in _http_imports(BACKEND / name)
 

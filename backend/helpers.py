@@ -24,6 +24,7 @@ class Errors:
     FAILED_TO_FETCH_HERO_STATS = ErrorDefinition(
         "FAILED_TO_FETCH_HERO_STATS", "Failed to fetch hero stats from OpenDota"
     )
+    FAILED_TO_FETCH_ODDS = ErrorDefinition("FAILED_TO_FETCH_ODDS", "Failed to load odds from the bookmaker")
     FAILED_TO_FETCH_MATCHES = ErrorDefinition("FAILED_TO_FETCH_MATCHES", "Failed to fetch matches from Liquipedia")
     FAILED_TO_RETRIEVE_RESULTS = ErrorDefinition("FAILED_TO_RETRIEVE_RESULTS", "Failed to retrieve results")
     FAILED_TO_START_TASK = ErrorDefinition("FAILED_TO_START_TASK", "Failed to start background task")
@@ -45,6 +46,7 @@ class Errors:
     JOB_RUNNING = ErrorDefinition("JOB_RUNNING", "Job is already queued or running")
     MISSING_TEAMS = ErrorDefinition("MISSING_TEAMS", "No teams provided")
     NETWORK_ERROR = ErrorDefinition("NETWORK_ERROR", "Failed to fetch data due to network error")
+    ODDS_NOT_FOUND = ErrorDefinition("ODDS_NOT_FOUND", "The bookmaker has no upcoming series of these teams")
     PREDICTION_NOT_FOUND = ErrorDefinition("PREDICTION_NOT_FOUND", "Prediction not found")
     RESULTS_NOT_FOUND = ErrorDefinition("RESULTS_NOT_FOUND", "Results not found")
     SEARCH_ERROR = ErrorDefinition("SEARCH_ERROR", "Database search failed")
