@@ -397,7 +397,7 @@ def test_farm_stats_take_top_two_gpm_and_xpm_of_each_game():
 
 
 def test_lineup_stats_are_cached(ctx):
-    """GPM and XPM come with the lineup query and are read back from the cache."""
+    """GPM, XPM and the picked hero come with the lineup query and are read back from the cache."""
     rows = [
         {
             "match_id": 42,
@@ -405,6 +405,7 @@ def test_lineup_stats_are_cached(ctx):
             "account_id": 1000 + s,
             "gold_per_min": 600,
             "xp_per_min": 700,
+            "hero_id": 10 + s,
         }
         for s in [0, 1, 2, 3, 4, 128, 129, 130, 131, 132]
     ]
@@ -412,9 +413,12 @@ def test_lineup_stats_are_cached(ctx):
         first = _lineup(42)
         second = _lineup(42)
     assert mock_get.call_count == 1
-    assert "gold_per_min" in mock_get.call_args.kwargs["params"]["sql"]
+    sql = mock_get.call_args.kwargs["params"]["sql"]
+    assert "gold_per_min" in sql
+    assert "hero_id" in sql
     assert first == second
-    assert second[0] == LineupPlayer(0, 1000, 600, 700)
+    assert second[0] == LineupPlayer(0, 1000, 600, 700, 10)
+    assert second[9] == LineupPlayer(132, 1132, 600, 700, 142)
 
 
 def test_create_team_stats_uses_recent_lineup(ctx):

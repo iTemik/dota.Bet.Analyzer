@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS match_players (
     account_id INTEGER,
     gold_per_min INTEGER,          -- NULL when the match is not parsed
     xp_per_min INTEGER,
+    hero_id INTEGER,               -- Picked hero (heroes.hero_id)
     PRIMARY KEY (match_id, player_slot)
 );
 
