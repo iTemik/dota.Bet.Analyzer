@@ -60,6 +60,13 @@ def no_roster_requests(request):
 
 
 @pytest.fixture(autouse=True)
+def no_team_meta_requests():
+    """Keep team statistics tests offline: no team meta games are loaded (backend.team_meta is tested directly)."""
+    with patch("backend.stats.load_team_games", return_value=None) as mock_load:
+        yield mock_load
+
+
+@pytest.fixture(autouse=True)
 def no_startup_jobs(request):
     """Keep app startup offline: no cache job is queued (tested in test_jobs itself)."""
     if request.module.__name__.endswith("test_jobs"):

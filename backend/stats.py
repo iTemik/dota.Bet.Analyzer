@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import sqlite3
 import statistics
+from dataclasses import asdict
 from typing import List, Optional
 
 from backend.db import get_cache_db
 from backend.helpers import ApiError, Errors
 from backend.logging_config import setup_logging
+from backend.meta import MetaParams
 from backend.models import (
     MatchesSummary,
     MatchStats,
@@ -23,6 +25,7 @@ from backend.opendota import (
 from backend.pro_players import get_players_by_team
 from backend.ratings import window_rating_change
 from backend.rosters import resolve_roster
+from backend.team_meta import TeamMetaParams, load_team_games
 
 LOBBY_TYPE_RATING = [0, 4, 5, 6, 7, 9, 22]
 LOBBY_TYPE_TOURNAMENT = [1, 2]
@@ -272,10 +275,27 @@ def _resolve_roster_safe(team_id: Optional[int], days: int) -> TeamRoster:
         return TeamRoster()
 
 
+def _load_team_games_safe(team_id: Optional[int], days: int, params: TeamMetaParams) -> Optional[dict]:
+    """Team games with picks for the meta state (backend.team_meta.load_team_games), never raising.
+
+    Returns:
+        load_team_games output, None when team_id is missing or loading failed
+    """
+    if not team_id:
+        return None
+    try:
+        return load_team_games(team_id, days, params)
+    except Exception as exc:
+        logger.warning(f"Failed to load meta games for team {team_id}: {exc}")
+        return None
+
+
 def _create_team_stats(
     team_stats: TeamStats,
     players_statistics_task,
     days: int = 20,
+    meta_params: Optional[MetaParams] = None,
+    team_meta_params: Optional[TeamMetaParams] = None,
 ) -> TeamStats:
     """Populate TeamStats with player data and task initialization.
 
@@ -287,7 +307,9 @@ def _create_team_stats(
     Args:
         team_stats: TeamStats instance with team info (empty player lists)
         players_statistics_task: Celery task for player statistics
-        days: Roster window and match history window in days
+        days: Roster window and match history window in days (also the recent window of the meta state)
+        meta_params: Meta tab thresholds for the team meta state (defaults when None)
+        team_meta_params: Windows and thresholds of the team meta state (defaults when None)
 
     Returns:
         TeamStats object with players and task_id populated
@@ -317,12 +339,26 @@ def _create_team_stats(
         # Imported here: task_store imports this module
         from backend.task_store import start_task
 
+        team_meta_params = team_meta_params or TeamMetaParams()
+        team_meta = None
+        team_games = _load_team_games_safe(team_stats.team_id, days, team_meta_params)
+        if team_games is not None:
+            # Core players practise the meta heroes; without a clear core, the main roster does
+            core = [player.id for player in team_stats.players if player.is_core] or account_ids
+            team_meta = {
+                "games": team_games,
+                "core": core,
+                "meta_params": asdict(meta_params or MetaParams()),
+                "params": asdict(team_meta_params),
+            }
+
         task_id, _ = start_task(
             players_statistics_task,
             team_id=team_stats.team_id,
             accounts=account_ids,
             days=days,
             rank_accounts=standin_ids,
+            team_meta=team_meta,
         )
 
     team_stats.task_id = task_id
@@ -335,6 +371,8 @@ def _process_single_team(
     team_id: int | None = None,
     players_statistics_task=None,
     days: int = 20,
+    meta_params: Optional[MetaParams] = None,
+    team_meta_params: Optional[TeamMetaParams] = None,
 ) -> TeamStats:
     """Process a single team item and return TeamStats with players populated.
 
@@ -342,6 +380,9 @@ def _process_single_team(
         team_str: Team name to search for (mutually exclusive with team_id)
         team_id: Team ID to search for (mutually exclusive with team_str)
         players_statistics_task: Celery task for player statistics
+        days: Statistics window in days
+        meta_params: Meta tab thresholds for the team meta state
+        team_meta_params: Windows and thresholds of the team meta state
 
     Returns:
         TeamStats object with all data populated, or error if fetch failed
@@ -356,6 +397,8 @@ def _process_single_team(
             team_stats=team_stats,
             players_statistics_task=players_statistics_task,
             days=days,
+            meta_params=meta_params,
+            team_meta_params=team_meta_params,
         )
 
     except Exception as exc:
@@ -367,6 +410,8 @@ def compute_statistics(
     teams: Optional[List[str]] = None,
     team_ids: Optional[List[int]] = None,
     days: int = 20,
+    meta_params: Optional[MetaParams] = None,
+    team_meta_params: Optional[TeamMetaParams] = None,
 ) -> StatsResponse:
     """Fetch and compute statistics for multiple Dota 2 teams.
 
@@ -380,6 +425,8 @@ def compute_statistics(
         teams: List of team names or tags to fetch statistics for (optional)
         team_ids: List of team IDs to fetch statistics for (optional)
         days: Window in days for the roster (recent league matches) and player match history
+        meta_params: Meta tab thresholds for the team meta state (defaults when None)
+        team_meta_params: Windows and thresholds of the team meta state (defaults when None)
 
     Returns:
         StatsResponse containing a list of TeamStats objects. Each TeamStats may
@@ -416,14 +463,26 @@ def compute_statistics(
     if teams:
         for team_str in teams:
             result.append(
-                _process_single_team(team_str=team_str, players_statistics_task=players_statistics_task, days=days)
+                _process_single_team(
+                    team_str=team_str,
+                    players_statistics_task=players_statistics_task,
+                    days=days,
+                    meta_params=meta_params,
+                    team_meta_params=team_meta_params,
+                )
             )
 
     # Process teams by ID
     if team_ids:
         for team_id in team_ids:
             result.append(
-                _process_single_team(team_id=team_id, players_statistics_task=players_statistics_task, days=days)
+                _process_single_team(
+                    team_id=team_id,
+                    players_statistics_task=players_statistics_task,
+                    days=days,
+                    meta_params=meta_params,
+                    team_meta_params=team_meta_params,
+                )
             )
 
     return StatsResponse(teams=result)

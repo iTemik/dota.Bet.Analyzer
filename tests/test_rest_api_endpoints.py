@@ -129,7 +129,7 @@ class TestStatisticsEndpoint:
         """Test that GET /statistics returns 200 on success."""
         from backend.models import Player, StatsResponse, TeamStats
 
-        def fake_compute(teams=None, team_ids=None, days=20):
+        def fake_compute(teams=None, team_ids=None, days=20, **_kwargs):
             items = (team_ids or []) + (teams or [])
             return StatsResponse(
                 teams=[
