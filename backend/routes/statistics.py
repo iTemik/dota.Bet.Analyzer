@@ -2,11 +2,13 @@
 
 import json
 import time
+from dataclasses import fields
 
 from flask import Response, jsonify, request, stream_with_context
 
 from backend.helpers import Errors, api_error
 from backend.logging_config import setup_logging
+from backend.meta import MetaParams
 from backend.routes import ApiBlueprint
 from backend.schemas import (
     PlayerStatisticsQuerySchema,
@@ -25,6 +27,7 @@ from backend.task_store import (
     wait_for_progress,
 )
 from backend.tasks import players_statistics_task
+from backend.team_meta import TeamMetaParams
 
 logger = setup_logging(__name__)
 
@@ -73,6 +76,8 @@ def statistics(args) -> tuple[Response, int]:
     - team_id: Team ID (supports multiple values: `?team_id=123&team_id=456`)
     - team: Team name (supports multiple values: `?team=Alpha&team=Beta`)
     - team1, team2, ...: Alternative numbered format
+    - Meta tab thresholds (pro_min_pick_ban, ultra_min_win, ultra_min_picks, pub_top, pub_min_win) and team meta
+      windows and thresholds (deep_days, meta_min_games, ...): used for `meta` in the task results
 
     Returns computed statistics for the specified teams (1-10 teams combined).
     Includes team ratings, tags, IDs, rating deltas, player lists, and a `task_id`
@@ -107,6 +112,8 @@ def statistics(args) -> tuple[Response, int]:
             teams=teams if teams else None,
             team_ids=team_ids_int if team_ids_int else None,
             days=args.get("days", 20),
+            meta_params=MetaParams(**{f.name: args[f.name] for f in fields(MetaParams) if f.name in args}),
+            team_meta_params=TeamMetaParams(**{f.name: args[f.name] for f in fields(TeamMetaParams) if f.name in args}),
         )
         return jsonify(stats.model_dump()), 200
 
