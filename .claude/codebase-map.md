@@ -52,7 +52,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 `progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `opendota:short_lineup:<match>` 1d, `liquipedia:matches` 30min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
 
 ## SQLite (`instance/`)
-- `d2ba.sqlite` = cache, deletable (WAL: delete with its -wal/-shm files). Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm), heroes, sync_state(name, synced_at).
+- `d2ba.sqlite` = cache, deletable (WAL: delete with its -wal/-shm files). Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm, hero_id), heroes, sync_state(name, synced_at).
 - `predictions.sqlite` = user data, back up. Migrations `backend/migrations/predictions/`. Tables: team_snapshots (JSON `data`, UNIQUE team+date+days+last_match_time), predictions.
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 

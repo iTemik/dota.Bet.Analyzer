@@ -42,7 +42,7 @@ ROSTER_STANDINS = "standins"  # A clear core, plus stand-ins in some games
 ROSTER_NEW_TEAM = "new_team"  # No clear core of ROSTER_SIZE players
 DAY_SECONDS = 24 * 60 * 60
 REQUEST_TIMEOUT = 30
-LINEUP_STATS = ("gold_per_min", "xp_per_min")  # Player match stats kept with a lineup
+LINEUP_STATS = ("gold_per_min", "xp_per_min", "hero_id")  # Player match stats kept with a lineup
 SHORT_LINEUP_TTL = DAY_SECONDS  # A lineup with fewer than 10 players is not asked again for this long
 SHORT_LINEUP_KEY = "opendota:short_lineup:{match_id}"
 
@@ -112,12 +112,13 @@ class TeamMatch(BaseModel):
 
 
 class LineupPlayer(NamedTuple):
-    """One player of a match lineup, with the player's GPM and XPM (None when the match is not parsed)."""
+    """One player of a match lineup, with the player's GPM and XPM (None when the match is not parsed) and hero."""
 
     player_slot: int
     account_id: int
     gold_per_min: Optional[int] = None
     xp_per_min: Optional[int] = None
+    hero_id: Optional[int] = None
 
 
 def _get_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
@@ -247,7 +248,7 @@ def _store_lineup(match_id: int, lineup: list[LineupPlayer]) -> None:
         db = get_cache_db()
         db.executemany(
             f"INSERT OR REPLACE INTO match_players (match_id, player_slot, account_id, {', '.join(LINEUP_STATS)}) "
-            "VALUES (?, ?, ?, ?, ?)",
+            f"VALUES ({', '.join('?' * (3 + len(LINEUP_STATS)))})",
             [(match_id, *player) for player in lineup],
         )
         db.commit()
