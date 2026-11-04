@@ -97,7 +97,7 @@ def test_find_odds_in_given_order_and_swapped():
 
 
 def test_find_odds_by_normalized_name_and_tag():
-    """"Spirit" matches "Team Spirit" (normalized) and a tag matches a bookmaker's short name."""
+    """ "Spirit" matches "Team Spirit" (normalized) and a tag matches a bookmaker's short name."""
     series = parse_pari_line(LINE)
     assert find_odds(series, ("Spirit", None), ("Xtreme Gaming", "XTREME"))["team2_odds"] == 6.0
 
