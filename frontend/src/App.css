@@ -1055,3 +1055,9 @@ pre {
   color: var(--neg-text);
   font-weight: 600;
 }
+
+/* A meta hero's games: hover for games per window and practice */
+.team-meta-games {
+  cursor: help;
+  text-decoration: underline dotted;
+}
