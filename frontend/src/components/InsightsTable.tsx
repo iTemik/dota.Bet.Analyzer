@@ -222,7 +222,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Meta heroes the team picked in tournament games (most games first) or a core player practises. Tags: ultra = ultra meta; recent = picked in the recent window; 60d = picked only in the deeper window; pub = never picked by the team, known from a player’s league or pub games.',
+        'Meta heroes the team picked in 3+ tournament games (most games first) or a core player practises. Tags: ultra = ultra meta; recent = picked in the recent window; 60d = picked only in the deeper window; pub = never picked by the team, known from a player’s league or pub games.',
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),

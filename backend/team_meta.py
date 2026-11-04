@@ -66,6 +66,7 @@ class TeamMetaParams:
     practice_league_games: int = 3  # League games on a hero that prove practice
     practice_total_games: int = 5  # League + pub games on a hero that prove practice
     players_know_min: int = 3  # Core players with a practised meta hero for "players know meta"
+    meta_hero_min_games: int = 3  # Team picks a meta hero needs to be listed (unless a core player practises it)
     patch_cut: bool = True  # Windows start no earlier than the latest patch
 
 
@@ -264,8 +265,9 @@ def _picked_heroes(
     recent_start: int,
     meta_by_id: dict[int, dict[str, Any]],
     practice_players: dict[int, int],
+    min_games: int,
 ) -> list[dict[str, Any]]:
-    """Meta heroes the team picked or a core player practises, most games first."""
+    """Meta heroes the team picked at least `min_games` times or a core player practises, most games first."""
     picked: dict[int, int] = {}
     picked_recent: dict[int, int] = {}
     for game in games:
@@ -284,7 +286,7 @@ def _picked_heroes(
             "recent_games": picked_recent.get(hero, 0),
             "practice_players": practice_players.get(hero, 0),
         }
-        for hero in set(picked) | set(practice_players)
+        for hero in {h for h, n in picked.items() if n >= min_games} | set(practice_players)
     ]
     heroes.sort(key=lambda h: (-h["games"], -h["recent_games"], -h["practice_players"], h["localized_name"]))
     return heroes
@@ -331,7 +333,9 @@ def compute_team_meta(
     for player in players:
         for hero in player["meta_heroes"]:
             practice_players[hero] = practice_players.get(hero, 0) + 1
-    heroes = _picked_heroes(deep_games, team_games["recent_start"], meta_by_id, practice_players)
+    heroes = _picked_heroes(
+        deep_games, team_games["recent_start"], meta_by_id, practice_players, params.meta_hero_min_games
+    )
 
     return {
         "state": state,

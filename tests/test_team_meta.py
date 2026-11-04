@@ -161,7 +161,7 @@ def test_no_info_without_games():
 def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
     games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]
 
-    heroes = {h["hero_id"]: h for h in _meta(games)["heroes"]}
+    heroes = {h["hero_id"]: h for h in _meta(games, meta_hero_min_games=1)["heroes"]}
 
     assert set(heroes) == {1, 2, 3, 4}  # Non-meta heroes are not listed
     assert heroes[1] == {
@@ -175,7 +175,18 @@ def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
     }
     assert (heroes[2]["games"], heroes[2]["recent_games"]) == (3, 2)
     assert (heroes[4]["games"], heroes[4]["recent_games"], heroes[4]["ultra"]) == (1, 0, False)
-    assert _meta(games)["heroes"][0]["hero_id"] == 2  # Most games first
+    assert _meta(games, meta_hero_min_games=1)["heroes"][0]["hero_id"] == 2  # Most games first
+
+
+def test_heroes_picked_fewer_than_three_times_are_listed_only_when_practised():
+    games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]  # Hero 2: 3 picks, heroes 1 and 3: 2, hero 4: 1
+
+    assert [h["hero_id"] for h in _meta(games)["heroes"]] == [2]
+    # Hero 4 (1 pick) is listed again when a core player practises it in pub games
+    practised = _meta(games, {101: {4: 5}, 102: {}, 103: {}, 104: {}, 105: {}})
+    assert [h["hero_id"] for h in practised["heroes"]] == [2, 4]
+    # The state still counts every pick
+    assert _meta(games)["recent"]["meta_games"] == 2
 
 
 def test_stand_in_picks_count_for_the_team():

@@ -296,6 +296,13 @@ class TeamMetaQuerySchema(MetaThresholdsSchema):
         validate=validate.Range(min=1, max=5),
         metadata={"description": "Team meta: core players practising a meta hero for players know meta"},
     )
+    meta_hero_min_games = fields.Int(
+        load_default=TeamMetaParams.meta_hero_min_games,
+        validate=validate.Range(min=1),
+        metadata={
+            "description": "Team meta: team picks a meta hero needs to be listed, unless a core player practises it"
+        },
+    )
     patch_cut = fields.Bool(
         load_default=TeamMetaParams.patch_cut,
         metadata={"description": "Team meta: windows start no earlier than the latest patch"},
@@ -518,7 +525,12 @@ class TeamMetaSchema(Schema):
     pro_meta_picks_pct = fields.Float(
         allow_none=True, metadata={"description": "Share of all pro picks on meta heroes, percent (pro avg)"}
     )
-    heroes = fields.List(fields.Nested(TeamMetaHeroSchema), metadata={"description": "Most team picks first"})
+    heroes = fields.List(
+        fields.Nested(TeamMetaHeroSchema),
+        metadata={
+            "description": "Most team picks first; picked fewer than `meta_hero_min_games` times only if practised"
+        },
+    )
     players = fields.List(fields.Nested(TeamMetaPlayerSchema))
     params = fields.Dict(metadata={"description": "Team meta windows and thresholds used"})
     error = fields.Str(metadata={"description": "Set instead of the rest when the hero stats were unavailable"})
