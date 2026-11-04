@@ -135,19 +135,30 @@ describe('InsightsTable', () => {
     })
     const since = (start: number) => `Since ${new Date(start * 1000).toLocaleDateString()}`
 
-    it('shows the state, meta picks and meta games per window, with details in tooltips', () => {
+    it('shows the state with one coloured share of meta games, details in the tooltip', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), undefined]} />)
 
       const [first, second] = rowCells('Meta')
-      expect(first).toHaveTextContent('Actively plays metaMeta picks: 52% (pro avg 50%)Meta games: 16 (57%) 20d / 24 (53%) 60d')
-      expect(first).not.toHaveTextContent('7.39')
-      expect(within(first).getByText(/^Meta games:/)).toHaveAttribute(
+      // Actively plays meta comes from the recent window: 57% of its games, under 65% so red
+      expect(first).toHaveTextContent(/^Actively plays meta · 57%$/)
+      expect(within(first).getByText('57%')).toHaveClass('team-meta-neg')
+      expect(first.querySelector('.team-meta')).toHaveAttribute(
         'title',
-        `Games with 3+ meta heroes in the team draft.\n${since(recentStart)}: 3+ meta heroes in 16 of 28 games (57%)\n` +
-          `${since(deepStart)}: 3+ meta heroes in 24 of 45 games (53%)`,
+        'Share of the team\'s games with 3+ meta heroes in the draft (plays meta: 65%+ of at least 20 games).\n' +
+          `${since(recentStart)}: 3+ meta heroes in 16 of 28 games (57%)\n` +
+          `${since(deepStart)}: 3+ meta heroes in 24 of 45 games (53%)\n` +
+          'Meta heroes are 52% of all the team\'s picks (all pro games: 50%).',
       )
-      expect(within(first).getByText(/^Meta picks:/).getAttribute('title')).toMatch(/^Share of all the team's hero picks/)
       expect(second).toHaveTextContent('-')
+    })
+
+    it('takes the share from the deeper window for other states and colours it green at the threshold', () => {
+      const deep = { start: deepStart, games: 45, meta_games: 30, meta_games_pct: 66.7, meta_picks_pct: 60 }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ state: 'tries', deep }), null]} />)
+
+      const [cell] = rowCells('Meta')
+      expect(cell).toHaveTextContent(/^Tries to play meta · 67%$/)
+      expect(within(cell).getByText('67%')).toHaveClass('team-meta-pos')
     })
 
     it.each([
@@ -161,7 +172,7 @@ describe('InsightsTable', () => {
       expect(rowCells('Meta')[0]).toHaveTextContent(label)
     })
 
-    it('shows one window when the patch cut both to the same start, and no meta picks without games', () => {
+    it('shows only the state without games, and one window when the patch cut both to the same start', () => {
       const window = { start: now - 7 * DAY, games: 0, meta_games: 0, meta_games_pct: null, meta_picks_pct: null }
       render(
         <InsightsTable
@@ -171,7 +182,9 @@ describe('InsightsTable', () => {
         />,
       )
 
-      expect(rowCells('Meta')[0]).toHaveTextContent(/^No infoMeta games: 0 \(-\) 7d$/)
+      const [cell] = rowCells('Meta')
+      expect(cell).toHaveTextContent(/^No info$/)
+      expect(cell.querySelector('.team-meta')?.getAttribute('title')?.split('\n')).toHaveLength(3)
       expect(rowCells('Meta Heroes')[0]).toHaveTextContent('None')
     })
 

@@ -583,8 +583,8 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 
 #### Team Meta (Team Insights "Meta" and "Meta Heroes")
 - Does the team play the Meta tab's pro/ultra heroes: actively (recent window), tries (60 days), players know meta
-  (core players' league or pub practice), doesn't play meta, or no info; "Meta picks: x% (pro avg y%)" and
-  "Meta games: 16 (57%) 20d / 24 (53%) 60d", details in tooltips
+  (core players' league or pub practice), doesn't play meta, or no info; next to it the share of games with 3+
+  meta heroes from the window the state comes from (green at 65%+, red below); per-window counts in the tooltip
 - Picked meta heroes (3+ team games, by name) with games and ultra/60d tags; windows start at the latest patch,
   shown in the Meta tab name; thresholds are `/statistics` query parameters (the Meta tab's come from the browser)
 

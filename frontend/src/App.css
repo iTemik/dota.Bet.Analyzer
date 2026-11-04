@@ -1044,3 +1044,14 @@ pre {
   margin-left: 0.4rem;
   margin-right: 0;
 }
+
+/* Team meta share: green when it reaches the "plays meta" threshold, red below */
+.team-meta-pos {
+  color: var(--pos-text);
+  font-weight: 600;
+}
+
+.team-meta-neg {
+  color: var(--neg-text);
+  font-weight: 600;
+}
