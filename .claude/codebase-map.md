@@ -16,7 +16,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `routes/__init__.py` | `ApiBlueprint` (/api prefix, `bp.error_response(...)` Swagger helper), `register_routes(api)` (called by create_app) |
 | `routes/statistics.py` | /statistics, /statistics/players, /stream-progress, /results + progress stream generator |
 | `routes/jobs.py` | /jobs, /jobs/stream (+ `_generate_jobs_stream`), /jobs/<name>/run |
-| `routes/catalog.py` | /version (`full_version()`), /heroes, /heroes/meta, /matches, /teams/search (both queue the teams job when due) |
+| `routes/catalog.py` | /version (`full_version()`), /heroes, /heroes/meta (+ `patch` from team_meta.latest_patch), /matches, /teams/search (both queue the teams job when due) |
 | `routes/predictions.py` | /snapshots, /predictions, /predictions/<id>/head-to-head, /odds/pari |
 | `tasks.py` | `players_statistics_task` (Celery, default queue); optional `team_meta` step (heroes per core player) adds `meta` to the results |
 | `team_meta.py` | Team meta state: `TeamMetaParams` (windows/thresholds, /statistics query params), `load_team_games` (in the request: deep-window league games with team picks, cut at `latest_patch`), `get_player_heroes_cached` (/players/{id}/heroes, Redis 1d), `compute_team_meta` (in the task) |

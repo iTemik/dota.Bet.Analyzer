@@ -61,8 +61,11 @@ def no_roster_requests(request):
 
 @pytest.fixture(autouse=True)
 def no_team_meta_requests():
-    """Keep team statistics tests offline: no team meta games are loaded (backend.team_meta is tested directly)."""
-    with patch("backend.stats.load_team_games", return_value=None) as mock_load:
+    """Keep tests offline: no team meta games and no patch list are loaded (backend.team_meta is tested directly)."""
+    with (
+        patch("backend.stats.load_team_games", return_value=None) as mock_load,
+        patch("backend.routes.catalog.latest_patch", return_value=None),
+    ):
         yield mock_load
 
 

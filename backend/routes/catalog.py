@@ -1,6 +1,7 @@
 """Catalog routes: backend version, heroes, hero meta, Liquipedia matches and team search."""
 
 import os
+import time
 
 from flask import Response, current_app, jsonify
 
@@ -21,6 +22,7 @@ from backend.schemas import (
     TeamSearchQuerySchema,
     VersionSchema,
 )
+from backend.team_meta import latest_patch
 
 logger = setup_logging(__name__)
 
@@ -84,14 +86,16 @@ def get_heroes() -> tuple[Response, int]:
 @bp.response(200, MetaSchema)
 @bp.error_response(503, Errors.FAILED_TO_FETCH_HERO_STATS, "OpenDota could not be reached or its answer was invalid")
 def get_hero_meta(args: dict) -> tuple[Response, int]:
-    """Pro meta, ultra meta and pub meta heroes from OpenDota /heroStats (about the last 7 days).
+    """Pro meta, ultra meta and pub meta heroes from OpenDota /heroStats (about the last 7 days), and the latest patch.
 
     At most one OpenDota request per hour (cached in Redis), or per minute with `refresh=true`; the thresholds
     are query parameters, so changing them needs no new request.
     """
     try:
         refresh = args.pop("refresh", False)
-        return jsonify(get_meta(MetaParams(**args), refresh)), 200
+        meta = get_meta(MetaParams(**args), refresh)
+        patch = latest_patch(int(time.time()))  # Cached for a week, None when unknown
+        return jsonify({**meta, "patch": patch["name"] if patch else None}), 200
     except ConnectionError as e:
         return api_error(503, Errors.FAILED_TO_FETCH_HERO_STATS, e)
 

@@ -81,8 +81,14 @@ const META_STATE_LABELS: Record<TeamMetaState, string> = {
 
 const formatPct = (value: number | null | undefined): string => (value == null ? '-' : `${Math.round(value)}%`)
 
-// "Since Oct 5: 3+ meta heroes in 14 of 19 games (74%)"
-const formatMetaWindow = (window: TeamMetaWindow, minHeroes: number): string =>
+const DAY_SECONDS = 24 * 60 * 60
+
+// "16 (57%) 20d": meta games and their share in a window; the window length is counted from its start to now
+const formatMetaGames = (window: TeamMetaWindow, now: number): string =>
+  `${window.meta_games} (${formatPct(window.meta_games_pct)}) ${Math.max(1, Math.round((now - window.start) / DAY_SECONDS))}d`
+
+// "Since 10/15/2026: 3+ meta heroes in 16 of 28 games (57%)", for the tooltip
+const describeMetaGames = (window: TeamMetaWindow, minHeroes: number): string =>
   `Since ${formatDate(window.start)}: ${minHeroes}+ meta heroes in ${window.meta_games} of ${window.games} games` +
   (window.games ? ` (${formatPct(window.meta_games_pct)})` : '')
 
@@ -91,47 +97,49 @@ const renderMetaState = (meta: TeamMeta | null | undefined) => {
   if (meta.error) return <span className="field-error">Unavailable: {meta.error}</span>
   if (!meta.state || !meta.deep || !meta.recent) return '-'
   const minHeroes = Number(meta.params?.meta_min_heroes ?? 3)
+  const now = Date.now() / 1000
+  // Both windows start at the latest patch when it is newer than the recent window: then one is enough
+  const windows = meta.deep.start === meta.recent.start ? [meta.deep] : [meta.recent, meta.deep]
   return (
     <div className="team-meta">
       <div className="team-meta-state">{META_STATE_LABELS[meta.state]}</div>
       {meta.deep.games > 0 && (
-        <div>
-          {formatPct(meta.deep.meta_picks_pct)} meta picks (pro avg {formatPct(meta.pro_meta_picks_pct)})
+        <div title="Share of all the team's hero picks (stand-ins included) that are meta heroes, in the deeper window. Pro avg: the same share over all pro picks.">
+          Meta picks: {formatPct(meta.deep.meta_picks_pct)} (pro avg {formatPct(meta.pro_meta_picks_pct)})
         </div>
       )}
-      <div>{formatMetaWindow(meta.recent, minHeroes)}</div>
-      {meta.deep.start !== meta.recent.start && <div>{formatMetaWindow(meta.deep, minHeroes)}</div>}
-      {meta.patch && <div className="roster-source">patch {meta.patch}</div>}
+      <div title={`Games with ${minHeroes}+ meta heroes in the team draft.\n${windows.map((w) => describeMetaGames(w, minHeroes)).join('\n')}`}>
+        Meta games: {windows.map((w) => formatMetaGames(w, now)).join(' / ')}
+      </div>
     </div>
   )
 }
 
-// Tags of a picked meta hero: ultra; 60d (picked only before the recent window) or pub (never picked by the team,
-// known from a core player's league + pub practice); a hero picked in the recent window has no window tag
+// Ultra tag, and a 60d tag for a hero picked only before the recent window (no tag: picked in the recent window)
 const metaHeroTags = (hero: TeamMetaHero, deepDays: number): { label: string; title: string; ultra?: boolean }[] => {
   const tags: { label: string; title: string; ultra?: boolean }[] = []
   if (hero.ultra) tags.push({ label: 'ultra', title: 'Ultra meta hero', ultra: true })
-  if (!hero.games) tags.push({ label: 'pub', title: 'Not picked by the team; core players practise it in league or pub games' })
-  else if (!hero.recent_games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days, not in the recent window` })
+  if (!hero.recent_games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days, not in the recent window` })
   return tags
 }
+
+// Tooltip of a meta hero: picks per window and how many core players practise it
+const describeMetaHero = (hero: TeamMetaHero, deepDays: number): string =>
+  `${hero.games} games in ${deepDays} days, ${hero.recent_games} in the recent window. ` +
+  `Practised by ${hero.practice_players} core player${hero.practice_players === 1 ? '' : 's'} ` +
+  `(3+ league games, or 5+ league and pub games, in ${deepDays} days).`
 
 const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
   if (!meta?.heroes) return '-'
   if (!meta.heroes.length) return 'None'
   const deepDays = Number(meta.params?.deep_days ?? 60)
+  const heroes = [...meta.heroes].sort((a, b) => a.localized_name.localeCompare(b.localized_name))
   return (
     <div className="team-meta-heroes">
-      {meta.heroes.map((hero) => (
-        <div key={hero.hero_id} className="team-meta-hero">
+      {heroes.map((hero) => (
+        <div key={hero.hero_id} className="team-meta-hero" title={describeMetaHero(hero, deepDays)}>
           <img src={hero.icon} alt={`${hero.localized_name} icon`} />
-          {hero.localized_name}
-          {hero.games > 0 && ` · ${hero.games} games`}
-          {hero.practice_players > 0 && (
-            <span title="Core players with 3+ league games, or 5+ league and pub games, on this hero in the last 60 days">
-              {` · practised by ${hero.practice_players}`}
-            </span>
-          )}
+          {hero.localized_name} · {hero.games}
           {metaHeroTags(hero, deepDays).map((tag) => (
             <span key={tag.label} className={`meta-tag team-meta-tag${tag.ultra ? ' meta-tag-ultra' : ''}`} title={tag.title}>
               {tag.label}
@@ -215,7 +223,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? A meta game has 3+ meta heroes in the team draft (stand-ins included). Actively plays: 65%+ meta games among 20+ games of the recent window; Tries: the same only in the last 60 days; Players know meta: 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days); Doesn’t play meta: 20+ games but none of that; No info: too few games. Windows start no earlier than the latest patch.',
+        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? A meta game has 3+ meta heroes in the team draft (stand-ins included). Actively plays: 65%+ meta games among 20+ games of the recent window; Tries: the same only in the last 60 days; Players know meta: 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days); Doesn’t play meta: 20+ games but none of that; No info: too few games. Windows start no earlier than the latest patch. Meta picks: share of all team picks that are meta heroes. Meta games: games with 3+ meta heroes in the draft, per window.',
       assumption: 'A team that plays the meta is better prepared. Thresholds to be tuned after testing.',
     },
     render: (_team, _ranks, meta) => renderMetaState(meta),
@@ -225,7 +233,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Meta heroes the team picked in 3+ tournament games (most games first) or a core player practises. "practised by N" = N core players with 3+ league or 5+ league and pub games on the hero in 60 days. Tags: ultra = ultra meta; 60d = picked only before the recent window; pub = never picked by the team, known from a player’s league or pub games; no tag = picked in the recent window.',
+        'Meta heroes the team picked in 3+ tournament games of the last 60 days, by name, with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover a hero for its games per window and how many core players practise it.',
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),

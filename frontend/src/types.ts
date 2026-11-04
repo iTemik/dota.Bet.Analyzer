@@ -122,7 +122,7 @@ export interface TeamMetaHero {
 
 export interface TeamMeta {
   state?: TeamMetaState
-  patch?: string | null
+  patch?: string | null // the windows start no earlier than this patch
   recent?: TeamMetaWindow
   deep?: TeamMetaWindow
   pro_meta_picks_pct?: number | null
@@ -276,6 +276,7 @@ export interface MetaParams {
 // GET /api/heroes/meta
 export interface Meta {
   fetched_at: number
+  patch?: string | null // latest Dota patch, shown in the tab name
   params: MetaParams
   pro_matches: number
   pub_matches: number

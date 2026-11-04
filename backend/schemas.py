@@ -299,9 +299,7 @@ class TeamMetaQuerySchema(MetaThresholdsSchema):
     meta_hero_min_games = fields.Int(
         load_default=TeamMetaParams.meta_hero_min_games,
         validate=validate.Range(min=1),
-        metadata={
-            "description": "Team meta: team picks a meta hero needs to be listed, unless a core player practises it"
-        },
+        metadata={"description": "Team meta: team picks a meta hero needs to be listed"},
     )
     patch_cut = fields.Bool(
         load_default=TeamMetaParams.patch_cut,
@@ -527,9 +525,7 @@ class TeamMetaSchema(Schema):
     )
     heroes = fields.List(
         fields.Nested(TeamMetaHeroSchema),
-        metadata={
-            "description": "Most team picks first; picked fewer than `meta_hero_min_games` times only if practised"
-        },
+        metadata={"description": "Meta heroes picked `meta_hero_min_games`+ times, most team picks first"},
     )
     players = fields.List(fields.Nested(TeamMetaPlayerSchema))
     params = fields.Dict(metadata={"description": "Team meta windows and thresholds used"})
@@ -922,6 +918,7 @@ class MetaSchema(Schema):
         ordered = True
 
     fetched_at = fields.Int(required=True, metadata={"description": "When the hero stats were fetched (unix seconds)"})
+    patch = fields.Str(allow_none=True, metadata={"description": "Latest Dota patch, null when unknown"})
     params = fields.Dict(required=True, metadata={"description": "Thresholds used"})
     pro_matches = fields.Int(required=True, metadata={"description": "Pro matches in the window (pro picks / 10)"})
     pub_matches = fields.Int(

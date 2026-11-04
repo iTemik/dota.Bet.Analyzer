@@ -52,6 +52,7 @@ function App() {
   const [summaryData, setSummaryData] = useState<Record<string, StatisticsResult> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [metaPatch, setMetaPatch] = useState<string | null>(null) // latest patch from the Meta tab, in its tab name
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const [hash, setHash] = useState(() => window.location.hash)
@@ -275,7 +276,7 @@ function App() {
               className={`tab ${tab === t.id ? 'active' : ''}`}
               aria-current={tab === t.id ? 'page' : undefined}
             >
-              {t.label}
+              {t.id === 'meta' && metaPatch ? `Meta ${metaPatch}` : t.label}
             </a>
           ))}
         </nav>
@@ -284,7 +285,7 @@ function App() {
 
       {tab === 'meta' && (
         <div className="tab-panel">
-          <MetaTab />
+          <MetaTab onPatch={setMetaPatch} />
         </div>
       )}
 

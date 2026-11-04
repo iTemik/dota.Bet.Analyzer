@@ -125,6 +125,15 @@ describe('MetaTab', () => {
     expect(screen.getByText(/76 pro matches, 2.5M Immortal, Divine and Ancient matches/)).toBeInTheDocument()
   })
 
+  it('reports the latest patch for the tab name', async () => {
+    mockFetch({ ...meta, patch: '7.41' })
+    const onPatch = vi.fn()
+    render(<MetaTab onPatch={onPatch} />)
+    await screen.findByRole('table', { name: 'Meta heroes' })
+
+    expect(onPatch).toHaveBeenCalledWith('7.41')
+  })
+
   it('highlights ultra meta heroes and explains each meta tag', async () => {
     await renderLoaded()
     const [delta, alpha] = bodyRows()

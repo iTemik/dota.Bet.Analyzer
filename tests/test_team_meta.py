@@ -137,9 +137,8 @@ def test_players_know_meta_from_pub_games():
         {"account_id": 104, "meta_heroes": [], "pub_known": True},
         {"account_id": 105, "meta_heroes": [], "pub_known": False},
     ]
-    # Hero 3 was never picked by the team: it is listed from practice only
-    hero3 = next(h for h in meta["heroes"] if h["hero_id"] == 3)
-    assert (hero3["games"], hero3["recent_games"], hero3["practice_players"]) == (0, 0, 1)
+    # Heroes 1 and 2 were picked 3 times; hero 3 was never picked by the team, so it is not listed
+    assert [h["hero_id"] for h in meta["heroes"]] == [1, 2]
 
 
 def test_league_games_alone_prove_practice():
@@ -178,13 +177,13 @@ def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
     assert _meta(games, meta_hero_min_games=1)["heroes"][0]["hero_id"] == 2  # Most games first
 
 
-def test_heroes_picked_fewer_than_three_times_are_listed_only_when_practised():
+def test_heroes_picked_fewer_than_three_times_are_not_listed():
     games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]  # Hero 2: 3 picks, heroes 1 and 3: 2, hero 4: 1
 
     assert [h["hero_id"] for h in _meta(games)["heroes"]] == [2]
-    # Hero 4 (1 pick) is listed again when a core player practises it in pub games
-    practised = _meta(games, {101: {4: 5}, 102: {}, 103: {}, 104: {}, 105: {}})
-    assert [h["hero_id"] for h in practised["heroes"]] == [2, 4]
+    # Practice alone does not list a hero; it is counted for the listed ones
+    practised = _meta(games, {101: {4: 5}, 102: {2: 9}, 103: {}, 104: {}, 105: {}})
+    assert [(h["hero_id"], h["practice_players"]) for h in practised["heroes"]] == [(2, 1)]
     # The state still counts every pick
     assert _meta(games)["recent"]["meta_games"] == 2
 
@@ -413,3 +412,13 @@ def test_statistics_route_forwards_meta_settings(monkeypatch):
     assert seen[0] == (MetaParams(), TeamMetaParams())
     assert seen[1][0] == MetaParams(pro_min_pick_ban=20)
     assert seen[1][1] == TeamMetaParams(deep_days=45, meta_min_games=12, patch_cut=False)
+
+
+def test_hero_meta_route_adds_the_latest_patch(monkeypatch):
+    from backend import create_app
+
+    monkeypatch.setattr("backend.routes.catalog.get_meta", lambda params, refresh: {"heroes": []})
+    monkeypatch.setattr("backend.routes.catalog.latest_patch", lambda now: {"name": "7.41", "start_time": 1})
+    client = create_app(test_config={}).test_client()
+
+    assert client.get("/api/heroes/meta").get_json() == {"heroes": [], "patch": "7.41"}

@@ -1260,6 +1260,21 @@ describe('App Component', () => {
             expect(screen.getByPlaceholderText(/Enter first team name/i)).not.toBeVisible()
         })
 
+        it('names the Meta tab after the latest patch once the meta is loaded', async () => {
+            const baseFetch = globalThis.fetch
+            globalThis.fetch = vi.fn((url: string, init?: RequestInit) =>
+                url.startsWith('/api/heroes/meta')
+                    ? Promise.resolve(
+                          createMockResponse({ fetched_at: 1, patch: '7.41', params: {}, pro_matches: 0, pub_matches: 0, heroes: [] }),
+                      )
+                    : baseFetch(url, init),
+            ) as any
+            render(<App />)
+            await userEvent.click(screen.getByRole('link', { name: 'Meta' }))
+
+            expect(await screen.findByRole('link', { name: 'Meta 7.41' })).toHaveAttribute('aria-current', 'page')
+        })
+
         it('opens the Predictions tab from a prediction link in the hash', async () => {
             window.location.hash = '#predictions/3'
             render(<App />)

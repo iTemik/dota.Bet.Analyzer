@@ -235,13 +235,21 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
   { key: 'pub_min_win', label: 'Pub meta: Win % above', min: 0, max: 100, step: 0.1 },
 ]
 
+interface MetaTabProps {
+  onPatch?: (patch: string | null) => void // called with the latest patch once the meta is loaded (tab name)
+}
+
 /** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats in one table, thresholds below it. */
-function MetaTab() {
+function MetaTab({ onPatch }: MetaTabProps) {
   const [params, setParams] = useState<MetaParams>(loadMetaParams)
   const [form, setForm] = useState<MetaParams>(params)
   const [data, setData] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  useEffect(() => {
+    if (data) onPatch?.(data.patch ?? null)
+  }, [data, onPatch])
 
   useEffect(() => {
     let cancelled = false

@@ -115,18 +115,19 @@ describe('InsightsTable', () => {
 
   describe('team meta', () => {
     const DAY = 24 * 60 * 60
-    const deepStart = 1_790_000_000
-    const recentStart = deepStart + 40 * DAY
+    const now = Math.floor(Date.now() / 1000)
+    const deepStart = now - 60 * DAY
+    const recentStart = now - 20 * DAY
     const meta = (fields: Partial<TeamMeta> = {}): TeamMeta => ({
       state: 'actively',
       patch: '7.39',
-      recent: { start: recentStart, games: 19, meta_games: 14, meta_games_pct: 73.7, meta_picks_pct: 58.2 },
-      deep: { start: deepStart, games: 30, meta_games: 20, meta_games_pct: 66.7, meta_picks_pct: 57.6 },
-      pro_meta_picks_pct: 45.1,
+      recent: { start: recentStart, games: 28, meta_games: 16, meta_games_pct: 57.1, meta_picks_pct: 58.2 },
+      deep: { start: deepStart, games: 45, meta_games: 24, meta_games_pct: 53.3, meta_picks_pct: 52.4 },
+      pro_meta_picks_pct: 49.8,
       heroes: [
+        { hero_id: 2, localized_name: 'Axe', icon: 'axe.png', ultra: false, games: 3, recent_games: 0, practice_players: 0 },
         { hero_id: 1, localized_name: 'Anti-Mage', icon: 'am.png', ultra: true, games: 6, recent_games: 4, practice_players: 1 },
-        { hero_id: 2, localized_name: 'Axe', icon: 'axe.png', ultra: false, games: 2, recent_games: 0, practice_players: 0 },
-        { hero_id: 3, localized_name: 'Bane', icon: 'bane.png', ultra: false, games: 0, recent_games: 0, practice_players: 2 },
+        { hero_id: 3, localized_name: 'Bane', icon: 'bane.png', ultra: false, games: 4, recent_games: 1, practice_players: 2 },
       ],
       players: [],
       params: { meta_min_heroes: 3, deep_days: 60 },
@@ -134,15 +135,18 @@ describe('InsightsTable', () => {
     })
     const since = (start: number) => `Since ${new Date(start * 1000).toLocaleDateString()}`
 
-    it('shows the state, the meta picks share and both windows', () => {
+    it('shows the state, meta picks and meta games per window, with details in tooltips', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), undefined]} />)
 
       const [first, second] = rowCells('Meta')
-      expect(first).toHaveTextContent('Actively plays meta')
-      expect(first).toHaveTextContent('58% meta picks (pro avg 45%)')
-      expect(first).toHaveTextContent(`${since(recentStart)}: 3+ meta heroes in 14 of 19 games (74%)`)
-      expect(first).toHaveTextContent(`${since(deepStart)}: 3+ meta heroes in 20 of 30 games (67%)`)
-      expect(first).toHaveTextContent('patch 7.39')
+      expect(first).toHaveTextContent('Actively plays metaMeta picks: 52% (pro avg 50%)Meta games: 16 (57%) 20d / 24 (53%) 60d')
+      expect(first).not.toHaveTextContent('7.39')
+      expect(within(first).getByText(/^Meta games:/)).toHaveAttribute(
+        'title',
+        `Games with 3+ meta heroes in the team draft.\n${since(recentStart)}: 3+ meta heroes in 16 of 28 games (57%)\n` +
+          `${since(deepStart)}: 3+ meta heroes in 24 of 45 games (53%)`,
+      )
+      expect(within(first).getByText(/^Meta picks:/).getAttribute('title')).toMatch(/^Share of all the team's hero picks/)
       expect(second).toHaveTextContent('-')
     })
 
@@ -157,8 +161,8 @@ describe('InsightsTable', () => {
       expect(rowCells('Meta')[0]).toHaveTextContent(label)
     })
 
-    it('shows one window when the patch cut both to the same start, and no share without games', () => {
-      const window = { start: recentStart, games: 0, meta_games: 0, meta_games_pct: null, meta_picks_pct: null }
+    it('shows one window when the patch cut both to the same start, and no meta picks without games', () => {
+      const window = { start: now - 7 * DAY, games: 0, meta_games: 0, meta_games_pct: null, meta_picks_pct: null }
       render(
         <InsightsTable
           teams={[team({}), team({})]}
@@ -167,8 +171,7 @@ describe('InsightsTable', () => {
         />,
       )
 
-      const [cell] = rowCells('Meta')
-      expect(cell).toHaveTextContent(`No info${since(recentStart)}: 3+ meta heroes in 0 of 0 gamespatch 7.39`)
+      expect(rowCells('Meta')[0]).toHaveTextContent(/^No infoMeta games: 0 \(-\) 7d$/)
       expect(rowCells('Meta Heroes')[0]).toHaveTextContent('None')
     })
 
@@ -181,18 +184,21 @@ describe('InsightsTable', () => {
       expect(rowCells('Meta Heroes')[0]).toHaveTextContent('-')
     })
 
-    it('lists meta heroes with icon, games and tags', () => {
+    it('lists meta heroes by name with icon, games and tags, details in the tooltip', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), null]} />)
 
       const [cell] = rowCells('Meta Heroes')
-      const heroes = within(cell).getAllByText(/Anti-Mage|Axe|Bane/).map((el) => el.closest('.team-meta-hero'))
-      expect(heroes[0]).toHaveTextContent('Anti-Mage · 6 games · practised by 1ultra')
-      expect(heroes[1]).toHaveTextContent('Axe · 2 games60d')
-      expect(heroes[2]).toHaveTextContent('Bane · practised by 2pub')
+      const heroes = [...cell.querySelectorAll('.team-meta-hero')]
+      expect(heroes.map((h) => h.textContent)).toEqual(['Anti-Mage · 6ultra', 'Axe · 360d', 'Bane · 4'])
+      expect(heroes[0]).toHaveAttribute(
+        'title',
+        '6 games in 60 days, 4 in the recent window. Practised by 1 core player (3+ league games, or 5+ league and pub games, in 60 days).',
+      )
+      expect(heroes[2].getAttribute('title')).toContain('Practised by 2 core players')
       expect(within(cell).getByAltText('Anti-Mage icon')).toHaveAttribute('src', 'am.png')
       expect(within(cell).getByText('ultra')).toHaveClass('meta-tag-ultra')
       expect(within(cell).getByText('60d')).toHaveAttribute('title', 'Picked only in the last 60 days, not in the recent window')
-      expect(within(cell).queryByText('recent')).not.toBeInTheDocument()
+      expect(cell).not.toHaveTextContent('practised')
     })
 
     it('hides the meta rows without team meta (saved snapshots)', () => {
