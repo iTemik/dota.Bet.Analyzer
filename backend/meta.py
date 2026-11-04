@@ -36,7 +36,7 @@ PICKS_PER_MATCH = 10
 class MetaParams:
     """Meta thresholds; every field is a query parameter of GET /api/heroes/meta."""
 
-    pro_min_pick_ban: float = 30.0  # percent of pro matches
+    pro_min_pick_ban: float = 40.0  # percent of pro matches
     ultra_min_win: float = 55.0  # percent
     ultra_min_picks: int = 5  # so a hero with 2 wins in 2 picks is not ultra meta
     pub_top: int = 30  # most picked heroes

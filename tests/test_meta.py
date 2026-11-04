@@ -39,7 +39,7 @@ def hero_stats_entry(hero_id: int, name: str, pro: tuple[int, int, int], pubs: d
 HERO_STATS = [
     hero_stats_entry(1, "Alpha", (5, 4, 0), {7: (100, 60)}),  # P+B 50%, win 80%: ultra
     hero_stats_entry(2, "Beta", (2, 2, 2), {7: (100, 40), 8: (20, 15)}),  # P+B 40%, 2/2 wins: too few picks for ultra
-    hero_stats_entry(3, "Gamma", (3, 1, 0), {7: (50, 30), 6: (10, 9)}),  # P+B exactly 30%: not meta
+    hero_stats_entry(3, "Gamma", (3, 1, 0), {7: (50, 30), 6: (10, 9)}),  # P+B 30%: not meta (default above 40%)
     hero_stats_entry(4, "Delta", (90, 50, 10), {7: (50, 26), 5: (1000, 900)}),  # P+B 1000%, win 55.6%
 ]
 
@@ -79,12 +79,11 @@ def test_compute_meta_defaults():
     assert meta["pro_matches"] == 10
     # Immortal + Divine + Ancient together (Legend games of Delta are left out): pub_matches = 330 picks / 10
     assert meta["pub_matches"] == 33
-    # Ultra first, then pro, then pub only; Gamma is only pub meta (pro P+B exactly 30%), Beta (45.8%) and Delta
-    # (exactly 52%) are not pub meta
+    # Ultra first, then pro, then pub only; Beta (pro P+B exactly 40%, pub win 45.8%) is in no meta, Gamma is only
+    # pub meta (pro P+B 30%), Delta (pub win exactly 52%) is not pub meta
     assert [(h["localized_name"], h["meta"]) for h in meta["heroes"]] == [
         ("Delta", ["ultra", "pro"]),
         ("Alpha", ["ultra", "pro", "pub"]),
-        ("Beta", ["pro"]),
         ("Gamma", ["pub"]),
     ]
     assert meta["heroes"][1] == {
@@ -103,8 +102,8 @@ def test_compute_meta_defaults():
         "pub_win_rate": 60.0,
     }
     # Pub only hero keeps its pro stats
-    assert meta["heroes"][3]["pro_pick_ban_rate"] == 30.0
-    assert meta["heroes"][3]["pub_win_rate"] == 65.0
+    assert meta["heroes"][2]["pro_pick_ban_rate"] == 30.0
+    assert meta["heroes"][2]["pub_win_rate"] == 65.0
 
 
 def test_compute_meta_custom_params():
@@ -155,13 +154,13 @@ def test_endpoint_returns_meta_and_caches(client, fake_redis):
     assert response.status_code == 200
     data = response.get_json()
     assert data["params"] == {
-        "pro_min_pick_ban": 30.0,
+        "pro_min_pick_ban": 40.0,
         "ultra_min_win": 55.0,
         "ultra_min_picks": 5,
         "pub_top": 30,
         "pub_min_win": 52.0,
     }
-    assert [h["hero_id"] for h in data["heroes"]] == [4, 1, 2, 3]
+    assert [h["hero_id"] for h in data["heroes"]] == [4, 1, 3]
     assert data["pub_matches"] == 33
     assert isinstance(data["fetched_at"], int)
     again_data = again.get_json()

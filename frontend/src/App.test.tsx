@@ -5,7 +5,7 @@ import App from './App'
 
 // Helper to create proper mock responses with text() method for version endpoint
 // Meta tab thresholds every /api/statistics request carries (defaults: nothing saved in the browser)
-const META_QUERY = '&pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
+const META_QUERY = '&pro_min_pick_ban=40&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
 
 const createMockResponse = (data: unknown, ok = true, status = 200) => ({
     ok,
