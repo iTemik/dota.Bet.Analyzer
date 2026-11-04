@@ -96,6 +96,7 @@ def test_actively_plays_meta_in_recent_window():
         "start": NOW - 20 * DAY,
     }
     assert meta["pro_meta_picks_pct"] == 90.9  # 500 of 550 pro picks
+    assert meta["meta_heroes_total"] == 5
     assert meta["patch"] == "7.39"
     assert meta["params"]["meta_min_games"] == 20
 

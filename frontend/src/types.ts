@@ -126,6 +126,7 @@ export interface TeamMeta {
   recent?: TeamMetaWindow
   deep?: TeamMetaWindow
   pro_meta_picks_pct?: number | null
+  meta_heroes_total?: number // size of the meta list the team was checked against
   heroes?: TeamMetaHero[]
   players?: { account_id: number; meta_heroes: number[]; pub_known: boolean }[]
   params?: Record<string, number | boolean>

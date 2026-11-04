@@ -134,11 +134,20 @@ const describeMetaHero = (hero: TeamMetaHero, deepDays: number): string =>
 
 const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
   if (!meta?.heroes) return '-'
-  if (!meta.heroes.length) return 'None'
   const deepDays = Number(meta.params?.deep_days ?? 60)
+  const minGames = Number(meta.params?.meta_hero_min_games ?? 3)
+  // The meta list changes size with the thresholds and the week, so the count is out of its current size
+  const total =
+    meta.meta_heroes_total != null && (
+      <div className="team-meta-count" title={`Meta heroes the team picked ${minGames}+ times in ${deepDays} days, out of all current meta heroes`}>
+        {meta.heroes.length} of {meta.meta_heroes_total} meta heroes
+      </div>
+    )
+  if (!meta.heroes.length) return total || 'None'
   const heroes = [...meta.heroes].sort((a, b) => a.localized_name.localeCompare(b.localized_name))
   return (
     <div className="team-meta-heroes">
+      {total}
       {heroes.map((hero) => (
         <div key={hero.hero_id} className="team-meta-hero">
           <img src={hero.icon} alt={`${hero.localized_name} icon`} />
@@ -239,7 +248,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Meta heroes the team picked in 3+ tournament games of the last 60 days, by name, with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover the number of games for the games per window and how many core players practise it.',
+        'How many of the current meta heroes the team picked in 3+ tournament games of the last 60 days, then those heroes by name with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover the number of games for the games per window and how many core players practise it.',
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),

@@ -1061,3 +1061,8 @@ pre {
   cursor: help;
   text-decoration: underline dotted;
 }
+
+.team-meta-count {
+  font-weight: 600;
+  cursor: help;
+}

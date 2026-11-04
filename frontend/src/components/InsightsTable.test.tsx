@@ -124,6 +124,7 @@ describe('InsightsTable', () => {
       recent: { start: recentStart, games: 28, meta_games: 16, meta_games_pct: 57.1, meta_picks_pct: 58.2 },
       deep: { start: deepStart, games: 45, meta_games: 24, meta_games_pct: 53.3, meta_picks_pct: 52.4 },
       pro_meta_picks_pct: 49.8,
+      meta_heroes_total: 14,
       heroes: [
         { hero_id: 2, localized_name: 'Axe', icon: 'axe.png', ultra: false, games: 3, recent_games: 0, practice_players: 0 },
         { hero_id: 1, localized_name: 'Anti-Mage', icon: 'am.png', ultra: true, games: 6, recent_games: 4, practice_players: 1 },
@@ -185,7 +186,7 @@ describe('InsightsTable', () => {
       const [cell] = rowCells('Meta')
       expect(cell).toHaveTextContent(/^No info$/)
       expect(cell.querySelector('.team-meta')?.getAttribute('title')?.split('\n')).toHaveLength(3)
-      expect(rowCells('Meta Heroes')[0]).toHaveTextContent('None')
+      expect(rowCells('Meta Heroes')[0]).toHaveTextContent(/^0 of 14 meta heroes$/)
     })
 
     it('shows an unavailable meta with its error', () => {
@@ -203,6 +204,7 @@ describe('InsightsTable', () => {
       const [cell] = rowCells('Meta Heroes')
       const heroes = [...cell.querySelectorAll('.team-meta-hero')]
       expect(heroes.map((h) => h.textContent)).toEqual(['Anti-Mage · 6ultra', 'Axe · 360d', 'Bane · 4'])
+      expect(cell.querySelector('.team-meta-count')).toHaveTextContent(/^3 of 14 meta heroes$/)
       expect(heroes[0]).not.toHaveAttribute('title')
       expect(heroes[0].querySelector('.team-meta-games')).toHaveAttribute(
         'title',

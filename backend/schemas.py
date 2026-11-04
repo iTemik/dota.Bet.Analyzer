@@ -523,6 +523,7 @@ class TeamMetaSchema(Schema):
     pro_meta_picks_pct = fields.Float(
         allow_none=True, metadata={"description": "Share of all pro picks on meta heroes, percent (pro avg)"}
     )
+    meta_heroes_total = fields.Int(metadata={"description": "Number of meta heroes (pro and ultra) checked"})
     heroes = fields.List(
         fields.Nested(TeamMetaHeroSchema),
         metadata={"description": "Meta heroes picked `meta_hero_min_games`+ times, most team picks first"},

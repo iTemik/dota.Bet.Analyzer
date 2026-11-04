@@ -314,9 +314,9 @@ def compute_team_meta(
 
     Returns:
         state, patch, recent/deep windows (games, meta_games, meta_games_pct, meta_picks_pct, start),
-        pro_meta_picks_pct (share of all pro picks on meta heroes), heroes (meta heroes the team picked or a core
-        player practises: hero_id, localized_name, icon, ultra, games, recent_games, practice_players; most games
-        first), players (account_id, meta_heroes practised, pub_known) and the params used
+        pro_meta_picks_pct (share of all pro picks on meta heroes), meta_heroes_total (size of the meta list),
+        heroes (meta heroes the team picked `meta_hero_min_games`+ times: hero_id, localized_name, icon, ultra, games,
+        recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known) and the params used
     """
     meta_list = [h for h in compute_meta(hero_stats, meta_params)["heroes"] if "pro" in h["meta"]]
     meta_by_id = {h["hero_id"]: h for h in meta_list}
@@ -345,6 +345,7 @@ def compute_team_meta(
         "recent": recent,
         "deep": deep,
         "pro_meta_picks_pct": _percent(pro_meta_picks, all_pro_picks),
+        "meta_heroes_total": len(meta_ids),
         "heroes": heroes,
         "players": players,
         "params": asdict(params),
