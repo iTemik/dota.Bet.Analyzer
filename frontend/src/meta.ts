@@ -11,3 +11,14 @@ export const DEFAULT_META_PARAMS: MetaParams = {
 }
 // The thresholds are kept in the browser, so they survive a reload
 export const META_PARAMS_KEY = 'metaParams'
+
+// Saved thresholds over the defaults; keys no longer used (e.g. from an older version) are dropped
+export const loadMetaParams = (): MetaParams => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')
+    const keys = Object.keys(DEFAULT_META_PARAMS) as (keyof MetaParams)[]
+    return Object.fromEntries(keys.map((k) => [k, saved[k] ?? DEFAULT_META_PARAMS[k]])) as unknown as MetaParams
+  } catch {
+    return DEFAULT_META_PARAMS
+  }
+}

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { formatDate, teamName } from '../format'
 import { getCorePlayers, getStandins, hasCore, renderName } from '../roster'
-import type { Player, TeamData } from '../types'
+import type { Player, TeamData, TeamMeta, TeamMetaHero, TeamMetaState, TeamMetaWindow } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 // Leaderboard rank per account id (null: not on the leaderboard); only players whose rank was fetched are in it
@@ -10,6 +10,7 @@ export type PlayerRanks = Map<number, number | null>
 interface InsightsTableProps {
   teams: (TeamData | undefined)[] // team 1 and team 2
   ranks: PlayerRanks[] // player ranks per team
+  metas?: (TeamMeta | null | undefined)[] // team meta per team from the task results; without it the meta rows are hidden
 }
 
 // " · games: N · rank: R" after a player's name; "N of total" when the player missed some of the team's
@@ -70,8 +71,84 @@ const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
   return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team, ranks)
 }
 
+const META_STATE_LABELS: Record<TeamMetaState, string> = {
+  actively: 'Actively plays meta',
+  tries: 'Tries to play meta',
+  players_know: 'Players know meta',
+  doesnt_play: "Doesn't play meta",
+  no_info: 'No info',
+}
+
+const formatPct = (value: number | null | undefined): string => (value == null ? '-' : `${Math.round(value)}%`)
+
+// "Since Oct 5: 3+ meta heroes in 14 of 19 games (74%)"
+const formatMetaWindow = (window: TeamMetaWindow, minHeroes: number): string =>
+  `Since ${formatDate(window.start)}: ${minHeroes}+ meta heroes in ${window.meta_games} of ${window.games} games` +
+  (window.games ? ` (${formatPct(window.meta_games_pct)})` : '')
+
+const renderMetaState = (meta: TeamMeta | null | undefined) => {
+  if (!meta) return '-'
+  if (meta.error) return <span className="field-error">Unavailable: {meta.error}</span>
+  if (!meta.state || !meta.deep || !meta.recent) return '-'
+  const minHeroes = Number(meta.params?.meta_min_heroes ?? 3)
+  return (
+    <div className="team-meta">
+      <div className="team-meta-state">{META_STATE_LABELS[meta.state]}</div>
+      {meta.deep.games > 0 && (
+        <div>
+          {formatPct(meta.deep.meta_picks_pct)} meta picks (pro avg {formatPct(meta.pro_meta_picks_pct)})
+        </div>
+      )}
+      <div>{formatMetaWindow(meta.recent, minHeroes)}</div>
+      {meta.deep.start !== meta.recent.start && <div>{formatMetaWindow(meta.deep, minHeroes)}</div>}
+      {meta.patch && <div className="roster-source">patch {meta.patch}</div>}
+    </div>
+  )
+}
+
+// Tags of a picked meta hero: ultra; recent (picked in the recent window), 60d (only in the deeper window) or
+// pub (never picked by the team, known from a core player's league + pub practice)
+const metaHeroTags = (hero: TeamMetaHero, deepDays: number): { label: string; title: string; ultra?: boolean }[] => {
+  const tags: { label: string; title: string; ultra?: boolean }[] = []
+  if (hero.ultra) tags.push({ label: 'ultra', title: 'Ultra meta hero', ultra: true })
+  if (hero.recent_games) tags.push({ label: 'recent', title: `Picked ${hero.recent_games} times in the recent window` })
+  else if (hero.games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days` })
+  else tags.push({ label: 'pub', title: 'Not picked by the team; core players practise it in league or pub games' })
+  return tags
+}
+
+const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
+  if (!meta?.heroes) return '-'
+  if (!meta.heroes.length) return 'None'
+  const deepDays = Number(meta.params?.deep_days ?? 60)
+  return (
+    <div className="team-meta-heroes">
+      {meta.heroes.map((hero) => (
+        <div key={hero.hero_id} className="team-meta-hero">
+          <img src={hero.icon} alt={`${hero.localized_name} icon`} />
+          {hero.localized_name}
+          {hero.games > 0 && ` · ${hero.games} games`}
+          {hero.practice_players > 0 && ` · practised by ${hero.practice_players}`}
+          {metaHeroTags(hero, deepDays).map((tag) => (
+            <span key={tag.label} className={`meta-tag team-meta-tag${tag.ultra ? ' meta-tag-ultra' : ''}`} title={tag.title}>
+              {tag.label}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type InsightRow = {
+  label: string
+  info?: RowInfo
+  needsMeta?: boolean // shown only with team meta (live Compare, not saved snapshots)
+  render: (team: TeamData | undefined, ranks: PlayerRanks, meta: TeamMeta | null | undefined) => ReactNode
+}
+
 // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
-const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+const insightRows: InsightRow[] = [
   { label: 'Team Tag', render: (team) => team?.tag || '-' },
   { label: 'Team ID', render: (team) => team?.team_id || '-' },
   {
@@ -130,10 +207,30 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
     },
     render: (team) => formatDuration(team?.league_form?.duration_median),
   },
+  {
+    label: 'Meta',
+    needsMeta: true,
+    info: {
+      description:
+        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? A meta game has 3+ meta heroes in the team draft (stand-ins included). Actively plays: 65%+ meta games among 20+ games of the recent window; Tries: the same only in the last 60 days; Players know meta: 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days); Doesn’t play meta: 20+ games but none of that; No info: too few games. Windows start no earlier than the latest patch.',
+      assumption: 'A team that plays the meta is better prepared. Thresholds to be tuned after testing.',
+    },
+    render: (_team, _ranks, meta) => renderMetaState(meta),
+  },
+  {
+    label: 'Meta Heroes',
+    needsMeta: true,
+    info: {
+      description:
+        'Meta heroes the team picked in tournament games (most games first) or a core player practises. Tags: ultra = ultra meta; recent = picked in the recent window; 60d = picked only in the deeper window; pub = never picked by the team, known from a player’s league or pub games.',
+      assumption: 'TBD',
+    },
+    render: (_team, _ranks, meta) => renderMetaHeroes(meta),
+  },
 ]
 
 /** Team Insights table for two teams; renders live statistics and saved snapshots alike. */
-const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
+const InsightsTable = ({ teams, ranks, metas }: InsightsTableProps) => (
   <table className="stats-table insights-table">
     <thead>
       <tr>
@@ -143,14 +240,14 @@ const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
       </tr>
     </thead>
     <tbody>
-      {insightRows.map((row) => (
+      {insightRows.filter((row) => metas || !row.needsMeta).map((row) => (
         <tr key={row.label}>
           <td className="row-label">
             {row.label}
             {row.info && <RowInfoIcon info={row.info} />}
           </td>
-          <td>{row.render(teams[0], ranks[0] ?? new Map())}</td>
-          <td>{row.render(teams[1], ranks[1] ?? new Map())}</td>
+          <td>{row.render(teams[0], ranks[0] ?? new Map(), metas?.[0])}</td>
+          <td>{row.render(teams[1], ranks[1] ?? new Map(), metas?.[1])}</td>
         </tr>
       ))}
     </tbody>

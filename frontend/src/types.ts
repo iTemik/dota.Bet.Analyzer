@@ -94,6 +94,42 @@ export interface StatisticsResult {
   successful?: number
   total?: number
   summary?: MatchesSummary
+  meta?: TeamMeta | null // null for a task without a team
+}
+
+// GET /api/results/{task_id} meta: does the team play the meta heroes
+export type TeamMetaState = 'actively' | 'tries' | 'players_know' | 'doesnt_play' | 'no_info'
+
+// meta.recent (the `days` window) and meta.deep (`deep_days`); both start no earlier than the latest patch
+export interface TeamMetaWindow {
+  start: number
+  games: number
+  meta_games: number
+  meta_games_pct: number | null
+  meta_picks_pct: number | null
+}
+
+// meta.heroes[]: a meta hero the team picked (games) or a core player practises (practice_players)
+export interface TeamMetaHero {
+  hero_id: number
+  localized_name: string
+  icon: string
+  ultra: boolean
+  games: number
+  recent_games: number
+  practice_players: number
+}
+
+export interface TeamMeta {
+  state?: TeamMetaState
+  patch?: string | null
+  recent?: TeamMetaWindow
+  deep?: TeamMetaWindow
+  pro_meta_picks_pct?: number | null
+  heroes?: TeamMetaHero[]
+  players?: { account_id: number; meta_heroes: number[]; pub_known: boolean }[]
+  params?: Record<string, number | boolean>
+  error?: string // set instead of the rest when the hero stats were unavailable
 }
 
 // GET /api/predictions: [].team1 and [].team2 (name, tag and logo as saved in the snapshot)

@@ -2,19 +2,8 @@ import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'r
 import Bar from './Bar'
 import { formatDateTime, formatPercent, formatShortCount } from '../format'
 import { requestJson } from '../api'
-import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
+import { DEFAULT_META_PARAMS, META_PARAMS_KEY, loadMetaParams } from '../meta'
 import type { Meta, MetaHero, MetaKind, MetaParams } from '../types'
-
-// Saved thresholds over the defaults; keys no longer used (e.g. from an older version) are dropped
-const loadParams = (): MetaParams => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')
-    const keys = Object.keys(DEFAULT_META_PARAMS) as (keyof MetaParams)[]
-    return Object.fromEntries(keys.map((k) => [k, saved[k] ?? DEFAULT_META_PARAMS[k]])) as unknown as MetaParams
-  } catch {
-    return DEFAULT_META_PARAMS
-  }
-}
 
 const metaUrl = (params: MetaParams): string =>
   `/api/heroes/meta?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`
@@ -248,7 +237,7 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
 
 /** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats in one table, thresholds below it. */
 function MetaTab() {
-  const [params, setParams] = useState<MetaParams>(loadParams)
+  const [params, setParams] = useState<MetaParams>(loadMetaParams)
   const [form, setForm] = useState<MetaParams>(params)
   const [data, setData] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)

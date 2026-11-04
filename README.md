@@ -581,6 +581,12 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
 
+#### Team Meta (Team Insights "Meta" and "Meta Heroes")
+- Does the team play the Meta tab's pro/ultra heroes: actively (recent window), tries (60 days), players know meta
+  (core players' league or pub practice), doesn't play meta, or no info; with "x% meta picks (pro avg y%)"
+- Picked meta heroes with games and ultra/recent/60d/pub tags; windows start at the latest patch; thresholds are
+  `/statistics` query parameters (the Meta tab's are sent from the browser)
+
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:
 - **Match Fetching**: Retrieves match history for multiple players (up to 10)

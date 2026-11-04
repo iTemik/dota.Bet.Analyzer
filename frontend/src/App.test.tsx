@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 // Helper to create proper mock responses with text() method for version endpoint
+// Meta tab thresholds every /api/statistics request carries (defaults: nothing saved in the browser)
+const META_QUERY = '&pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
+
 const createMockResponse = (data: unknown, ok = true, status = 200) => ({
     ok,
     status,
@@ -168,8 +171,34 @@ describe('App Component', () => {
             await userEvent.click(button)
 
             await waitFor(() => {
-                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team=Nigma+Galaxy&team=Aurora&days=20', undefined)
+                expect(mockFetch).toHaveBeenCalledWith(`/api/statistics?team=Nigma+Galaxy&team=Aurora&days=20${META_QUERY}`, undefined)
             })
+        })
+
+        it('sends the Meta tab thresholds saved in the browser', async () => {
+            localStorage.setItem('metaParams', JSON.stringify({ pro_min_pick_ban: 20, pub_top: 10 }))
+            const mockFetch = vi.fn((url: string) => {
+                if (url === '/api/matches') return Promise.resolve(createMockResponse({ upcoming: [], finished: [] }))
+                if (url === '/api/version') return Promise.resolve(createMockResponse({ backend: '0.4.DEV' }))
+                return Promise.resolve(createMockResponse({ teams: [] }))
+            }) as any
+            globalThis.fetch = mockFetch
+
+            try {
+                render(<App />)
+                await userEvent.type(screen.getByPlaceholderText(/Enter first team name/i), 'A')
+                await userEvent.type(screen.getByPlaceholderText(/Enter second team name/i), 'B')
+                await userEvent.click(screen.getByRole('button', { name: /Check Statistics/i }))
+
+                await waitFor(() => {
+                    expect(mockFetch).toHaveBeenCalledWith(
+                        '/api/statistics?team=A&team=B&days=20&pro_min_pick_ban=20&ultra_min_win=55&ultra_min_picks=5&pub_top=10&pub_min_win=52',
+                        undefined,
+                    )
+                })
+            } finally {
+                localStorage.removeItem('metaParams')
+            }
         })
 
         it('should display loading state during fetch', async () => {
@@ -574,7 +603,7 @@ describe('App Component', () => {
             let callCount = 0
             const mockFetch = vi.fn((url: string) => {
                 callCount++
-                if (url === '/api/statistics?team=Team+A&team=Team+B&days=20') {
+                if (url === `/api/statistics?team=Team+A&team=Team+B&days=20${META_QUERY}`) {
                     return Promise.resolve({
                         ok: true,
                         json: () => Promise.resolve(mockStats),
@@ -1871,7 +1900,7 @@ describe('App Component', () => {
             await userEvent.click(await screen.findByText('New Squad'))
 
             await waitFor(() => {
-                expect(mockFetch).toHaveBeenCalledWith('/api/statistics?team_id=9467224&team=New+Squad&days=20', undefined)
+                expect(mockFetch).toHaveBeenCalledWith(`/api/statistics?team_id=9467224&team=New+Squad&days=20${META_QUERY}`, undefined)
             })
             expect(screen.getByPlaceholderText(/Enter first team name/i)).toHaveValue('Aurora')
             expect(screen.getByPlaceholderText(/Enter second team name/i)).toHaveValue('New Squad')
