@@ -121,6 +121,14 @@ describe('MetaTab', () => {
       ['Alpha', 'Pro', '39.5%', '-', '950', '42.1%'],
       ['Beta', 'Pub', '2.6%', '50.0%', '164k', '57.9%'],
     ])
+    // Pub data is blue (tag and column headers), pro stays neutral
+    const headers = within(table()).getAllByRole('columnheader')
+    expect(headers.filter((h) => h.classList.contains('meta-col-pub')).map((h) => h.textContent)).toEqual([
+      'Pub Picks',
+      'Pub Win',
+    ])
+    const betaRow = within(table()).getByRole('img', { name: 'Beta icon' }).closest('tr') as HTMLElement
+    expect(within(betaRow).getByText('Pub')).toHaveClass('meta-tag', 'meta-tag-pub')
     expect(within(table()).getByRole('img', { name: 'Beta icon' })).toHaveAttribute('src', 'https://cdn/Beta.png')
     expect(screen.getByText(/last 7 days: 3 meta heroes, 76 pro matches, 2.5M Immortal, Divine and Ancient matches/)).toBeInTheDocument()
   })

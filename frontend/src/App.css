@@ -942,6 +942,16 @@ pre {
   font-weight: 600;
 }
 
+/* Pub tag and Pub column headers share one blue; pro stays neutral */
+.meta-tag-pub {
+  color: var(--pub);
+  background: var(--pub-bg);
+}
+
+.meta-table th.meta-col-pub {
+  color: var(--pub);
+}
+
 /* Value with a thin bar under it */
 .meta-bar-cell {
   min-width: 5.5rem;

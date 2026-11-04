@@ -200,6 +200,7 @@ function MetaTable({ data }: { data: Meta }) {
             return (
               <th
                 key={c.key}
+                className={c.key.startsWith('pub_') ? 'meta-col-pub' : undefined}
                 title={c.title}
                 aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
               >
