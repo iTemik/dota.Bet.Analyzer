@@ -1060,3 +1060,8 @@ pre {
   font-weight: 600;
   cursor: help;
 }
+
+/* The hero line does not wrap, its (i) tooltip does */
+.team-meta-hero .row-info-tooltip {
+  white-space: normal;
+}
