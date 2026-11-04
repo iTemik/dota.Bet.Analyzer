@@ -81,7 +81,8 @@ def _meta(games: list[dict], player_heroes: dict | None = None, **params) -> dic
 
 
 THREE_META = [1, 2, 3, 6, 7]  # A meta game: 3 meta heroes
-TWO_META = [1, 2, 6, 7, 8]  # Not a meta game
+TWO_META = [1, 2, 6, 7, 8]  # A meta game with the default 2 meta heroes
+ONE_META = [1, 6, 7, 8, 9]  # Not a meta game
 
 
 def test_actively_plays_meta_in_recent_window():
@@ -113,7 +114,7 @@ def test_tries_when_only_the_deeper_window_passes():
 
 def test_meta_games_share_below_threshold_is_not_playing_meta():
     # 12 of 20 games (60%) are meta games, under 65%; practice is out of reach here
-    games = _games(12, THREE_META) + [_game(100 + i, 11 + i * 0.5, TWO_META) for i in range(8)]
+    games = _games(12, THREE_META) + [_game(100 + i, 11 + i * 0.5, ONE_META) for i in range(8)]
     meta = _meta(games, practice_league_games=100)
 
     assert meta["deep"]["meta_games_pct"] == 60.0
@@ -122,6 +123,13 @@ def test_meta_games_share_below_threshold_is_not_playing_meta():
     assert _meta(games, meta_min_games_pct=60)["state"] == STATE_ACTIVELY
     # With the default practice rule, the league picks show 3 players practising meta heroes
     assert _meta(games)["state"] == STATE_PLAYERS_KNOW
+
+
+def test_two_meta_heroes_make_a_meta_game_by_default():
+    games = _games(20, TWO_META)
+
+    assert _meta(games)["recent"]["meta_games"] == 20
+    assert _meta(games, meta_min_heroes=3)["recent"]["meta_games"] == 0
 
 
 def test_players_know_meta_from_pub_games():

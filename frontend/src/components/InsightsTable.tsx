@@ -81,18 +81,18 @@ const META_STATE_LABELS: Record<TeamMetaState, string> = {
 
 const formatPct = (value: number | null | undefined): string => (value == null ? '-' : `${Math.round(value)}%`)
 
-// "Since 10/15/2026: 3+ meta heroes in 16 of 28 games (57%)", for the tooltip
+// "Since 10/15/2026: 2+ meta heroes in 16 of 28 games (57%)", for the tooltip
 const describeMetaGames = (window: TeamMetaWindow, minHeroes: number): string =>
   `Since ${formatDate(window.start)}: ${minHeroes}+ meta heroes in ${window.meta_games} of ${window.games} games` +
   (window.games ? ` (${formatPct(window.meta_games_pct)})` : '')
 
-// State and one number: the share of games with 3+ meta heroes in the window the state comes from (the recent window
+// State and one number: the share of games with 2+ meta heroes in the window the state comes from (the recent window
 // for "Actively plays meta", else the deeper one), green when it reaches the rule's threshold; details in the tooltip
 const renderMetaState = (meta: TeamMeta | null | undefined) => {
   if (!meta) return '-'
   if (meta.error) return <span className="field-error">Unavailable: {meta.error}</span>
   if (!meta.state || !meta.deep || !meta.recent) return '-'
-  const minHeroes = Number(meta.params?.meta_min_heroes ?? 3)
+  const minHeroes = Number(meta.params?.meta_min_heroes ?? 2)
   const minPct = Number(meta.params?.meta_min_games_pct ?? 65)
   const minGames = Number(meta.params?.meta_min_games ?? 20)
   const window = meta.state === 'actively' ? meta.recent : meta.deep
@@ -236,7 +236,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? A meta game has 3+ meta heroes in the team draft (stand-ins included). Actively plays: 65%+ meta games among 20+ games of the recent window; Tries: the same only in the last 60 days; Players know meta: 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days); Doesn’t play meta: 20+ games but none of that; No info: too few games. Windows start no earlier than the latest patch. The number: share of games with 3+ meta heroes in the window the state comes from, green at 65%+; hover it for both windows and the share of meta picks.',
+        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? A meta game has 2+ meta heroes in the team draft (stand-ins included). Actively plays: 65%+ meta games among 20+ games of the recent window; Tries: the same only in the last 60 days; Players know meta: 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days); Doesn’t play meta: 20+ games but none of that; No info: too few games. Windows start no earlier than the latest patch. The number: share of games with 2+ meta heroes in the window the state comes from, green at 65%+; hover it for both windows and the share of meta picks.',
       assumption: 'A team that plays the meta is better prepared. Thresholds to be tuned after testing.',
     },
     render: (_team, _ranks, meta) => renderMetaState(meta),

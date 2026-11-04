@@ -61,7 +61,7 @@ class TeamMetaParams:
 
     deep_days: int = 60  # Deeper window; the recent window is the statistics `days`
     meta_min_games: int = 20  # Games a window needs before its result counts
-    meta_min_heroes: int = 3  # Meta heroes in one team draft for a meta game
+    meta_min_heroes: int = 2  # Meta heroes in one team draft for a meta game
     meta_min_games_pct: float = 65.0  # Percent of meta games for "plays meta"
     practice_league_games: int = 3  # League games on a hero that prove practice
     practice_total_games: int = 5  # League + pub games on a hero that prove practice
