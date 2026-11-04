@@ -106,14 +106,13 @@ const renderMetaState = (meta: TeamMeta | null | undefined) => {
   )
 }
 
-// Tags of a picked meta hero: ultra; recent (picked in the recent window), 60d (only in the deeper window) or
-// pub (never picked by the team, known from a core player's league + pub practice)
+// Tags of a picked meta hero: ultra; 60d (picked only before the recent window) or pub (never picked by the team,
+// known from a core player's league + pub practice); a hero picked in the recent window has no window tag
 const metaHeroTags = (hero: TeamMetaHero, deepDays: number): { label: string; title: string; ultra?: boolean }[] => {
   const tags: { label: string; title: string; ultra?: boolean }[] = []
   if (hero.ultra) tags.push({ label: 'ultra', title: 'Ultra meta hero', ultra: true })
-  if (hero.recent_games) tags.push({ label: 'recent', title: `Picked ${hero.recent_games} times in the recent window` })
-  else if (hero.games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days` })
-  else tags.push({ label: 'pub', title: 'Not picked by the team; core players practise it in league or pub games' })
+  if (!hero.games) tags.push({ label: 'pub', title: 'Not picked by the team; core players practise it in league or pub games' })
+  else if (!hero.recent_games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days, not in the recent window` })
   return tags
 }
 
@@ -128,7 +127,11 @@ const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
           <img src={hero.icon} alt={`${hero.localized_name} icon`} />
           {hero.localized_name}
           {hero.games > 0 && ` · ${hero.games} games`}
-          {hero.practice_players > 0 && ` · practised by ${hero.practice_players}`}
+          {hero.practice_players > 0 && (
+            <span title="Core players with 3+ league games, or 5+ league and pub games, on this hero in the last 60 days">
+              {` · practised by ${hero.practice_players}`}
+            </span>
+          )}
           {metaHeroTags(hero, deepDays).map((tag) => (
             <span key={tag.label} className={`meta-tag team-meta-tag${tag.ultra ? ' meta-tag-ultra' : ''}`} title={tag.title}>
               {tag.label}
@@ -222,7 +225,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'Meta heroes the team picked in 3+ tournament games (most games first) or a core player practises. Tags: ultra = ultra meta; recent = picked in the recent window; 60d = picked only in the deeper window; pub = never picked by the team, known from a player’s league or pub games.',
+        'Meta heroes the team picked in 3+ tournament games (most games first) or a core player practises. "practised by N" = N core players with 3+ league or 5+ league and pub games on the hero in 60 days. Tags: ultra = ultra meta; 60d = picked only before the recent window; pub = never picked by the team, known from a player’s league or pub games; no tag = picked in the recent window.',
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),

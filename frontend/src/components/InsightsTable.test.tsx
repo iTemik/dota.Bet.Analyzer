@@ -186,12 +186,13 @@ describe('InsightsTable', () => {
 
       const [cell] = rowCells('Meta Heroes')
       const heroes = within(cell).getAllByText(/Anti-Mage|Axe|Bane/).map((el) => el.closest('.team-meta-hero'))
-      expect(heroes[0]).toHaveTextContent('Anti-Mage · 6 games · practised by 1ultrarecent')
+      expect(heroes[0]).toHaveTextContent('Anti-Mage · 6 games · practised by 1ultra')
       expect(heroes[1]).toHaveTextContent('Axe · 2 games60d')
       expect(heroes[2]).toHaveTextContent('Bane · practised by 2pub')
       expect(within(cell).getByAltText('Anti-Mage icon')).toHaveAttribute('src', 'am.png')
       expect(within(cell).getByText('ultra')).toHaveClass('meta-tag-ultra')
-      expect(within(cell).getByText('60d')).toHaveAttribute('title', 'Picked only in the last 60 days')
+      expect(within(cell).getByText('60d')).toHaveAttribute('title', 'Picked only in the last 60 days, not in the recent window')
+      expect(within(cell).queryByText('recent')).not.toBeInTheDocument()
     })
 
     it('hides the meta rows without team meta (saved snapshots)', () => {
