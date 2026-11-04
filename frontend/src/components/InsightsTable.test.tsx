@@ -203,18 +203,21 @@ describe('InsightsTable', () => {
 
       const [cell] = rowCells('Meta Heroes')
       const heroes = [...cell.querySelectorAll('.team-meta-hero')]
-      expect(heroes.map((h) => h.textContent)).toEqual(['Anti-Mage · 6ultra', 'Axe · 360d', 'Bane · 4'])
+      // Each hero: name, games, an (i) tooltip and its tags
+      expect(heroes.map((h) => h.textContent?.replace(/iDescription: [^]*?\)\./, ' (i) '))).toEqual([
+        'Anti-Mage · 6 (i) ultra',
+        'Axe · 3 (i) 60d',
+        'Bane · 4 (i) ',
+      ])
       expect(cell.querySelector('.team-meta-count')).toHaveTextContent(/^3 of 14 meta heroes$/)
-      expect(heroes[0]).not.toHaveAttribute('title')
-      expect(heroes[0].querySelector('.team-meta-games')).toHaveAttribute(
-        'title',
-        '6 games in 60 days, 4 in the recent window. Practised by 1 core player (3+ league games, or 5+ league and pub games, in 60 days).',
+      expect(within(heroes[0] as HTMLElement).getByRole('tooltip')).toHaveTextContent(
+        'Description: 6 games in 60 days, 4 in the recent window. Practised by 1 core player (3+ league games, or 5+ league and pub games, in 60 days).',
       )
-      expect(heroes[2].querySelector('.team-meta-games')?.getAttribute('title')).toContain('Practised by 2 core players')
+      expect(within(heroes[2] as HTMLElement).getByRole('tooltip')).toHaveTextContent('Practised by 2 core players')
       expect(within(cell).getByAltText('Anti-Mage icon')).toHaveAttribute('src', 'am.png')
       expect(within(cell).getByText('ultra')).toHaveClass('meta-tag-ultra')
       expect(within(cell).getByText('60d')).toHaveAttribute('title', 'Picked only in the last 60 days, not in the recent window')
-      expect(cell).not.toHaveTextContent('practised')
+      expect(cell.textContent?.replace(/Description: [^]*?days\)\./g, '')).not.toMatch(/ractised/)
     })
 
     it('hides the meta rows without team meta (saved snapshots)', () => {

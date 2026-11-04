@@ -151,10 +151,8 @@ const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
       {heroes.map((hero) => (
         <div key={hero.hero_id} className="team-meta-hero">
           <img src={hero.icon} alt={`${hero.localized_name} icon`} />
-          {hero.localized_name} ·{' '}
-          <span className="team-meta-games" title={describeMetaHero(hero, deepDays)}>
-            {hero.games}
-          </span>
+          {hero.localized_name} · {hero.games}
+          <RowInfoIcon info={{ description: describeMetaHero(hero, deepDays) }} />
           {metaHeroTags(hero, deepDays).map((tag) => (
             <span key={tag.label} className={`meta-tag team-meta-tag${tag.ultra ? ' meta-tag-ultra' : ''}`} title={tag.title}>
               {tag.label}
@@ -248,7 +246,7 @@ const insightRows: InsightRow[] = [
     needsMeta: true,
     info: {
       description:
-        'How many of the current meta heroes the team picked in 3+ tournament games of the last 60 days, then those heroes by name with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover the number of games for the games per window and how many core players practise it.',
+        'How many of the current meta heroes the team picked in 3+ tournament games of the last 60 days, then those heroes by name with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover the (i) next to the number of games for the games per window and how many core players practise it.',
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),
