@@ -822,6 +822,31 @@ class MatchesSchema(Schema):
     finished = fields.List(fields.Nested(MatchSchema), required=True)
 
 
+class OddsQuerySchema(Schema):
+    """Query parameters of GET /api/odds/pari: the two teams as the prediction panel shows them."""
+
+    team1 = fields.Str(required=True, validate=validate.Length(min=1), metadata={"description": "Team 1 name"})
+    team2 = fields.Str(required=True, validate=validate.Length(min=1), metadata={"description": "Team 2 name"})
+    tag1 = fields.Str(load_default=None, metadata={"description": "Team 1 tag, also matched"})
+    tag2 = fields.Str(load_default=None, metadata={"description": "Team 2 tag, also matched"})
+
+
+class OddsSchema(Schema):
+    """Match-winner odds of the soonest series of the two teams, in the requested team order."""
+
+    class Meta:
+        """Keep fields in declaration order."""
+
+        ordered = True
+
+    team1_odds = fields.Float(required=True, metadata={"description": "Decimal odds of team 1 winning the series"})
+    team2_odds = fields.Float(required=True, metadata={"description": "Decimal odds of team 2 winning the series"})
+    start_time = fields.Int(allow_none=True, metadata={"description": "Series start (unix seconds)"})
+    tournament = fields.Str(required=True, metadata={"description": "Tournament as the bookmaker names it"})
+    live = fields.Bool(required=True, metadata={"description": "The series has already started"})
+    names = fields.List(fields.Str(), required=True, metadata={"description": "Team names at the bookmaker"})
+
+
 # Auto-generated schemas from Pydantic models
 # These are generated at module import time to ensure they stay in sync with Pydantic models
 # If you modify the Pydantic models (Player, TeamStats, StatsResponse), these schemas

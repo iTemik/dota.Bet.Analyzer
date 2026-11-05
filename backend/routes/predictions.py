@@ -2,6 +2,7 @@
 
 from flask import Response, jsonify
 
+from backend.bookmakers import OddsNotFound, find_odds, get_pari_series
 from backend.head_to_head import get_head_to_head
 from backend.helpers import Errors, api_error
 from backend.logging_config import setup_logging
@@ -18,6 +19,8 @@ from backend.routes import ApiBlueprint
 from backend.routes.catalog import full_version
 from backend.schemas import (
     HeadToHeadSchema,
+    OddsQuerySchema,
+    OddsSchema,
     PredictionCreateSchema,
     PredictionDecisionSchema,
     PredictionDetailSchema,
@@ -34,7 +37,9 @@ from backend.snapshots import get_snapshot, list_snapshots, save_snapshot
 logger = setup_logging(__name__)
 
 
-bp = ApiBlueprint("Predictions", __name__, description="Prediction log: snapshots, predictions, head-to-head")
+bp = ApiBlueprint(
+    "Predictions", __name__, description="Prediction log: snapshots, predictions, head-to-head, bookmaker odds"
+)
 
 
 @bp.route("/snapshots", methods=["POST"])
@@ -245,3 +250,24 @@ if __name__ == "__main__":
 
     app = create_app()
     app.run(debug=True)
+
+
+@bp.route("/odds/pari", methods=["GET"])
+@bp.arguments(OddsQuerySchema, location="query")
+@bp.response(200, OddsSchema)
+@bp.error_response(404, Errors.ODDS_NOT_FOUND, "Pari has no upcoming series of these teams", matches=["A vs B"])
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Missing team name")
+@bp.error_response(503, Errors.FAILED_TO_FETCH_ODDS, "The Pari line could not be loaded or read")
+def get_pari_odds(args: dict) -> tuple[Response, int]:
+    """Pari match-winner odds of the soonest series of two teams, for the prediction panel.
+
+    One request to the Pari line at most every 5 minutes (the Dota 2 part is cached in Redis). Teams are matched
+    by name or tag in either order; a 404 lists the series Pari has, to spot a differently spelled name.
+    """
+    try:
+        odds = find_odds(get_pari_series(), (args["team1"], args["tag1"]), (args["team2"], args["tag2"]))
+        return jsonify(odds), 200
+    except OddsNotFound as e:
+        return api_error(404, Errors.ODDS_NOT_FOUND, e, matches=e.matches)
+    except ConnectionError as e:
+        return api_error(503, Errors.FAILED_TO_FETCH_ODDS, e)

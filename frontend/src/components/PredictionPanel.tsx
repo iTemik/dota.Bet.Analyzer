@@ -1,14 +1,27 @@
 import { useState } from 'react'
-import { postJson } from '../api'
-import { teamName } from '../format'
+import { postJson, requestJson } from '../api'
+import { formatDateTime, teamName } from '../format'
 import { type BetChoice, SERIES_OPTIONS, decisionBody, decisionErrors } from '../predictions'
-import type { StatisticsResult, TeamData } from '../types'
+import type { BookmakerOdds, StatisticsResult, TeamData } from '../types'
 
 interface PredictionPanelProps {
   teams: (TeamData | undefined)[] // team 1 and team 2
   results: (StatisticsResult | undefined)[] // GET /api/results/{task_id} per team
   days: number // statistics window the teams were loaded with
 }
+
+// Bookmakers with a "Get odds from ..." button: name shown and GET /api/odds/{key}
+const BOOKMAKERS = [{ key: 'pari', name: 'Pari' }]
+
+type OddsStatus = { kind: 'loading' } | { kind: 'found'; text: string } | { kind: 'error'; text: string }
+
+// Query of GET /api/odds/{bookmaker}: both team names and tags
+const oddsQuery = (teams: TeamData[]) =>
+  new URLSearchParams({ team1: teams[0].team, team2: teams[1].team, tag1: teams[0].tag ?? '', tag2: teams[1].tag ?? '' })
+
+// Which series the odds came from: "Pari: A vs B, Tournament, date" (live series marked)
+const foundText = (bookmaker: string, odds: BookmakerOdds) =>
+  `${bookmaker}: ${odds.names.join(' vs ')}, ${odds.tournament}, ${odds.live ? 'live' : formatDateTime(odds.start_time)}`
 
 type SaveResult = { kind: 'prediction'; id: number } | { kind: 'snapshots'; ids: number[] }
 
@@ -41,6 +54,7 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SaveResult | null>(null)
+  const [oddsStatus, setOddsStatus] = useState<OddsStatus | null>(null)
 
   // Player statistics are optional: without them the snapshot is saved with an empty summary
   const ready = teams.every(Boolean)
@@ -54,6 +68,18 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
   }
 
   const { oddsErrors, stakeError, invalid } = decisionErrors(odds, bet, stake)
+
+  // Fill both coefficients from the bookmaker's current line (still editable)
+  const fetchOdds = async (key: string, name: string) => {
+    setOddsStatus({ kind: 'loading' })
+    try {
+      const found = await requestJson<BookmakerOdds>(`/api/odds/${key}?${oddsQuery(teams as TeamData[])}`)
+      edit(setOdds)([String(found.team1_odds), String(found.team2_odds)])
+      setOddsStatus({ kind: 'found', text: foundText(name, found) })
+    } catch (err) {
+      setOddsStatus({ kind: 'error', text: err instanceof Error ? err.message : 'An error occurred' })
+    }
+  }
 
   const saveSnapshots = async (): Promise<number[]> => {
     const snapshots = await Promise.all(
@@ -127,6 +153,22 @@ function PredictionPanel({ teams, results, days }: PredictionPanelProps) {
                 ))}
               </select>
             </label>
+          </div>
+          <div className="odds-fetch">
+            {BOOKMAKERS.map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                className="secondary-btn"
+                disabled={oddsStatus?.kind === 'loading'}
+                onClick={() => fetchOdds(b.key, b.name)}
+              >
+                Get odds from {b.name}
+              </button>
+            ))}
+            {oddsStatus?.kind === 'loading' && <span className="prediction-hint">Loading odds...</span>}
+            {oddsStatus?.kind === 'found' && <span className="prediction-hint">{oddsStatus.text}</span>}
+            {oddsStatus?.kind === 'error' && <span className="field-error">{oddsStatus.text}</span>}
           </div>
         </fieldset>
 
