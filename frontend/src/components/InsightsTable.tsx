@@ -116,7 +116,7 @@ const renderMetaState = (meta: TeamMeta | null | undefined) => {
   const p3 = param(meta, 'plays_meta3_pct', 35)
   const minGames = param(meta, 'sample_min_games', 10)
   const tooltip = [
-    `Actively: 2+ meta heroes in over ${a2}% of games and 3+ in over ${a3}%. Doesn't play: 2+ in ${p2}% or less, or 3+ in ${p3}% or less. Tries: in between.`,
+    `Actively: 2+ meta heroes in over ${a2}% of games and 3+ in over ${a3}%. Doesn't play: 2+ in ${p2}% or less, or 3+ in ${p3}% or less with 2+ in ${a2}% or less. Tries: in between.`,
     `From the ${describeSample(sample)}; fewer than ${minGames} games: decided by the players' practice.`,
     `Meta heroes are ${formatPct(sample.meta_picks_pct)} of these picks (all pro games: ${formatPct(meta.pro_meta_picks_pct)}).`,
   ].join('\n')
@@ -265,7 +265,7 @@ const insightRows: InsightRow[] = [
               <b>Tries to play meta</b>: in between
             </li>
             <li>
-              <b>Doesn’t play meta</b>: 2+ in 50% or less, or 3+ in 35% or less
+              <b>Doesn’t play meta</b>: 2+ in 50% or less, or 3+ in 35% or less with 2+ in 65% or less
             </li>
             <li>
               <b>Players know meta</b>: fewer than 10 games, but 3+ core players practise a meta hero (3+ league, or 5+

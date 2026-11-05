@@ -314,7 +314,8 @@ def _state(sample: dict[str, Any], knowers: int, params: TeamMetaParams) -> str:
     meta2, meta3 = sample["meta2_games_pct"] or 0, sample["meta3_games_pct"] or 0
     if meta2 > params.actively_meta2_pct and meta3 > params.actively_meta3_pct:
         return STATE_ACTIVELY
-    if meta2 <= params.plays_meta2_pct or meta3 <= params.plays_meta3_pct:
+    # A low 3+ share alone means doesn't play only while the 2+ share is not above the actively threshold.
+    if meta2 <= params.plays_meta2_pct or (meta3 <= params.plays_meta3_pct and meta2 <= params.actively_meta2_pct):
         return STATE_DOESNT_PLAY
     return STATE_TRIES
 

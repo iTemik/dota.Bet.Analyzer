@@ -583,8 +583,8 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 
 #### Team Meta (Team Insights "Meta" and "Meta Heroes")
 - Does the team play the Meta tab's pro/ultra heroes, from its 15 newest tournament games (recent window first, then
-  60 days): actively (2+ meta heroes in over 65% of drafts and 3+ in over 50%), doesn't play (50% or less, or 35% or
-  less), tries (in between); with fewer than 10 games: players know meta (core players' league or pub practice) or
+  60 days): actively (2+ meta heroes in over 65% of drafts and 3+ in over 50%), doesn't play (2+ in 50% or less, or 3+
+  in 35% or less while 2+ is 65% or less), tries (in between); with fewer than 10 games: players know meta (core players' league or pub practice) or
   no info. Next to it the two shares, green/red by the thresholds
 - Team Comparison "Hero Pool": wide (over 40), normal or narrow (under 30) different heroes in the same 15 games
   ("Wide: 45"); the bigger pool is green when they differ by more than 3

@@ -122,8 +122,10 @@ def test_states_from_the_shares_of_2_and_3_meta_hero_drafts():
     assert _meta(_mix(6, 6, 3))["state"] == STATE_TRIES
     # 2+ exactly 65% is not above it: tries
     assert _meta(_mix(13, 0, 7), sample_games=20)["state"] == STATE_TRIES
-    # 3+ in 33% (at most 35%): doesn't play, whatever the 2+ share
-    assert _meta(_mix(5, 10, 0))["state"] == STATE_DOESNT_PLAY
+    # 3+ in 33% (at most 35%) with 2+ in 60% (not above 65%): doesn't play
+    assert _meta(_mix(3, 6, 6))["state"] == STATE_DOESNT_PLAY
+    # 3+ in 33% but 2+ in 100% (above 65%): tries, a low 3+ share alone is not enough
+    assert _meta(_mix(5, 10, 0))["state"] == STATE_TRIES
     # 2+ in 47% (at most 50%): doesn't play
     assert _meta(_mix(7, 0, 8))["state"] == STATE_DOESNT_PLAY
     # Thresholds are parameters

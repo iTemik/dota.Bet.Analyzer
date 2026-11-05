@@ -148,7 +148,7 @@ describe('InsightsTable', () => {
       expect(within(first).getByText('40%')).not.toHaveClass('team-meta-pos', 'team-meta-neg')
       expect(first.querySelector('.team-meta')).toHaveAttribute(
         'title',
-        "Actively: 2+ meta heroes in over 65% of games and 3+ in over 50%. Doesn't play: 2+ in 50% or less, or 3+ in 35% or less. Tries: in between.\n" +
+        "Actively: 2+ meta heroes in over 65% of games and 3+ in over 50%. Doesn't play: 2+ in 50% or less, or 3+ in 35% or less with 2+ in 65% or less. Tries: in between.\n" +
           `From the 15 newest tournament games since ${formatDate(recentStart)} (all in the recent window); fewer than 10 games: decided by the players' practice.\n` +
           'Meta heroes are 58% of these picks (all pro games: 50%).',
       )
