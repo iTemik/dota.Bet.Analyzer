@@ -484,6 +484,7 @@ class TeamMetaWindowSchema(Schema):
     meta_games_pct = fields.Float(allow_none=True, metadata={"description": "meta_games / games, percent"})
     meta2_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 2+ meta heroes, percent"})
     meta3_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 3+ meta heroes, percent"})
+    heroes = fields.Int(metadata={"description": "Different heroes the team picked (hero pool size, any hero)"})
     meta_picks_pct = fields.Float(
         allow_none=True, metadata={"description": "Team picks that are meta heroes, percent (stand-ins included)"}
     )

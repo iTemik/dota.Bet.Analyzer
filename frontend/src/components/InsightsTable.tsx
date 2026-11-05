@@ -161,6 +161,25 @@ const renderMetaDrafts = (meta: TeamMeta | null | undefined) => {
   )
 }
 
+// "20d: 34 heroes in 25 games (1.4 per game)" per window
+const renderHeroPool = (meta: TeamMeta | null | undefined) => {
+  if (!meta?.recent || !meta.deep) return '-'
+  const windows: [string, TeamMetaWindow][] = [
+    [windowDays(meta.recent.start), meta.recent],
+    [windowDays(meta.deep.start), meta.deep],
+  ]
+  return (
+    <div className="team-meta-numbers">
+      {windows.map(([label, w]) => (
+        <div key={label}>
+          {label}: {w.heroes ?? '-'} heroes in {w.games} games
+          {w.games > 0 && w.heroes != null && ` (${(w.heroes / w.games).toFixed(1)} per game)`}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const describePlayerGames = (games: TeamMetaPlayerGames): string =>
   `${games.meta_games} of ${games.games} games on a meta hero (${games.players} of 5 core players with data)`
 
@@ -314,6 +333,17 @@ const insightRows: InsightRow[] = [
       assumption: 'Numbers to choose the meta state rule from; the state may change after testing.',
     },
     render: (_team, _ranks, meta) => renderMetaDrafts(meta),
+  },
+  {
+    label: 'Hero Pool',
+    needsMeta: true,
+    info: {
+      description:
+        'Different heroes the team picked (any hero, stand-ins included) and its tournament games in the recent and the 60-day window, then heroes per game. Windows start no earlier than the latest patch.',
+      assumption:
+        'A team with a big pool is harder to prepare for: it can counter-pick or surprise the opponent. Heroes per game falls as games grow, so compare teams with similar game counts.',
+    },
+    render: (_team, _ranks, meta) => renderHeroPool(meta),
   },
   {
     label: 'Meta Players',

@@ -232,6 +232,17 @@ describe('InsightsTable', () => {
       expect(second).toHaveTextContent('-')
     })
 
+    it('shows the hero pool: different heroes and games per window', () => {
+      const recent = { start: recentStart, games: 25, meta_games: 10, meta_games_pct: 40, meta_picks_pct: 30, heroes: 34 }
+      const deep = { start: deepStart, games: 45, meta_games: 20, meta_games_pct: 44, meta_picks_pct: 31, heroes: 56 }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ recent, deep }), undefined]} />)
+
+      const [first, second] = rowCells('Hero Pool')
+      expect(within(first).getByText('20d: 34 heroes in 25 games (1.4 per game)')).toBeInTheDocument()
+      expect(within(first).getByText('60d: 56 heroes in 45 games (1.2 per game)')).toBeInTheDocument()
+      expect(second).toHaveTextContent('-')
+    })
+
     it('shows the core players’ meta hero games in pubs and in all games', () => {
       const games = (meta_games: number, total: number, players = 5) => ({ games: total, meta_games, meta_games_pct: Math.round((1000 * meta_games) / total) / 10, players })
       const player_games = { recent: games(50, 100), deep: games(120, 250), pub_deep: games(90, 210, 4) }
@@ -251,6 +262,7 @@ describe('InsightsTable', () => {
       expect(screen.queryByText('Meta Heroes')).not.toBeInTheDocument()
       expect(screen.queryByText('Meta Drafts')).not.toBeInTheDocument()
       expect(screen.queryByText('Meta Players')).not.toBeInTheDocument()
+      expect(screen.queryByText('Hero Pool')).not.toBeInTheDocument()
     })
   })
 })

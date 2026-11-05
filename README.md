@@ -589,6 +589,7 @@ The backend provides REST API endpoints for team statistics, match data, and pla
   shown in the Meta tab name; thresholds are `/statistics` query parameters (the Meta tab's come from the browser)
 - "Meta Drafts": share of tournament games with 2+ and 3+ meta heroes in the recent and 60-day windows; "Meta Players":
   share of the core players' games on meta heroes in pubs (60 days) and in all games (recent and 60 days)
+- "Hero Pool": different heroes the team picked and its games in the recent and 60-day windows, with heroes per game
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:

@@ -108,6 +108,7 @@ export interface TeamMetaWindow {
   meta_games_pct: number | null
   meta2_games_pct?: number | null // games with 2+ meta heroes, percent
   meta3_games_pct?: number | null // games with 3+ meta heroes, percent
+  heroes?: number // different heroes the team picked (hero pool size)
   meta_picks_pct: number | null
 }
 

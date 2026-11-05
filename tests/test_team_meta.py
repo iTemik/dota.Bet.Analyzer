@@ -96,6 +96,7 @@ def test_actively_plays_meta_in_recent_window():
         "meta2_games_pct": 100.0,
         "meta3_games_pct": 100.0,
         "meta_picks_pct": 60.0,
+        "heroes": 5,
         "start": NOW - 20 * DAY,
     }
     assert meta["pro_meta_picks_pct"] == 90.9  # 500 of 550 pro picks
@@ -140,6 +141,8 @@ def test_shares_of_games_with_two_and_three_meta_heroes():
     meta = _meta(games)
 
     assert (meta["recent"]["meta2_games_pct"], meta["recent"]["meta3_games_pct"]) == (75.0, 50.0)
+    # Hero pool: heroes 1, 2, 3, 6, 7, 8, 9 over the three drafts
+    assert meta["recent"]["heroes"] == 7
 
 
 def test_player_games_on_meta_heroes_with_and_without_league_games():

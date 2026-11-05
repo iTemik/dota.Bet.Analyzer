@@ -206,8 +206,8 @@ def _percent(part: int, whole: int) -> Optional[float]:
 
 
 def _window(games: list[dict[str, Any]], meta_ids: set[int], min_heroes: int) -> dict[str, Any]:
-    """Games, meta games and meta pick share of a list of team games, plus the share of games with 2+ and 3+ meta
-    heroes (shown next to each other whatever `min_heroes` is)."""
+    """Games, meta games and meta pick share of a list of team games, the share of games with 2+ and 3+ meta heroes
+    (shown next to each other whatever `min_heroes` is) and the number of different heroes picked."""
     picks = [hero for game in games for _, hero in game["picks"]]
     meta_counts = [sum(1 for _, hero in g["picks"] if hero in meta_ids) for g in games]
     meta_games = sum(1 for count in meta_counts if count >= min_heroes)
@@ -218,6 +218,7 @@ def _window(games: list[dict[str, Any]], meta_ids: set[int], min_heroes: int) ->
         "meta2_games_pct": _percent(sum(1 for count in meta_counts if count >= 2), len(games)),
         "meta3_games_pct": _percent(sum(1 for count in meta_counts if count >= 3), len(games)),
         "meta_picks_pct": _percent(sum(1 for hero in picks if hero in meta_ids), len(picks)),
+        "heroes": len(set(picks)),  # Different heroes the team picked (hero pool size)
     }
 
 
