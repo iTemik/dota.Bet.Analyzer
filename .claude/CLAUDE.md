@@ -40,7 +40,7 @@ Module map, request/queue rules, caches, recipes: @codebase-map.md
 - New feature → add to README Core Features
 - DB: minimize new tables/columns; add only fields read by current code, extend later via migration
 - OpenDota: minimize requests; cache frequent/immutable responses (SQLite for finished matches, Redis TTL for volatile data)
-- HTTP: only `backend/opendota.py`, `backend/matches.py` and `backend/bookmakers.py` import `requests`; tests mock every request (enforced by `tests/test_network_guard.py`)
+- HTTP: only `backend/opendota.py`, `backend/matches.py` and `backend/bookmakers.py` import `requests` (bookmakers.py also `websocket`); tests mock every request (enforced by `tests/test_network_guard.py`)
 - PR description: follow [.github/pull_request_template.md](.github/pull_request_template.md): short Before/After, then API (by endpoint and JSON path), Backend, Frontend, DB and Other as separate bullet lists, one item per bullet (list every DB change, it needs owner approval); no player names
 
 ## PowerShell Only (Windows PC)

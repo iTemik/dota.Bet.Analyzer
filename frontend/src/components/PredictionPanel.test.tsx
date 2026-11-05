@@ -227,4 +227,22 @@ describe('PredictionPanel', () => {
     expect(await screen.findByText('The bookmaker has no upcoming series of these teams')).toBeInTheDocument()
     expect(within(bookmakerBox()).getAllByRole('textbox').map((i) => (i as HTMLInputElement).value)).toEqual(['', ''])
   })
+
+  it('fills both coefficients from Winline', async () => {
+    const fetchMock = vi.fn(() =>
+      jsonResponse(
+        { team1_odds: 1.31, team2_odds: 3.5, start_time: 1793887200, tournament: 'EPL Masters', live: false, names: ['GL', 'YS'] },
+        true,
+        200,
+      ),
+    )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    render(<PredictionPanel teams={teams} results={results} days={20} />)
+
+    await userEvent.click(within(bookmakerBox()).getByRole('button', { name: 'Get odds from Winline' }))
+
+    expect(await screen.findByText(/^Winline: GL vs YS, EPL Masters, /)).toBeInTheDocument()
+    expect(within(bookmakerBox()).getAllByRole('textbox').map((i) => (i as HTMLInputElement).value)).toEqual(['1.31', '3.5'])
+    expect(fetchMock).toHaveBeenCalledWith('/api/odds/winline?team1=Team+A&team2=Team+B&tag1=T&tag2=T', undefined)
+  })
 })

@@ -9,9 +9,9 @@ import requests
 BACKEND = Path(__file__).parent.parent / "backend"
 
 # Only these modules send HTTP: opendota.py (OpenDota retries + limiter), matches.py (Liquipedia limiter),
-# bookmakers.py (bookmaker lines, one request per button press at most every few minutes)
+# bookmakers.py (bookmaker lines and the Winline WebSocket, one fetch per button press at most every few minutes)
 HTTP_CLIENT_MODULES = {"opendota.py", "matches.py", "bookmakers.py"}
-HTTP_LIBRARIES = {"requests", "urllib3", "httpx", "aiohttp", "http.client", "urllib.request"}
+HTTP_LIBRARIES = {"requests", "urllib3", "httpx", "aiohttp", "http.client", "urllib.request", "websocket"}
 
 
 def _imported_modules(path: Path) -> set[str]:

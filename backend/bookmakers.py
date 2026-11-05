@@ -3,16 +3,22 @@
 Pari (pari.ru, the Fonbet platform) has no public API docs, but its page reads the whole betting line as JSON from
 its line servers without login or cookies. That answer is about 11.5 MB for all sports, so only the Dota 2 part is
 kept, in Redis for CACHE_TTL: a button press costs at most one request, like a visitor opening the page.
+Winline (winline.ru) sends its line over a WebSocket of binary frames (decoded in backend.winline): one short
+connection reads the menu, prematch and live frames and is closed; the Dota 2 part is cached the same way.
 Teams are found by name (exact, normalized, or the tag), in either order.
 """
 
+import gzip
+import time
 from typing import Any, Optional
 
 import requests
+import websocket
 
 from backend.cache import cached_json
 from backend.logging_config import setup_logging
 from backend.matches import normalize_team_name
+from backend.winline import LIVE_STEP, MENU_STEP, PREMATCH_STEP, WinlineLine, frame_step
 
 logger = setup_logging(__name__)
 
@@ -29,6 +35,11 @@ USER_AGENT = (
 )
 TIMEOUT = 30  # seconds; the answer is large
 PARI_CACHE_KEY = "bookmaker:pari:dota2"
+WINLINE_URL = "wss://wss.winline.ru/data_ng?client=newsite&nb=true"
+WINLINE_ORIGIN = "https://winline.ru"
+WINLINE_HELLO = ("lang", "AA==", "data", "WINLINE", "getdate")  # text frames the page sends after connecting
+WINLINE_WAIT = 15  # seconds to wait for the menu, prematch and live frames (they come within ~3 s)
+WINLINE_CACHE_KEY = "bookmaker:winline:dota2"
 CACHE_TTL = 5 * 60  # seconds a fetched line is reused
 ERROR_CACHE_TTL = 60  # a failed fetch is not repeated sooner
 
@@ -117,6 +128,73 @@ def get_pari_series() -> list[dict[str, Any]]:
         PARI_CACHE_KEY, CACHE_TTL, lambda: parse_pari_line(_fetch_pari_line()), error_ttl=ERROR_CACHE_TTL
     )
     return series
+
+
+def _fetch_winline_frames() -> list[bytes]:
+    """Gunzipped frames of one Winline WebSocket session: until menu, prematch and live arrived, or WINLINE_WAIT.
+
+    Raises:
+        ConnectionError: When the socket fails or the prematch frame did not come
+    """
+    frames: list[bytes] = []
+    needed = {MENU_STEP, PREMATCH_STEP, LIVE_STEP}
+    deadline = time.monotonic() + WINLINE_WAIT
+    try:
+        ws = websocket.create_connection(
+            WINLINE_URL, timeout=WINLINE_WAIT, header=[f"User-Agent: {USER_AGENT}"], origin=WINLINE_ORIGIN
+        )
+    except (websocket.WebSocketException, OSError) as e:
+        raise ConnectionError(f"Winline could not be reached: {e}") from e
+    try:
+        for message in WINLINE_HELLO:
+            ws.send(message)
+        while needed and time.monotonic() < deadline:
+            message = ws.recv()
+            if isinstance(message, bytes) and message[:2] == b"\x1f\x8b":
+                frame = gzip.decompress(message)
+                frames.append(frame)
+                needed.discard(frame_step(frame))
+    except (websocket.WebSocketException, OSError, EOFError) as e:
+        if PREMATCH_STEP in needed:
+            raise ConnectionError(f"Winline line could not be loaded: {e}") from e
+    finally:
+        ws.close()
+    if PREMATCH_STEP in needed:
+        raise ConnectionError("Winline sent no prematch line")
+    return frames
+
+
+def parse_winline_frames(frames: list[bytes]) -> list[dict[str, Any]]:
+    """Dota 2 series with match-winner odds from gunzipped Winline frames (menu first, then the rest in order).
+
+    Args:
+        frames: Gunzipped WebSocket messages
+
+    Returns:
+        Series soonest first, in the same shape as parse_pari_line
+
+    Raises:
+        ValueError: When a frame cannot be read (the format changed)
+    """
+    line = WinlineLine()
+    for frame in sorted(frames, key=lambda f: frame_step(f) != MENU_STEP):
+        line.add_frame(frame)
+    return line.dota_series()
+
+
+def get_winline_series() -> list[dict[str, Any]]:
+    """Dota 2 series at Winline, cached for CACHE_TTL (failures for ERROR_CACHE_TTL).
+
+    Raises:
+        ConnectionError: When the line could not be loaded or read (now or in the last minute)
+    """
+    series: list[dict[str, Any]] = cached_json(
+        WINLINE_CACHE_KEY, CACHE_TTL, lambda: parse_winline_frames(_fetch_winline_frames()), error_ttl=ERROR_CACHE_TTL
+    )
+    return series
+
+
+BOOKMAKERS = {"pari": get_pari_series, "winline": get_winline_series}  # route name -> cached series getter
 
 
 def _name_keys(*names: Optional[str]) -> set[str]:

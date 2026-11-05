@@ -626,10 +626,12 @@ Async task for comprehensive player analysis:
 - `DELETE /predictions/<id>` removes one, its snapshots stay
 - `GET /predictions/<id>/head-to-head` lists league matches between the two teams from `days` before the prediction up to now, read from team 1's cached team matches (no OpenDota request while cached, otherwise one)
 
-#### Bookmaker Odds (`/odds/pari`)
-- `GET /odds/pari?team1=&team2=&tag1=&tag2=` returns Pari's match-winner odds of the soonest series of the two teams, in the requested order
-- Reads the betting line JSON the pari.ru page loads (no login); only the Dota 2 part is kept, cached in Redis for 5 minutes (failures 1 minute)
-- Teams match by name, normalized name or tag, in either order; a 404 lists the series Pari has
+#### Bookmaker Odds (`/odds/pari`, `/odds/winline`)
+- `GET /odds/pari?team1=&team2=&tag1=&tag2=` (and `/odds/winline`) returns the bookmaker's match-winner odds of the soonest series of the two teams, in the requested order
+- Pari: reads the betting line JSON the pari.ru page loads (no login)
+- Winline: one short session on the WebSocket the winline.ru page uses, binary frames decoded in `backend/winline.py`; prematch covers about the next 1-2 days, plus live series
+- Only the Dota 2 part is kept, cached in Redis for 5 minutes (failures 1 minute)
+- Teams match by name, normalized name or tag, in either order; a 404 lists the series the bookmaker has
 
 #### Heroes (`/heroes`)
 - `GET /heroes` lists heroes (id, internal name, display name, icon URL) from d2ba.sqlite, no OpenDota request
@@ -755,7 +757,7 @@ npm test          # Run tests
 #### Log Prediction
 - Framed panel under Team Comparison and Team Insights; works before the player statistics have loaded (the snapshots are then saved without them)
 - **From bookmaker** box: coefficient per team (above 1, "1,85" also accepted) and series (bo1, bo2, bo3, bo5 or n/a)
-- **Get odds from Pari** fills both coefficients from Pari's current line (still editable) and names the series they came from
+- **Get odds from Pari** / **Get odds from Winline** fill both coefficients from the bookmaker's current line (still editable) and name the series they came from
 - **My decision**: bet on team 1, team 2 or no bet, stake (required with a bet) and a comment
 - **Save prediction** saves both team snapshots, then the prediction, and links to it; **Save snapshots only** skips the prediction
 

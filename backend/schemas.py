@@ -870,7 +870,7 @@ class MatchesSchema(Schema):
 
 
 class OddsQuerySchema(Schema):
-    """Query parameters of GET /api/odds/pari: the two teams as the prediction panel shows them."""
+    """Query parameters of GET /api/odds/pari and /api/odds/winline: the two teams as the panel shows them."""
 
     team1 = fields.Str(required=True, validate=validate.Length(min=1), metadata={"description": "Team 1 name"})
     team2 = fields.Str(required=True, validate=validate.Length(min=1), metadata={"description": "Team 2 name"})

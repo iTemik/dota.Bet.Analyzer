@@ -1,8 +1,15 @@
 """Prediction log routes: team snapshots, predictions and their head-to-head."""
 
+from collections.abc import Callable
+
 from flask import Response, jsonify
 
-from backend.bookmakers import OddsNotFound, find_odds, get_pari_series
+from backend.bookmakers import (
+    OddsNotFound,
+    find_odds,
+    get_pari_series,
+    get_winline_series,
+)
 from backend.head_to_head import get_head_to_head
 from backend.helpers import Errors, api_error
 from backend.logging_config import setup_logging
@@ -252,6 +259,17 @@ if __name__ == "__main__":
     app.run(debug=True)
 
 
+def _odds_response(get_series: Callable[[], list[dict]], args: dict) -> tuple[Response, int]:
+    """Odds of the two teams from a bookmaker's cached series, or the api_error for 404/503."""
+    try:
+        odds = find_odds(get_series(), (args["team1"], args["tag1"]), (args["team2"], args["tag2"]))
+        return jsonify(odds), 200
+    except OddsNotFound as e:
+        return api_error(404, Errors.ODDS_NOT_FOUND, e, matches=e.matches)
+    except ConnectionError as e:
+        return api_error(503, Errors.FAILED_TO_FETCH_ODDS, e)
+
+
 @bp.route("/odds/pari", methods=["GET"])
 @bp.arguments(OddsQuerySchema, location="query")
 @bp.response(200, OddsSchema)
@@ -264,10 +282,19 @@ def get_pari_odds(args: dict) -> tuple[Response, int]:
     One request to the Pari line at most every 5 minutes (the Dota 2 part is cached in Redis). Teams are matched
     by name or tag in either order; a 404 lists the series Pari has, to spot a differently spelled name.
     """
-    try:
-        odds = find_odds(get_pari_series(), (args["team1"], args["tag1"]), (args["team2"], args["tag2"]))
-        return jsonify(odds), 200
-    except OddsNotFound as e:
-        return api_error(404, Errors.ODDS_NOT_FOUND, e, matches=e.matches)
-    except ConnectionError as e:
-        return api_error(503, Errors.FAILED_TO_FETCH_ODDS, e)
+    return _odds_response(get_pari_series, args)
+
+
+@bp.route("/odds/winline", methods=["GET"])
+@bp.arguments(OddsQuerySchema, location="query")
+@bp.response(200, OddsSchema)
+@bp.error_response(404, Errors.ODDS_NOT_FOUND, "Winline has no upcoming series of these teams", matches=["A vs B"])
+@bp.error_response(422, Errors.VALIDATION_ERROR, "Missing team name")
+@bp.error_response(503, Errors.FAILED_TO_FETCH_ODDS, "The Winline line could not be loaded or read")
+def get_winline_odds(args: dict) -> tuple[Response, int]:
+    """Winline match-winner odds of the soonest series of two teams (prematch about 1-2 days ahead, and live).
+
+    One short WebSocket session at most every 5 minutes (the Dota 2 part is cached in Redis). Teams are matched
+    by name or tag in either order; a 404 lists the series Winline has.
+    """
+    return _odds_response(get_winline_series, args)

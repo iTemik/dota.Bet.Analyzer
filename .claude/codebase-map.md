@@ -17,7 +17,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `routes/statistics.py` | /statistics, /statistics/players, /stream-progress, /results + progress stream generator |
 | `routes/jobs.py` | /jobs, /jobs/stream (+ `_generate_jobs_stream`), /jobs/<name>/run |
 | `routes/catalog.py` | /version (`full_version()`), /heroes, /heroes/meta (+ `patch` from team_meta.latest_patch), /matches, /teams/search (both queue the teams job when due) |
-| `routes/predictions.py` | /snapshots, /predictions, /predictions/<id>/head-to-head, /odds/pari |
+| `routes/predictions.py` | /snapshots, /predictions, /predictions/<id>/head-to-head, /odds/pari, /odds/winline |
 | `tasks.py` | `players_statistics_task` (Celery, default queue); optional `team_meta` step (heroes per core player) adds `meta` to the results |
 | `team_meta.py` | Team meta state: `TeamMetaParams` (windows/thresholds, /statistics query params), `load_team_games` (in the request: deep-window league games with team picks, cut at `latest_patch`), `get_player_heroes_cached` (/players/{id}/heroes, Redis 1d), `compute_team_meta` (in the task: state + hero pool state from the newest 15 games, 2+/3+ meta draft shares; core players' /players/{id}/heroes (deep window) only when `needs_player_heroes`, i.e. under 10 games) |
 | `celery_app.py` | `celery` (workers: `-A backend.celery_app.celery`, include tasks + jobs), BACKGROUND_QUEUE="background", beat: check_due_jobs_task every 60 s |
@@ -35,7 +35,8 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 | `teams_sync.py` | `run_teams_sync(full)`: incremental 2 explorer queries, full ~22 pages; only the `teams` job calls it |
 | `heroes.py` | /constants/heroes → `heroes` table, `list_heroes` |
 | `meta.py` | /heroStats → Redis `opendota:hero_stats:v2` (2h, errors 60s), `MetaParams`, `compute_meta`, `get_meta` |
-| `bookmakers.py` | Pari betting line JSON (`events/listBase`, ~11.5 MB all sports) → Dota 2 series with winner odds (factors 921/923) in Redis `bookmaker:pari:dota2` (5 min, errors 60s), `find_odds` by name/normalized/tag either order, own `requests.get` |
+| `bookmakers.py` | Pari betting line JSON (`events/listBase`, ~11.5 MB all sports) and one Winline WebSocket session (`websocket-client`, menu+prematch+live frames) → Dota 2 series with winner odds in Redis `bookmaker:pari:dota2` / `bookmaker:winline:dota2` (5 min, errors 60s), `find_odds` by name/normalized/tag either order, own `requests.get` |
+| `winline.py` | Winline binary frame decoder (no network): `WinlineLine.add_frame` steps 16 menu / 3 prematch / 4 live, `dota_series()`; layout + fixtures in `tests/fixtures/winline/` |
 | `matches.py` | Liquipedia parse → Redis `liquipedia:matches` (30min, errors 60s), `LIQUIPEDIA_LIMITER`, `TeamMatcher` (name → teams table), own `requests.get` (allowed exception, like bookmakers.py) |
 | `head_to_head.py` | from cached team matches, 0-1 requests |
 | `snapshots.py`, `predictions.py` | user data in predictions.sqlite via `db.get_user_db()` |
@@ -51,7 +52,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - Cache TTL rule: Redis TTL for volatile data (key prefix `opendota:` / `liquipedia:`), SQLite for finished matches/immutable data. Cache TTL > job interval so the job refreshes before expiry. Cache errors 60 s (`{"error": ...}` value) to avoid request storms. New Redis cache → `cache.cached_json`, never a new Redis client.
 
 ## Redis (db 0 = Celery broker/results; db 1 = everything else)
-`progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `opendota:short_lineup:<match>` 1d, `opendota:player_heroes:<acc>:<days>` 1d, `opendota:patches` 7d (errors 60s), `liquipedia:matches` 30min, `bookmaker:pari:dota2` 5min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
+`progress:<task>` 1h, `progress-updates:<task>` pubsub, `results:<task>` 1h, `opendota:matches:<acc>:<days>` 1h, `opendota:rank:<acc>` 1d, `opendota:hero_stats:v2` 2h, `opendota:short_lineup:<match>` 1d, `opendota:player_heroes:<acc>:<days>` 1d, `opendota:patches` 7d (errors 60s), `liquipedia:matches` 30min, `bookmaker:pari:dota2` 5min, `bookmaker:winline:dota2` 5min, `job:<name>` status JSON, `job:<name>:lock` 30min, `ratelimit:<name>:next|lock|day:YYYY-MM-DD`.
 
 ## SQLite (`instance/`)
 - `d2ba.sqlite` = cache, deletable (WAL: delete with its -wal/-shm files). Migrations `backend/migrations/*.sql`. Tables: pro_players, teams(team_id, rating, name, tag, logo_url, last_match_time), team_matches(+team_matches_sync TTL), match_players(match_id, player_slot, account_id, gpm, xpm, hero_id), heroes, sync_state(name, synced_at).
@@ -59,7 +60,7 @@ Update this file in the same PR when a module, endpoint, cache key, table, job o
 - Migrations: `YYYYMMDD_HHMMSS_name.sql`, auto-applied by `npm run dev`, no down migrations, split on `;` (no `;` in comments), add-only preferred. Every DB change needs Artem's approval: say so in the PR DB section.
 
 ## API (`backend/routes/`; Swagger sections Statistics, Predictions, Catalog, Jobs)
-GET /version · GET /statistics?team=|team_id=&days=(+ Meta tab and team meta thresholds) · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run (`?full=true` teams only) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head · GET /odds/pari?team1=&team2=&tag1=&tag2=. Swagger: /api/swagger-ui.
+GET /version · GET /statistics?team=|team_id=&days=(+ Meta tab and team meta thresholds) · GET /statistics/players?account_id= · GET /stream-progress/<task> (JSON lines) · GET /results/<task> · GET /teams/search · GET /matches · GET /heroes · GET /heroes/meta · GET /jobs · GET /jobs/stream (JSON lines, 2 s, 120 s max) · POST /jobs/<name>/run (`?full=true` teams only) · POST|GET /snapshots, GET /snapshots/<id> · POST|GET /predictions, GET|PUT|PATCH|DELETE /predictions/<id>, GET /predictions/<id>/head-to-head · GET /odds/pari|winline?team1=&team2=&tag1=&tag2=. Swagger: /api/swagger-ui.
 
 ## Recipes
 - New endpoint: route in the matching `routes/` module (new module: `bp = ApiBlueprint(...)` + register in `register_routes`) with `@bp.arguments(QuerySchema, location="query")`, `@bp.response(200, Schema)`, one `@bp.error_response(status, Errors.X, "description", **example_details)` per error status (builds the ErrorSchema example from `Errors`; `tests/test_error_helpers.py` fails on an error response without one); body returns `jsonify(data), 200` (jsonify bypasses the schema, so the schema is docs only: keep fields in sync by hand); errors `return api_error(status, Errors.X, e, **details)`, add the code to `Errors` in helpers.py; validation errors are 422. Add `frontend/src/types.ts` shape, README Core Features line, tests for 200 + each error status.
@@ -76,7 +77,7 @@ GET /version · GET /statistics?team=|team_id=&days=(+ Meta tab and team meta th
 - Tests: vitest + testing-library next to each file (`*.test.tsx`), fixtures in `src/test/`. App tests leak polling intervals: use unique task ids when counting fetches. When a label changes, assert the full new text.
 
 ## Tests (`tests/`, pytest)
-- `conftest.py` autouse: resets app singleton; patches `backend.stats.resolve_roster` + `window_rating_change` (except test_rosters) and `backend.stats.load_team_games` (fixture `no_team_meta_requests`); patches `backend.jobs.queue_due_jobs_on_startup` (except test_jobs); no retry sleep; limiter `acquire` patched (except test_rate_limit); `no_real_http` blocks real requests and fails the test at teardown. Fixtures `app` (temp instance with both DBs migrated), `client`.
+- `conftest.py` autouse: resets app singleton; patches `backend.stats.resolve_roster` + `window_rating_change` (except test_rosters) and `backend.stats.load_team_games` (fixture `no_team_meta_requests`); patches `backend.jobs.queue_due_jobs_on_startup` (except test_jobs); no retry sleep; limiter `acquire` patched (except test_rate_limit); `no_real_http` blocks real requests and `websocket.create_connection` and fails the test at teardown. Fixtures `app` (temp instance with both DBs migrated), `client`.
 - Mock HTTP at `backend.opendota.requests.get` or the module function (`backend.<module>.get_json`); mock Celery with `patch("backend.routes.statistics.players_statistics_task")` (route) or `backend.tasks.players_statistics_task` (compute_statistics); patch a route dependency in the route module that imports it; Redis only via `patch("backend.cache.redis_client")`.
 
 ## PR rules (from Artem)

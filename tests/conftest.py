@@ -93,7 +93,11 @@ def no_real_http():
         blocked.append(request.url)
         raise RuntimeError(f"Real HTTP request in a test: {request.url}")
 
-    with patch("requests.adapters.HTTPAdapter.send", block):
+    def block_socket(url, *args, **kwargs):
+        blocked.append(url)
+        raise RuntimeError(f"Real WebSocket in a test: {url}")
+
+    with patch("requests.adapters.HTTPAdapter.send", block), patch("websocket.create_connection", block_socket):
         yield blocked
     if blocked:
         pytest.fail(f"Test made real HTTP requests (mock requests.get instead): {blocked}")

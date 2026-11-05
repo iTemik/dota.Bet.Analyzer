@@ -11,7 +11,10 @@ interface PredictionPanelProps {
 }
 
 // Bookmakers with a "Get odds from ..." button: name shown and GET /api/odds/{key}
-const BOOKMAKERS = [{ key: 'pari', name: 'Pari' }]
+const BOOKMAKERS = [
+  { key: 'pari', name: 'Pari' },
+  { key: 'winline', name: 'Winline' },
+]
 
 type OddsStatus = { kind: 'loading' } | { kind: 'found'; text: string } | { kind: 'error'; text: string }
 
