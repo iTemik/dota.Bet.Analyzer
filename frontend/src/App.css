@@ -208,6 +208,12 @@ input:focus {
   margin-top: 0.4em;
 }
 
+/* List of states inside a row tooltip */
+.row-info-list {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+
 .row-info:hover,
 .row-info:focus {
   opacity: 1;
@@ -942,6 +948,23 @@ pre {
   font-weight: 600;
 }
 
+/* Pub tag and Pub column headers share one blue; pro stays neutral */
+.meta-tag-pub {
+  color: var(--pub);
+  background: var(--pub-bg);
+}
+
+.meta-table th.meta-col-pub {
+  color: var(--pub);
+}
+
+/* Match count next to a Meta tab percent, as on OpenDota */
+.meta-matches {
+  margin-left: 0.35em;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
 /* Value with a thin bar under it */
 .meta-bar-cell {
   min-width: 5.5rem;
@@ -1021,4 +1044,47 @@ pre {
 
 .bar-bad {
   background: var(--neg-bright);
+}
+
+/* Team meta in Team Insights */
+.team-meta-state {
+  font-weight: 600;
+}
+
+.team-meta-hero {
+  white-space: nowrap;
+}
+
+.team-meta-hero img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
+.team-meta-tag {
+  margin-left: 0.4rem;
+  margin-right: 0;
+}
+
+/* Team meta share: green when it reaches the "plays meta" threshold, red below */
+.team-meta-pos {
+  color: var(--pos-text);
+  font-weight: 600;
+}
+
+.team-meta-neg {
+  color: var(--neg-text);
+  font-weight: 600;
+}
+
+.team-meta-count {
+  font-weight: 600;
+  cursor: help;
+}
+
+/* The hero line does not wrap, its (i) tooltip does */
+.team-meta-hero .row-info-tooltip {
+  white-space: normal;
 }

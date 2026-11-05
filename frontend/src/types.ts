@@ -94,6 +94,53 @@ export interface StatisticsResult {
   successful?: number
   total?: number
   summary?: MatchesSummary
+  meta?: TeamMeta | null // null for a task without a team
+}
+
+// GET /api/results/{task_id} meta: does the team play the meta heroes
+export type TeamMetaState = 'actively' | 'tries' | 'players_know' | 'doesnt_play' | 'no_info'
+
+// meta.recent (the `days` window) and meta.deep (`deep_days`); both start no earlier than the latest patch
+export interface TeamMetaWindow {
+  start: number
+  games: number
+  heroes?: number // different heroes the team picked (hero pool size)
+}
+
+// meta.sample: the newest sample_games league games the states come from
+export interface TeamMetaSample extends Omit<TeamMetaWindow, 'start'> {
+  meta2_games_pct: number | null // games with 2+ meta heroes, percent
+  meta3_games_pct: number | null // games with 3+ meta heroes, percent
+  meta_picks_pct: number | null
+  start: number | null // start time of the oldest game in the sample
+  window: 'recent' | 'deep' // recent when the recent window had enough games
+}
+
+export type TeamPoolState = 'narrow' | 'normal' | 'wide'
+
+export interface TeamMetaHero {
+  hero_id: number
+  localized_name: string
+  icon: string
+  ultra: boolean
+  games: number
+  recent_games: number
+  practice_players: number
+}
+
+export interface TeamMeta {
+  state?: TeamMetaState
+  pool_state?: TeamPoolState | null // null without a full sample
+  sample?: TeamMetaSample
+  patch?: string | null // the windows start no earlier than this patch
+  recent?: TeamMetaWindow
+  deep?: TeamMetaWindow
+  pro_meta_picks_pct?: number | null
+  meta_heroes_total?: number // size of the meta list the team was checked against
+  heroes?: TeamMetaHero[]
+  players?: { account_id: number; meta_heroes: number[]; pub_known: boolean }[]
+  params?: Record<string, number | boolean>
+  error?: string // set instead of the rest when the hero stats were unavailable
 }
 
 // GET /api/predictions: [].team1 and [].team2 (name, tag and logo as saved in the snapshot)
@@ -240,6 +287,7 @@ export interface MetaParams {
 // GET /api/heroes/meta
 export interface Meta {
   fetched_at: number
+  patch?: string | null // latest Dota patch, shown in the tab name
   params: MetaParams
   pro_matches: number
   pub_matches: number

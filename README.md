@@ -581,6 +581,16 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - Falls back to OpenDota team membership (marked unconfirmed) when there was no league match in the window
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
 
+#### Team Meta (Team Insights "Meta" and "Meta Heroes")
+- Does the team play the Meta tab's pro/ultra heroes, from its 15 newest tournament games (recent window first, then
+  60 days): actively (2+ meta heroes in over 65% of drafts and 3+ in over 50%), doesn't play (2+ in 50% or less, or 3+
+  in 35% or less while 2+ is 65% or less), tries (in between); with fewer than 10 games: players know meta (core players' league or pub practice) or
+  no info. Next to it the two shares, green/red by the thresholds
+- Team Comparison "Hero Pool": wide (over 40), normal or narrow (under 30) different heroes in the same 15 games
+  ("Wide: 45"); the bigger pool is green when they differ by more than 3
+- "X of Y meta heroes", then the picked meta heroes (3+ team games, by name) with games and ultra/60d tags; windows start at the latest patch,
+  shown in the Meta tab name; thresholds are `/statistics` query parameters (the Meta tab's come from the browser)
+
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:
 - **Match Fetching**: Retrieves match history for multiple players (up to 10)
@@ -626,7 +636,7 @@ Async task for comprehensive player analysis:
 - Filled by the `heroes` cache job (one `/constants/heroes` request, weekly); `POST /jobs/heroes/run` refreshes it
 
 #### Hero Meta (`/heroes/meta`)
-- Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold
+- Pro meta: heroes with a Pick + Ban rate in pro matches above a threshold (default 40%)
 - Ultra meta: pro meta heroes with a win rate above a threshold and a minimum number of picks
 - Pub meta: of the N most picked heroes in Immortal, Divine and Ancient games together (OpenDota's Imm/Div/Anc), those with a win rate above a threshold
 - One `heroes` list: every hero in any meta with `meta` (ultra, pro, pub) and its pro and pub stats
@@ -729,7 +739,7 @@ npm test          # Run tests
 - **Compare**, **Predictions** and **Meta** tabs, kept in the URL hash (`#compare`, `#predictions`, `#meta`) so a refresh stays on the tab
 
 #### Meta
-- One compact table of pro, ultra and pub meta heroes, like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B, Pro Win, Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
+- One compact table of pro, ultra and pub meta heroes (the number of heroes is in the line above it), like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B and Pro Win (each with its match count, as on OpenDota), Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
 - Sorted by Pro P+B (highest first) by default; click a column header to sort (highest first, click again to reverse); hover a number for the picks, bans and wins behind it
 - Thresholds, Apply, Defaults and Refresh data sit below the table; thresholds are kept in the browser
 

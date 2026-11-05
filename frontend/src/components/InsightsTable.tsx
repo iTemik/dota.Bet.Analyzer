@@ -1,7 +1,14 @@
 import type { ReactNode } from 'react'
 import { formatDate, teamName } from '../format'
 import { getCorePlayers, getStandins, hasCore, renderName } from '../roster'
-import type { Player, TeamData } from '../types'
+import type {
+  Player,
+  TeamData,
+  TeamMeta,
+  TeamMetaHero,
+  TeamMetaSample,
+  TeamMetaState,
+} from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 // Leaderboard rank per account id (null: not on the leaderboard); only players whose rank was fetched are in it
@@ -10,6 +17,7 @@ export type PlayerRanks = Map<number, number | null>
 interface InsightsTableProps {
   teams: (TeamData | undefined)[] // team 1 and team 2
   ranks: PlayerRanks[] // player ranks per team
+  metas?: (TeamMeta | null | undefined)[] // team meta per team from the task results; without it the meta rows are hidden
 }
 
 // " · games: N · rank: R" after a player's name; "N of total" when the player missed some of the team's
@@ -70,8 +78,118 @@ const renderOtherPlayers = (team: TeamData | undefined, ranks: PlayerRanks) => {
   return renderPlayedList(team.roster_source === 'recent_matches' ? others.filter((p) => p.games === 0) : others, team, ranks)
 }
 
+const META_STATE_LABELS: Record<TeamMetaState, string> = {
+  actively: 'Actively plays meta',
+  tries: 'Tries to play meta',
+  players_know: 'Players know meta',
+  doesnt_play: "Doesn't play meta",
+  no_info: 'No info',
+}
+
+const formatPct = (value: number | null | undefined): string => (value == null ? '-' : `${Math.round(value)}%`)
+
+const param = (meta: TeamMeta, key: string, fallback: number): number => Number(meta.params?.[key] ?? fallback)
+
+// Green above the actively threshold, red at or below the doesn't play one, plain in between
+const shareClass = (value: number | null | undefined, actively: number, plays: number): string | undefined => {
+  if (value == null) return undefined
+  if (value > actively) return 'team-meta-pos'
+  if (value <= plays) return 'team-meta-neg'
+  return undefined
+}
+
+// "15 games since 10/21/2026 (recent window)" for tooltips
+const describeSample = (sample: TeamMetaSample): string =>
+  `${sample.games} newest tournament games` +
+  (sample.start ? ` since ${formatDate(sample.start)}` : '') +
+  (sample.window === 'recent' ? ' (all in the recent window)' : ' (reaching into the 60-day window)')
+
+// State, then the sample's shares of drafts with 2+ and 3+ meta heroes, coloured by the state thresholds
+const renderMetaState = (meta: TeamMeta | null | undefined) => {
+  if (!meta) return '-'
+  if (meta.error) return <span className="field-error">Unavailable: {meta.error}</span>
+  if (!meta.state || !meta.sample) return '-'
+  const sample = meta.sample
+  const a2 = param(meta, 'actively_meta2_pct', 65)
+  const a3 = param(meta, 'actively_meta3_pct', 50)
+  const p2 = param(meta, 'plays_meta2_pct', 50)
+  const p3 = param(meta, 'plays_meta3_pct', 35)
+  const minGames = param(meta, 'sample_min_games', 10)
+  const tooltip = [
+    `Actively: 2+ meta heroes in over ${a2}% of games and 3+ in over ${a3}%. Doesn't play: 2+ in ${p2}% or less, or 3+ in ${p3}% or less with 2+ in ${a2}% or less. Tries: in between.`,
+    `From the ${describeSample(sample)}; fewer than ${minGames} games: decided by the players' practice.`,
+    `Meta heroes are ${formatPct(sample.meta_picks_pct)} of these picks (all pro games: ${formatPct(meta.pro_meta_picks_pct)}).`,
+  ].join('\n')
+  return (
+    <div className="team-meta" title={tooltip}>
+      <span className="team-meta-state">{META_STATE_LABELS[meta.state]}</span>
+      {sample.games >= minGames && (
+        <>
+          {' · 2+ '}
+          <span className={shareClass(sample.meta2_games_pct, a2, p2)}>{formatPct(sample.meta2_games_pct)}</span>
+          {' · 3+ '}
+          <span className={shareClass(sample.meta3_games_pct, a3, p3)}>{formatPct(sample.meta3_games_pct)}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Ultra tag, and a 60d tag for a hero picked only before the recent window (no tag: picked in the recent window)
+const metaHeroTags = (hero: TeamMetaHero, deepDays: number): { label: string; title: string; ultra?: boolean }[] => {
+  const tags: { label: string; title: string; ultra?: boolean }[] = []
+  if (hero.ultra) tags.push({ label: 'ultra', title: 'Ultra meta hero', ultra: true })
+  if (!hero.recent_games) tags.push({ label: `${deepDays}d`, title: `Picked only in the last ${deepDays} days, not in the recent window` })
+  return tags
+}
+
+// Tooltip of a meta hero: picks per window and how many core players practise it
+const describeMetaHero = (hero: TeamMetaHero, deepDays: number): string =>
+  `${hero.games} games in ${deepDays} days, ${hero.recent_games} in the recent window. ` +
+  `Practised by ${hero.practice_players} core player${hero.practice_players === 1 ? '' : 's'} ` +
+  `(3+ league games, or 5+ league and pub games, in ${deepDays} days).`
+
+const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
+  if (!meta?.heroes) return '-'
+  const deepDays = Number(meta.params?.deep_days ?? 60)
+  const minGames = Number(meta.params?.meta_hero_min_games ?? 3)
+  // The meta list changes size with the thresholds and the week, so the count is out of its current size
+  const total =
+    meta.meta_heroes_total != null && (
+      <div className="team-meta-count" title={`Meta heroes the team picked ${minGames}+ times in ${deepDays} days, out of all current meta heroes`}>
+        {meta.heroes.length} of {meta.meta_heroes_total} meta heroes
+      </div>
+    )
+  if (!meta.heroes.length) return total || 'None'
+  const heroes = [...meta.heroes].sort((a, b) => a.localized_name.localeCompare(b.localized_name))
+  return (
+    <div className="team-meta-heroes">
+      {total}
+      {heroes.map((hero) => (
+        <div key={hero.hero_id} className="team-meta-hero">
+          <img src={hero.icon} alt={`${hero.localized_name} icon`} />
+          {hero.localized_name} · {hero.games}
+          <RowInfoIcon info={{ description: describeMetaHero(hero, deepDays) }} />
+          {metaHeroTags(hero, deepDays).map((tag) => (
+            <span key={tag.label} className={`meta-tag team-meta-tag${tag.ultra ? ' meta-tag-ultra' : ''}`} title={tag.title}>
+              {tag.label}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type InsightRow = {
+  label: string
+  info?: RowInfo
+  needsMeta?: boolean // shown only with team meta (live Compare, not saved snapshots)
+  render: (team: TeamData | undefined, ranks: PlayerRanks, meta: TeamMeta | null | undefined) => ReactNode
+}
+
 // Team insights: one row per insight, Team #1 vs Team #2; add new insights to this list
-const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | undefined, ranks: PlayerRanks) => ReactNode }[] = [
+const insightRows: InsightRow[] = [
   { label: 'Team Tag', render: (team) => team?.tag || '-' },
   { label: 'Team ID', render: (team) => team?.team_id || '-' },
   {
@@ -130,10 +248,54 @@ const insightRows: { label: string; info?: RowInfo; render: (team: TeamData | un
     },
     render: (team) => formatDuration(team?.league_form?.duration_median),
   },
+  {
+    label: 'Meta',
+    needsMeta: true,
+    info: {
+      description: (
+        <>
+          Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? From its 15
+          newest tournament games (recent window first, then the last 60 days, stand-ins included): the shares of drafts
+          with 2+ and 3+ meta heroes.
+          <ul className="row-info-list">
+            <li>
+              <b>Actively plays meta</b>: 2+ in over 65% and 3+ in over 50% of games
+            </li>
+            <li>
+              <b>Tries to play meta</b>: in between
+            </li>
+            <li>
+              <b>Doesn’t play meta</b>: 2+ in 50% or less, or 3+ in 35% or less with 2+ in 65% or less
+            </li>
+            <li>
+              <b>Players know meta</b>: fewer than 10 games, but 3+ core players practise a meta hero (3+ league, or 5+
+              league and pub games in 60 days)
+            </li>
+            <li>
+              <b>No info</b>: fewer than 10 games and no practice
+            </li>
+          </ul>
+        </>
+      ),
+      colors: 'A share is green above the Actively threshold and red at or below the Doesn’t play one.',
+      assumption: 'A team that plays the meta is better prepared. Thresholds to be tuned after testing.',
+    },
+    render: (_team, _ranks, meta) => renderMetaState(meta),
+  },
+  {
+    label: 'Meta Heroes',
+    needsMeta: true,
+    info: {
+      description:
+        'How many of the current meta heroes the team picked in 3+ tournament games of the last 60 days, then those heroes by name with the number of games. Tags: ultra = ultra meta; 60d = picked only before the recent window (no tag: picked in the recent window). Hover the (i) next to the number of games for the games per window and how many core players practise it.',
+      assumption: 'TBD',
+    },
+    render: (_team, _ranks, meta) => renderMetaHeroes(meta),
+  },
 ]
 
 /** Team Insights table for two teams; renders live statistics and saved snapshots alike. */
-const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
+const InsightsTable = ({ teams, ranks, metas }: InsightsTableProps) => (
   <table className="stats-table insights-table">
     <thead>
       <tr>
@@ -143,14 +305,14 @@ const InsightsTable = ({ teams, ranks }: InsightsTableProps) => (
       </tr>
     </thead>
     <tbody>
-      {insightRows.map((row) => (
+      {insightRows.filter((row) => metas || !row.needsMeta).map((row) => (
         <tr key={row.label}>
           <td className="row-label">
             {row.label}
             {row.info && <RowInfoIcon info={row.info} />}
           </td>
-          <td>{row.render(teams[0], ranks[0] ?? new Map())}</td>
-          <td>{row.render(teams[1], ranks[1] ?? new Map())}</td>
+          <td>{row.render(teams[0], ranks[0] ?? new Map(), metas?.[0])}</td>
+          <td>{row.render(teams[1], ranks[1] ?? new Map(), metas?.[1])}</td>
         </tr>
       ))}
     </tbody>

@@ -2,19 +2,8 @@ import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'r
 import Bar from './Bar'
 import { formatDateTime, formatPercent, formatShortCount } from '../format'
 import { requestJson } from '../api'
-import { DEFAULT_META_PARAMS, META_PARAMS_KEY } from '../meta'
+import { DEFAULT_META_PARAMS, META_PARAMS_KEY, loadMetaParams } from '../meta'
 import type { Meta, MetaHero, MetaKind, MetaParams } from '../types'
-
-// Saved thresholds over the defaults; keys no longer used (e.g. from an older version) are dropped
-const loadParams = (): MetaParams => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(META_PARAMS_KEY) ?? '{}')
-    const keys = Object.keys(DEFAULT_META_PARAMS) as (keyof MetaParams)[]
-    return Object.fromEntries(keys.map((k) => [k, saved[k] ?? DEFAULT_META_PARAMS[k]])) as unknown as MetaParams
-  } catch {
-    return DEFAULT_META_PARAMS
-  }
-}
 
 const metaUrl = (params: MetaParams): string =>
   `/api/heroes/meta?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}`
@@ -43,8 +32,10 @@ function BarCell({
   max,
   title,
   win,
+  matches,
 }: {
   text: string
+  matches?: number // match count next to the percent, as on OpenDota
   value: number | null
   max: number
   title: string
@@ -54,6 +45,7 @@ function BarCell({
   return (
     <td className="meta-bar-cell" title={title}>
       <span>{text}</span>
+      {matches !== undefined && <span className="meta-matches">{count(matches)}</span>}
       <Bar value={value ?? 0} max={max} tone={tone} size="thin" />
     </td>
   )
@@ -110,6 +102,7 @@ const COLUMNS: Column[] = [
     cell: (h, data, max) => (
       <BarCell
         text={formatPercent(h.pro_pick_ban_rate)}
+        matches={h.pro_picks + h.pro_bans}
         value={h.pro_pick_ban_rate}
         max={max}
         title={`${count(h.pro_picks)} picks + ${count(h.pro_bans)} bans in ${count(data.pro_matches)} pro matches`}
@@ -126,6 +119,7 @@ const COLUMNS: Column[] = [
     cell: (h, _data, max) => (
       <BarCell
         text={formatPercent(h.pro_win_rate)}
+        matches={h.pro_win_rate == null ? undefined : h.pro_picks}
         value={h.pro_win_rate}
         max={max}
         title={`${count(h.pro_wins)} wins in ${count(h.pro_picks)} pro picks`}
@@ -211,6 +205,7 @@ function MetaTable({ data }: { data: Meta }) {
             return (
               <th
                 key={c.key}
+                className={c.key.startsWith('pub_') ? 'meta-col-pub' : undefined}
                 title={c.title}
                 aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
               >
@@ -246,13 +241,21 @@ const FIELDS: { key: keyof MetaParams; label: string; min: number; max?: number;
   { key: 'pub_min_win', label: 'Pub meta: Win % above', min: 0, max: 100, step: 0.1 },
 ]
 
+interface MetaTabProps {
+  onPatch?: (patch: string | null) => void // called with the latest patch once the meta is loaded (tab name)
+}
+
 /** Meta tab: pro, ultra and pub meta heroes from OpenDota hero stats in one table, thresholds below it. */
-function MetaTab() {
-  const [params, setParams] = useState<MetaParams>(loadParams)
+function MetaTab({ onPatch }: MetaTabProps) {
+  const [params, setParams] = useState<MetaParams>(loadMetaParams)
   const [form, setForm] = useState<MetaParams>(params)
   const [data, setData] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  useEffect(() => {
+    if (data) onPatch?.(data.patch ?? null)
+  }, [data, onPatch])
 
   useEffect(() => {
     let cancelled = false
@@ -298,7 +301,8 @@ function MetaTab() {
       {data && (
         <>
           <p className="prediction-hint meta-updated">
-            OpenDota hero stats for about the last 7 days: {count(data.pro_matches)} pro matches,{' '}
+            OpenDota hero stats for about the last 7 days: {count(data.heroes.length)} meta heroes,{' '}
+            {count(data.pro_matches)} pro matches,{' '}
             {formatShortCount(data.pub_matches)} Immortal, Divine and Ancient matches. Updated{' '}
             {formatDateTime(data.fetched_at)}.
           </p>

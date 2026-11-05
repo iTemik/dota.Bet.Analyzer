@@ -16,6 +16,10 @@
   --gold-bg: rgba(255, 200, 0, 0.08);
   --gold-bg-strong: rgba(255, 200, 0, 0.2);
 
+  /* Pub (Immortal, Divine, Ancient) data in the Meta tab; pro stays neutral */
+  --pub: #7cc4ff;
+  --pub-bg: rgba(90, 170, 255, 0.2);
+
   /* Text */
   --text: #fff;
   --text-soft: rgba(255, 255, 255, 0.85);

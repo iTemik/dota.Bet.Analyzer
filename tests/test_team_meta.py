@@ -11,6 +11,9 @@ from backend.opendota import OpenDotaError
 from backend.rosters import LineupPlayer, TeamMatch
 from backend.team_meta import (
     PATCHES_KEY,
+    POOL_NARROW,
+    POOL_NORMAL,
+    POOL_WIDE,
     STATE_ACTIVELY,
     STATE_DOESNT_PLAY,
     STATE_NO_INFO,
@@ -21,6 +24,7 @@ from backend.team_meta import (
     get_player_heroes_cached,
     latest_patch,
     load_team_games,
+    needs_player_heroes,
     player_heroes_days,
 )
 
@@ -81,46 +85,107 @@ def _meta(games: list[dict], player_heroes: dict | None = None, **params) -> dic
 
 
 THREE_META = [1, 2, 3, 6, 7]  # A meta game: 3 meta heroes
-TWO_META = [1, 2, 6, 7, 8]  # Not a meta game
+TWO_META = [1, 2, 6, 7, 8]  # A meta game with the default 2 meta heroes
+ONE_META = [1, 6, 7, 8, 9]  # Not a meta game
 
 
-def test_actively_plays_meta_in_recent_window():
+def _mix(three: int, two: int, one: int) -> list[dict]:
+    """three + two + one games (newest first) with 3, 2 and 1 meta heroes, half a day apart."""
+    drafts = [THREE_META] * three + [TWO_META] * two + [ONE_META] * one
+    return [_game(i, 0.5 + i * 0.5, heroes) for i, heroes in enumerate(drafts)]
+
+
+def test_actively_plays_meta_from_the_newest_15_recent_games():
     meta = _meta(_games(20, THREE_META))  # 20 games over the last 10 days
 
     assert meta["state"] == STATE_ACTIVELY
-    assert meta["recent"] == {
-        "games": 20,
-        "meta_games": 20,
-        "meta_games_pct": 100.0,
+    assert meta["sample"] == {
+        "games": 15,
+        "meta2_games_pct": 100.0,
+        "meta3_games_pct": 100.0,
         "meta_picks_pct": 60.0,
-        "start": NOW - 20 * DAY,
+        "heroes": 5,
+        "window": "recent",
+        "start": int(NOW - 7.5 * DAY),
     }
+    assert meta["recent"]["games"] == 20
     assert meta["pro_meta_picks_pct"] == 90.9  # 500 of 550 pro picks
+    assert meta["meta_heroes_total"] == 5
     assert meta["patch"] == "7.39"
-    assert meta["params"]["meta_min_games"] == 20
+    assert meta["params"]["sample_games"] == 15
 
 
-def test_tries_when_only_the_deeper_window_passes():
-    # 10 recent games, 10 more between 25 and 34 days ago: only the 60-day window has 20 games
-    games = _games(10, THREE_META) + [_game(100 + i, 25 + i, THREE_META) for i in range(10)]
+def test_states_from_the_shares_of_2_and_3_meta_hero_drafts():
+    # 2+ in 80%, 3+ in 60%: actively
+    assert _meta(_mix(9, 3, 3))["state"] == STATE_ACTIVELY
+    # 2+ in 80% but 3+ in 40%: tries (both must pass for actively)
+    assert _meta(_mix(6, 6, 3))["state"] == STATE_TRIES
+    # 2+ exactly 65% is not above it: tries
+    assert _meta(_mix(13, 0, 7), sample_games=20)["state"] == STATE_TRIES
+    # 3+ in 33% (at most 35%) with 2+ in 60% (not above 65%): doesn't play
+    assert _meta(_mix(3, 6, 6))["state"] == STATE_DOESNT_PLAY
+    # 3+ in 33% but 2+ in 100% (above 65%): tries, a low 3+ share alone is not enough
+    assert _meta(_mix(5, 10, 0))["state"] == STATE_TRIES
+    # 2+ in 47% (at most 50%): doesn't play
+    assert _meta(_mix(7, 0, 8))["state"] == STATE_DOESNT_PLAY
+    # Thresholds are parameters
+    assert _meta(_mix(6, 6, 3), actively_meta3_pct=35)["state"] == STATE_ACTIVELY
+
+
+def test_sample_falls_back_to_the_deeper_window():
+    # 10 recent games, 10 more between 25 and 34 days ago: the newest 15 come from both
+    games = _games(10, THREE_META) + [_game(100 + i, 25 + i, ONE_META) for i in range(10)]
 
     meta = _meta(games)
 
-    assert meta["state"] == STATE_TRIES
-    assert (meta["recent"]["games"], meta["deep"]["games"]) == (10, 20)
+    assert (meta["sample"]["window"], meta["sample"]["games"]) == ("deep", 15)
+    assert meta["sample"]["meta3_games_pct"] == 66.7
+    assert meta["state"] == STATE_ACTIVELY
 
 
-def test_meta_games_share_below_threshold_is_not_playing_meta():
-    # 12 of 20 games (60%) are meta games, under 65%; practice is out of reach here
-    games = _games(12, THREE_META) + [_game(100 + i, 11 + i * 0.5, TWO_META) for i in range(8)]
-    meta = _meta(games, practice_league_games=100)
+def test_too_few_games_leave_the_state_to_the_players():
+    # 9 games (fewer than 10): no team state; the league picks show 3 players practising meta heroes
+    games = _games(9, THREE_META)
 
-    assert meta["deep"]["meta_games_pct"] == 60.0
-    assert meta["state"] == STATE_DOESNT_PLAY
-    # A lower threshold accepts it
-    assert _meta(games, meta_min_games_pct=60)["state"] == STATE_ACTIVELY
-    # With the default practice rule, the league picks show 3 players practising meta heroes
     assert _meta(games)["state"] == STATE_PLAYERS_KNOW
+    assert _meta(games, practice_league_games=100)["state"] == STATE_NO_INFO
+    # 10 games are enough for a team state, but not for a hero pool state
+    assert _meta(_games(10, ONE_META))["state"] == STATE_DOESNT_PLAY
+    assert _meta(_games(10, ONE_META))["pool_state"] is None
+
+
+def test_player_heroes_are_needed_only_for_teams_with_too_few_games():
+    assert needs_player_heroes(_team_games(_games(9, ONE_META)), TeamMetaParams())
+    assert not needs_player_heroes(_team_games(_games(10, ONE_META)), TeamMetaParams())
+
+
+def test_hero_pool_state_from_different_heroes_in_the_sample():
+    def pool(heroes: int) -> str | None:
+        # 15 games, 75 picks cycling through `heroes` different heroes
+        picks = [j % heroes + 1 for j in range(75)]
+        meta = _meta([_game(i, 0.5 + i * 0.5, picks[5 * i : 5 * i + 5]) for i in range(15)])
+        assert meta["sample"]["heroes"] == heroes
+        state: str | None = meta["pool_state"]
+        return state
+
+    assert pool(29) == POOL_NARROW  # fewer than 30
+    assert pool(30) == POOL_NORMAL
+    assert pool(40) == POOL_NORMAL
+    assert pool(41) == POOL_WIDE  # more than 40
+    assert _meta(_games(15, ONE_META), pool_narrow_heroes=5)["pool_state"] == POOL_NORMAL
+    assert _meta(_games(15, ONE_META), pool_narrow_heroes=1, pool_wide_heroes=4)["pool_state"] == POOL_WIDE
+
+
+def test_shares_of_games_with_two_and_three_meta_heroes():
+    games = _games(10, THREE_META) + _games(5, TWO_META, start_days=6) + _games(5, ONE_META, start_days=9)
+
+    meta = _meta(games)
+
+    # The newest 15 games: 10 with 3 meta heroes, 5 with 2
+    assert (meta["sample"]["meta2_games_pct"], meta["sample"]["meta3_games_pct"]) == (100.0, 66.7)
+    # Hero pool: heroes 1, 2, 3, 6, 7, 8, 9 over the three drafts
+    assert meta["recent"]["heroes"] == 7
+    assert meta["recent"] == {"games": 20, "heroes": 7, "start": NOW - 20 * DAY}
 
 
 def test_players_know_meta_from_pub_games():
@@ -137,9 +202,8 @@ def test_players_know_meta_from_pub_games():
         {"account_id": 104, "meta_heroes": [], "pub_known": True},
         {"account_id": 105, "meta_heroes": [], "pub_known": False},
     ]
-    # Hero 3 was never picked by the team: it is listed from practice only
-    hero3 = next(h for h in meta["heroes"] if h["hero_id"] == 3)
-    assert (hero3["games"], hero3["recent_games"], hero3["practice_players"]) == (0, 0, 1)
+    # Heroes 1 and 2 were picked 3 times; hero 3 was never picked by the team, so it is not listed
+    assert [h["hero_id"] for h in meta["heroes"]] == [1, 2]
 
 
 def test_league_games_alone_prove_practice():
@@ -154,14 +218,15 @@ def test_no_info_without_games():
     meta = _meta([])
 
     assert meta["state"] == STATE_NO_INFO
-    assert meta["deep"]["meta_games_pct"] is None
+    assert meta["sample"]["meta2_games_pct"] is None
+    assert meta["pool_state"] is None
     assert meta["heroes"] == []
 
 
 def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
     games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]
 
-    heroes = {h["hero_id"]: h for h in _meta(games)["heroes"]}
+    heroes = {h["hero_id"]: h for h in _meta(games, meta_hero_min_games=1)["heroes"]}
 
     assert set(heroes) == {1, 2, 3, 4}  # Non-meta heroes are not listed
     assert heroes[1] == {
@@ -175,7 +240,18 @@ def test_heroes_list_counts_recent_and_deep_picks_with_ultra_flag():
     }
     assert (heroes[2]["games"], heroes[2]["recent_games"]) == (3, 2)
     assert (heroes[4]["games"], heroes[4]["recent_games"], heroes[4]["ultra"]) == (1, 0, False)
-    assert _meta(games)["heroes"][0]["hero_id"] == 2  # Most games first
+    assert _meta(games, meta_hero_min_games=1)["heroes"][0]["hero_id"] == 2  # Most games first
+
+
+def test_heroes_picked_fewer_than_three_times_are_not_listed():
+    games = [*_games(2, THREE_META), _game(50, 40, [4, 2, 6, 7, 8])]  # Hero 2: 3 picks, heroes 1 and 3: 2, hero 4: 1
+
+    assert [h["hero_id"] for h in _meta(games)["heroes"]] == [2]
+    # Practice alone does not list a hero; it is counted for the listed ones
+    practised = _meta(games, {101: {4: 5}, 102: {2: 9}, 103: {}, 104: {}, 105: {}})
+    assert [(h["hero_id"], h["practice_players"]) for h in practised["heroes"]] == [(2, 1)]
+    # The shares still count every pick
+    assert _meta(games)["sample"]["meta3_games_pct"] == 66.7
 
 
 def test_stand_in_picks_count_for_the_team():
@@ -309,21 +385,33 @@ TEAM_META_INPUT = {
 }
 
 
-def test_task_adds_meta_to_results_with_a_step_per_core_player():
+def test_task_adds_meta_to_results_without_player_requests_for_an_active_team():
     progress, results, heroes = _run_task(TEAM_META_INPUT)
 
     assert results["meta"]["state"] == STATE_ACTIVELY
-    # Hero 1 from the player heroes (9 games); 102 and 103 also have 20 league games on heroes 2 and 3
+    # 20 team games are enough: no /players/{id}/heroes, practice only from the league picks
+    assert heroes.call_count == 0
+    assert all(p["pub_known"] is False for p in results["meta"]["players"])
+    assert progress.call_args_list[-1].args[1] == 2 + 2 * 5  # The final message
+
+
+def test_task_fetches_player_heroes_for_a_team_with_too_few_games():
+    progress, results, heroes = _run_task({**TEAM_META_INPUT, "games": _team_games(_games(5, THREE_META))})
+
+    # Hero 1 from the player heroes (9 games); 102 and 103 also have 5 league games on heroes 2 and 3
     assert [p["meta_heroes"] for p in results["meta"]["players"]] == [[1], [1, 2], [1, 3], [1], [1]]
+    assert results["meta"]["state"] == STATE_PLAYERS_KNOW
+    # The deeper window per core player
     assert heroes.call_count == 5
-    total_steps = 2 + 2 * 5 + 5
-    assert progress.call_args_list[-1].args[1] == total_steps  # The final message
+    assert progress.call_args_list[-1].args[1] == 2 + 2 * 5 + 5
 
 
 def test_task_meta_survives_player_heroes_errors():
-    _, results, _ = _run_task(TEAM_META_INPUT, player_heroes=OpenDotaError(503, "NETWORK_ERROR", "down"))
+    few_games = {**TEAM_META_INPUT, "games": _team_games(_games(5, THREE_META))}
+    _, results, _ = _run_task(few_games, player_heroes=OpenDotaError(503, "NETWORK_ERROR", "down"))
 
-    assert results["meta"]["state"] == STATE_ACTIVELY
+    # The league picks still prove practice for 3 players
+    assert results["meta"]["state"] == STATE_PLAYERS_KNOW
     assert all(p["pub_known"] is False for p in results["meta"]["players"])
 
 
@@ -395,10 +483,20 @@ def test_statistics_route_forwards_meta_settings(monkeypatch):
     client = create_app(test_config={}).test_client()
 
     assert client.get("/api/statistics?team=A").status_code == 200
-    url = "/api/statistics?team=A&pro_min_pick_ban=20&deep_days=45&meta_min_games=12&patch_cut=false"
+    url = "/api/statistics?team=A&pro_min_pick_ban=20&deep_days=45&sample_games=12&patch_cut=false"
     assert client.get(url).status_code == 200
-    assert client.get("/api/statistics?team=A&meta_min_heroes=6").status_code == 422
+    assert client.get("/api/statistics?team=A&actively_meta2_pct=101").status_code == 422
 
     assert seen[0] == (MetaParams(), TeamMetaParams())
     assert seen[1][0] == MetaParams(pro_min_pick_ban=20)
-    assert seen[1][1] == TeamMetaParams(deep_days=45, meta_min_games=12, patch_cut=False)
+    assert seen[1][1] == TeamMetaParams(deep_days=45, sample_games=12, patch_cut=False)
+
+
+def test_hero_meta_route_adds_the_latest_patch(monkeypatch):
+    from backend import create_app
+
+    monkeypatch.setattr("backend.routes.catalog.get_meta", lambda params, refresh: {"heroes": []})
+    monkeypatch.setattr("backend.routes.catalog.latest_patch", lambda now: {"name": "7.41", "start_time": 1})
+    client = create_app(test_config={}).test_client()
+
+    assert client.get("/api/heroes/meta").get_json() == {"heroes": [], "patch": "7.41"}

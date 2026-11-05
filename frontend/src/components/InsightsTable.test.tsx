@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { Player, TeamData } from '../types'
+import { formatDate } from '../format'
+import type { Player, TeamData, TeamMeta } from '../types'
 import InsightsTable from './InsightsTable'
 
 const player = (id: number, games: number | null, is_core: boolean | null = null): Player => ({
@@ -111,5 +112,128 @@ describe('InsightsTable', () => {
       expect(within(screen.getByText(label)).getByRole('tooltip')).toHaveTextContent(/^Description: /)
     }
     expect(within(screen.getByText('Stand-ins')).getByRole('tooltip')).toHaveTextContent('outside the core who played')
+  })
+
+  describe('team meta', () => {
+    const DAY = 24 * 60 * 60
+    const now = Math.floor(Date.now() / 1000)
+    const deepStart = now - 60 * DAY
+    const recentStart = now - 20 * DAY
+    const meta = (fields: Partial<TeamMeta> = {}): TeamMeta => ({
+      state: 'actively',
+      patch: '7.39',
+      pool_state: 'normal',
+      sample: { start: recentStart, window: 'recent', games: 15, meta2_games_pct: 80, meta3_games_pct: 40, meta_picks_pct: 58.2, heroes: 32 },
+      recent: { start: recentStart, games: 28, meta_picks_pct: 58.2, heroes: 40 },
+      deep: { start: deepStart, games: 45, meta_picks_pct: 52.4, heroes: 56 },
+      pro_meta_picks_pct: 49.8,
+      meta_heroes_total: 14,
+      heroes: [
+        { hero_id: 2, localized_name: 'Axe', icon: 'axe.png', ultra: false, games: 3, recent_games: 0, practice_players: 0 },
+        { hero_id: 1, localized_name: 'Anti-Mage', icon: 'am.png', ultra: true, games: 6, recent_games: 4, practice_players: 1 },
+        { hero_id: 3, localized_name: 'Bane', icon: 'bane.png', ultra: false, games: 4, recent_games: 1, practice_players: 2 },
+      ],
+      players: [],
+      params: { deep_days: 60 },
+      ...fields,
+    })
+
+    it('shows the state with the sample’s 2+ and 3+ shares, coloured by the thresholds', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), undefined]} />)
+
+      const [first, second] = rowCells('Meta')
+      expect(first).toHaveTextContent(/^Actively plays meta · 2\+ 80% · 3\+ 40%$/)
+      // 80% is above the actively threshold (65%): green; 40% is between 35% and 50%: plain
+      expect(within(first).getByText('80%')).toHaveClass('team-meta-pos')
+      expect(within(first).getByText('40%')).not.toHaveClass('team-meta-pos', 'team-meta-neg')
+      expect(first.querySelector('.team-meta')).toHaveAttribute(
+        'title',
+        "Actively: 2+ meta heroes in over 65% of games and 3+ in over 50%. Doesn't play: 2+ in 50% or less, or 3+ in 35% or less with 2+ in 65% or less. Tries: in between.\n" +
+          `From the 15 newest tournament games since ${formatDate(recentStart)} (all in the recent window); fewer than 10 games: decided by the players' practice.\n` +
+          'Meta heroes are 58% of these picks (all pro games: 50%).',
+      )
+      expect(second).toHaveTextContent('-')
+    })
+
+    it('colours a share at or below the doesn’t play threshold red', () => {
+      const sample = { start: deepStart, window: 'deep' as const, games: 15, meta2_games_pct: 60, meta3_games_pct: 27, meta_picks_pct: 30, heroes: 46 }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ state: 'doesnt_play', sample }), null]} />)
+
+      const [cell] = rowCells('Meta')
+      expect(cell).toHaveTextContent(/^Doesn't play meta · 2\+ 60% · 3\+ 27%$/)
+      expect(within(cell).getByText('27%')).toHaveClass('team-meta-neg')
+      expect(cell.querySelector('.team-meta')?.getAttribute('title')).toContain('(reaching into the 60-day window)')
+    })
+
+    it.each([
+      ['tries', 'Tries to play meta'],
+      ['players_know', 'Players know meta'],
+      ['doesnt_play', "Doesn't play meta"],
+      ['no_info', 'No info'],
+    ] as const)('labels the %s state', (state, label) => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ state }), null]} />)
+
+      expect(rowCells('Meta')[0]).toHaveTextContent(label)
+    })
+
+    it('shows only the state with too few games', () => {
+      const sample = { start: null, window: 'deep' as const, games: 4, meta2_games_pct: 50, meta3_games_pct: 25, meta_picks_pct: 30, heroes: 15 }
+      render(
+        <InsightsTable
+          teams={[team({}), team({})]}
+          ranks={[new Map(), new Map()]}
+          metas={[meta({ state: 'no_info', pool_state: null, sample, heroes: [] }), null]}
+        />,
+      )
+
+      expect(rowCells('Meta')[0]).toHaveTextContent(/^No info$/)
+      expect(rowCells('Meta Heroes')[0]).toHaveTextContent(/^0 of 14 meta heroes$/)
+    })
+
+    it('lists every meta state in bold in the Meta tooltip', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), null]} />)
+
+      const label = screen.getByText('Meta', { selector: '.row-label' })
+      const states = [...within(label).getByRole('tooltip').querySelectorAll('li b')].map((b) => b.textContent)
+      expect(states).toEqual(['Actively plays meta', 'Tries to play meta', 'Doesn’t play meta', 'Players know meta', 'No info'])
+    })
+
+    it('shows an unavailable meta with its error', () => {
+      render(
+        <InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[{ error: 'heroStats down' }, null]} />,
+      )
+
+      expect(rowCells('Meta')[0]).toHaveTextContent('Unavailable: heroStats down')
+      expect(rowCells('Meta Heroes')[0]).toHaveTextContent('-')
+    })
+
+    it('lists meta heroes by name with icon, games and tags, details in the tooltip', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), null]} />)
+
+      const [cell] = rowCells('Meta Heroes')
+      const heroes = [...cell.querySelectorAll('.team-meta-hero')]
+      // Each hero: name, games, an (i) tooltip and its tags
+      expect(heroes.map((h) => h.textContent?.replace(/iDescription: [^]*?\)\./, ' (i) '))).toEqual([
+        'Anti-Mage · 6 (i) ultra',
+        'Axe · 3 (i) 60d',
+        'Bane · 4 (i) ',
+      ])
+      expect(cell.querySelector('.team-meta-count')).toHaveTextContent(/^3 of 14 meta heroes$/)
+      expect(within(heroes[0] as HTMLElement).getByRole('tooltip')).toHaveTextContent(
+        'Description: 6 games in 60 days, 4 in the recent window. Practised by 1 core player (3+ league games, or 5+ league and pub games, in 60 days).',
+      )
+      expect(within(heroes[2] as HTMLElement).getByRole('tooltip')).toHaveTextContent('Practised by 2 core players')
+      expect(within(cell).getByAltText('Anti-Mage icon')).toHaveAttribute('src', 'am.png')
+      expect(within(cell).getByText('ultra')).toHaveClass('meta-tag-ultra')
+      expect(within(cell).getByText('60d')).toHaveAttribute('title', 'Picked only in the last 60 days, not in the recent window')
+      expect(cell.textContent?.replace(/Description: [^]*?days\)\./g, '')).not.toMatch(/ractised/)
+    })
+
+    it('hides the meta rows without team meta (saved snapshots)', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} />)
+
+      expect(screen.queryByText('Meta')).not.toBeInTheDocument()
+      expect(screen.queryByText('Meta Heroes')).not.toBeInTheDocument()
+    })
   })
 })

@@ -12,6 +12,7 @@ import PredictionList from './components/PredictionList'
 import PredictionPanel from './components/PredictionPanel'
 import TeamAutocomplete from './components/TeamAutocomplete'
 import { requestJson } from './api'
+import { loadMetaParams } from './meta'
 import { type ProgressData, ProgressStreamError, followProgress } from './progress'
 import type { Match, MatchesSummary, Statistics, StatisticsResult, TeamData } from './types'
 import { useTeamInput } from './useTeamInput'
@@ -51,6 +52,7 @@ function App() {
   const [summaryData, setSummaryData] = useState<Record<string, StatisticsResult> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [metaPatch, setMetaPatch] = useState<string | null>(null) // latest patch from the Meta tab, in its tab name
   const [progress, setProgress] = useState<ProgressData | null>(null)
   const [backendVersion, setBackendVersion] = useState<string | null>(null)
   const [hash, setHash] = useState(() => window.location.hash)
@@ -147,6 +149,8 @@ function App() {
       query.append(...param1)
       query.append(...param2)
       query.append('days', String(STATS_DAYS))
+      // The Meta tab thresholds decide which heroes count as meta for the team meta state
+      for (const [key, value] of Object.entries(loadMetaParams())) query.append(key, String(value))
 
       // Throws with the backend's message ("Team not found"...) on an error status
       const data = await requestJson<Statistics>(`/api/statistics?${query.toString()}`)
@@ -272,7 +276,7 @@ function App() {
               className={`tab ${tab === t.id ? 'active' : ''}`}
               aria-current={tab === t.id ? 'page' : undefined}
             >
-              {t.label}
+              {t.id === 'meta' && metaPatch ? `Meta ${metaPatch}` : t.label}
             </a>
           ))}
         </nav>
@@ -281,7 +285,7 @@ function App() {
 
       {tab === 'meta' && (
         <div className="tab-panel">
-          <MetaTab />
+          <MetaTab onPatch={setMetaPatch} />
         </div>
       )}
 
@@ -339,12 +343,18 @@ function App() {
             <div className="results-columns">
               <div className="results-column">
                 <h2>Team Comparison</h2>
-                <ComparisonTable teams={teams} summaries={summaries} showSummaryRows={Boolean(summaryData)} days={STATS_DAYS} />
+                <ComparisonTable
+                  teams={teams}
+                  summaries={summaries}
+                  showSummaryRows={Boolean(summaryData)}
+                  days={STATS_DAYS}
+                  metas={results.map((r) => r?.meta)}
+                />
               </div>
 
               <div className="results-column">
                 <h2>Team Insights</h2>
-                <InsightsTable teams={teams} ranks={teams.map(getPlayerRanks)} />
+                <InsightsTable teams={teams} ranks={teams.map(getPlayerRanks)} metas={results.map((r) => r?.meta)} />
               </div>
             </div>
 

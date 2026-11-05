@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Meta, MetaHero } from '../types'
@@ -77,7 +77,7 @@ const rows = () => bodyRows().map((r) => within(r).getAllByRole('cell').map((c) 
 const names = () => rows().map((r) => r[0])
 
 const DEFAULT_URL =
-  '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
+  '/api/heroes/meta?pro_min_pick_ban=40&ultra_min_win=55&ultra_min_picks=5&pub_top=30&pub_min_win=52'
 
 const renderLoaded = async () => {
   const fetchMock = mockFetch(meta)
@@ -115,14 +115,35 @@ describe('MetaTab', () => {
       'Pub Picks',
       'Pub Win',
     ])
-    // Ultra replaces Pro for an ultra meta hero; pick and ban numbers are only in tooltips
+    // Ultra replaces Pro for an ultra meta hero
     expect(rows()).toEqual([
-      ['Delta', '★ UltraPub', '78.9%', '62.5%', '1.2M', '52.6%'],
-      ['Alpha', 'Pro', '39.5%', '-', '950', '42.1%'],
-      ['Beta', 'Pub', '2.6%', '50.0%', '164k', '57.9%'],
+      ['Delta', '★ UltraPub', '78.9%60', '62.5%40', '1.2M', '52.6%'],
+      ['Alpha', 'Pro', '39.5%30', '-', '950', '42.1%'],
+      ['Beta', 'Pub', '2.6%2', '50.0%2', '164k', '57.9%'],
     ])
+    // Pro cells show the matches behind the percent, as on OpenDota: picks + bans, then picks
+    const deltaRow = within(table()).getByRole('img', { name: 'Delta icon' }).closest('tr') as HTMLElement
+    expect([...deltaRow.querySelectorAll('.meta-matches')].map((m) => m.textContent)).toEqual(['60', '40'])
+    // Pub data is blue (tag and column headers), pro stays neutral
+    const headers = within(table()).getAllByRole('columnheader')
+    expect(headers.filter((h) => h.classList.contains('meta-col-pub')).map((h) => h.textContent)).toEqual([
+      'Pub Picks',
+      'Pub Win',
+    ])
+    const betaRow = within(table()).getByRole('img', { name: 'Beta icon' }).closest('tr') as HTMLElement
+    expect(within(betaRow).getByText('Pub')).toHaveClass('meta-tag', 'meta-tag-pub')
     expect(within(table()).getByRole('img', { name: 'Beta icon' })).toHaveAttribute('src', 'https://cdn/Beta.png')
-    expect(screen.getByText(/76 pro matches, 2.5M Immortal, Divine and Ancient matches/)).toBeInTheDocument()
+    expect(screen.getByText(/last 7 days: 3 meta heroes, 76 pro matches, 2.5M Immortal, Divine and Ancient matches/)).toBeInTheDocument()
+  })
+
+  it('reports the latest patch for the tab name', async () => {
+    mockFetch({ ...meta, patch: '7.41' })
+    const onPatch = vi.fn()
+    render(<MetaTab onPatch={onPatch} />)
+    await screen.findByRole('table', { name: 'Meta heroes' })
+
+    // The effect can run after the table is on screen, so wait for it
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('7.41'))
   })
 
   it('highlights ultra meta heroes and explains each meta tag', async () => {
@@ -134,7 +155,7 @@ describe('MetaTab', () => {
       'title',
       'Ultra meta: pro meta with a win rate above 55% and at least 5 picks',
     )
-    expect(within(alpha).getByText('Pro')).toHaveAttribute('title', 'Pro meta: Pick + Ban rate in pro matches above 30%')
+    expect(within(alpha).getByText('Pro')).toHaveAttribute('title', 'Pro meta: Pick + Ban rate in pro matches above 40%')
     expect(within(bodyRows()[2]).getByText('Pub')).toHaveAttribute(
       'title',
       'Pub meta: of the 30 most picked Immortal, Divine and Ancient heroes, a win rate above 52%',
@@ -213,7 +234,7 @@ describe('MetaTab', () => {
     await user.click(screen.getByRole('button', { name: 'Defaults' }))
     expect(fetchMock).toHaveBeenLastCalledWith(DEFAULT_URL, undefined)
     expect(localStorage.getItem(META_PARAMS_KEY)).toBeNull()
-    expect(screen.getByLabelText('Pro meta: Pick + Ban % above')).toHaveValue(30)
+    expect(screen.getByLabelText('Pro meta: Pick + Ban % above')).toHaveValue(40)
   })
 
   it('refreshes the hero stats from OpenDota with the current thresholds', async () => {
@@ -233,7 +254,7 @@ describe('MetaTab', () => {
     localStorage.setItem(META_PARAMS_KEY, JSON.stringify({ pub_top: 10, pub_bracket: 7 }))
     const fetchMock = await renderLoaded()
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/heroes/meta?pro_min_pick_ban=30&ultra_min_win=55&ultra_min_picks=5&pub_top=10&pub_min_win=52',
+      '/api/heroes/meta?pro_min_pick_ban=40&ultra_min_win=55&ultra_min_picks=5&pub_top=10&pub_min_win=52',
       undefined,
     )
     expect(screen.getByLabelText('Pub meta: most picked heroes')).toHaveValue(10)
