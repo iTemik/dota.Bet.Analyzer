@@ -1,0 +1,191 @@
+{
+  "series": [
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17092580,
+      "team1": "ANGRY BIRDS",
+      "team2": "TEAM SPIRIT ACADEMY",
+      "start_utc": "2026-11-05T10:00:00Z",
+      "live": false,
+      "p1": 1.43,
+      "p2": 2.64,
+      "tournament": "Asgard Championship"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17092581,
+      "team1": "LYNX",
+      "team2": "TIME TO SLEEP",
+      "start_utc": "2026-11-05T13:00:00Z",
+      "live": false,
+      "p1": 1.09,
+      "p2": 6.07,
+      "tournament": "Asgard Championship"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091673,
+      "team1": "YELLOW SUBMARINE",
+      "team2": "GAMERLEGION",
+      "start_utc": "2026-11-05T14:00:00Z",
+      "live": false,
+      "p1": 3.5,
+      "p2": 1.31,
+      "tournament": "EPL Masters"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17092579,
+      "team1": "XIPTO ESPORTS",
+      "team2": "ZERO TENACITY",
+      "start_utc": "2026-11-05T16:00:00Z",
+      "live": false,
+      "p1": 1.9,
+      "p2": 1.8,
+      "tournament": "Asgard Championship"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091699,
+      "team1": "PLAYTIME",
+      "team2": "TEAM SYNAPSE",
+      "start_utc": "2026-11-06T10:00:00Z",
+      "live": false,
+      "p1": 1.85,
+      "p2": 1.85,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091717,
+      "team1": "XIPTO ESPORTS",
+      "team2": "FROGLINGS",
+      "start_utc": "2026-11-06T10:00:00Z",
+      "live": false,
+      "p1": 2.08,
+      "p2": 1.67,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091870,
+      "team1": "POTN9KI",
+      "team2": "ZENITH",
+      "start_utc": "2026-11-06T10:00:00Z",
+      "live": false,
+      "p1": 1.64,
+      "p2": 2.12,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091713,
+      "team1": "FROGLINGS",
+      "team2": "NEMIGA GAMING",
+      "start_utc": "2026-11-06T13:00:00Z",
+      "live": false,
+      "p1": 1.45,
+      "p2": 2.56,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17092185,
+      "team1": "PLAYTIME",
+      "team2": "ZENITH",
+      "start_utc": "2026-11-06T13:00:00Z",
+      "live": false,
+      "p1": 1.12,
+      "p2": 5.39,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17092188,
+      "team1": "POTN9KI",
+      "team2": "POWER RANGERS",
+      "start_utc": "2026-11-06T13:00:00Z",
+      "live": false,
+      "p1": 4.27,
+      "p2": 1.18,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091728,
+      "team1": "CYBERHERO",
+      "team2": "INNER CIRCLE",
+      "start_utc": "2026-11-06T16:00:00Z",
+      "live": false,
+      "p1": 1.49,
+      "p2": 2.45,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091768,
+      "team1": "HULIGANI",
+      "team2": "YAKULT BROTHERS",
+      "start_utc": "2026-11-06T16:00:00Z",
+      "live": false,
+      "p1": 1.64,
+      "p2": 2.12,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091785,
+      "team1": "INTERACTIVE PHILIPPINES",
+      "team2": "ZERO TENACITY",
+      "start_utc": "2026-11-06T16:00:00Z",
+      "live": false,
+      "p1": 2.45,
+      "p2": 1.49,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091801,
+      "team1": "HULIGANI",
+      "team2": "PUCKCHAMP",
+      "start_utc": "2026-11-06T19:00:00Z",
+      "live": false,
+      "p1": 1.1,
+      "p2": 5.82,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step3_dota.bin",
+      "event_id": 17091818,
+      "team1": "INTERACTIVE PHILIPPINES",
+      "team2": "AMARU GAMING",
+      "start_utc": "2026-11-06T19:00:00Z",
+      "live": false,
+      "p1": 2.14,
+      "p2": 1.63,
+      "tournament": "DreamLeague, Division 2"
+    },
+    {
+      "fixture": "step4_live.bin",
+      "event_id": 17091871,
+      "team1": "ZENITH",
+      "team2": "YANGON GALACTICOS",
+      "start_utc": "2026-11-05T04:00:00Z",
+      "live": true,
+      "p1": 4.8,
+      "p2": 1.14,
+      "tournament": "EPL World Series"
+    },
+    {
+      "fixture": "step4_live.bin",
+      "event_id": 17093505,
+      "team1": "STORMRIDERS",
+      "team2": "AZURE DRAGONS",
+      "start_utc": "2026-11-05T05:27:00Z",
+      "live": true,
+      "p1": 2.15,
+      "p2": 1.62,
+      "tournament": "Mad Dogs League"
+    }
+  ]
+}
