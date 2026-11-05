@@ -33,7 +33,7 @@ def _meta_needs_players(team_meta: dict[str, Any]) -> bool:
 
 
 def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> dict[str, Any]:
-    """Fetch each core player's heroes (league + pubs, deeper and recent window) and compute the team meta state.
+    """Fetch each core player's heroes (league + pubs, deeper window) and compute the team meta state.
 
     One progress step per core player, only when the team has too few games for a state (needs_player_heroes).
 
@@ -47,9 +47,7 @@ def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> di
     """
     games = team_meta["games"]
     days = player_heroes_days(games["deep_start"])
-    recent_days = player_heroes_days(games["recent_start"])
     player_heroes: dict[int, Optional[dict[int, int]]] = {}
-    player_heroes_recent: dict[int, Optional[dict[int, int]]] = {}
     core = team_meta["core"] if _meta_needs_players(team_meta) else []
     for account_id in core:
         progress.next()
@@ -66,12 +64,6 @@ def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> di
             progress.report(
                 f"Error fetching heroes for account {account_id}: {e!s}", {"account_id": account_id, "error": str(e)}
             )
-        try:
-            # Recent window only for the shown numbers; a failure leaves this player out of them
-            player_heroes_recent[account_id] = get_player_heroes_cached(account_id, recent_days, on_wait=report_wait)
-        except Exception as e:
-            player_heroes_recent[account_id] = None
-            logger.warning(f"Recent heroes unavailable for account {account_id}: {e}")
     try:
         hero_stats, _ = cached_hero_stats()
     except ConnectionError as e:
@@ -84,7 +76,6 @@ def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> di
         hero_stats,
         MetaParams(**team_meta["meta_params"]),
         TeamMetaParams(**team_meta["params"]),
-        player_heroes_recent,
     )
 
 

@@ -586,12 +586,10 @@ The backend provides REST API endpoints for team statistics, match data, and pla
   60 days): actively (2+ meta heroes in over 65% of drafts and 3+ in over 50%), doesn't play (50% or less, or 35% or
   less), tries (in between); with fewer than 10 games: players know meta (core players' league or pub practice) or
   no info. Next to it the two shares, green/red by the thresholds
+- Team Comparison "Hero Pool": wide (over 40), normal or narrow (under 30) different heroes in the same 15 games
+  ("Wide: 45"); the bigger pool is green when they differ by more than 3
 - "X of Y meta heroes", then the picked meta heroes (3+ team games, by name) with games and ultra/60d tags; windows start at the latest patch,
   shown in the Meta tab name; thresholds are `/statistics` query parameters (the Meta tab's come from the browser)
-- "Hero Pool": narrow (under 30), normal or wide (over 40) different heroes in the same 15 games
-- "Meta Drafts": share of tournament games with 2+ and 3+ meta heroes in the recent and 60-day windows; "Meta Players":
-  share of the core players' games on meta heroes in pubs (60 days) and in all games (recent and 60 days), fetched
-  only for teams with too few games
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:
@@ -741,7 +739,7 @@ npm test          # Run tests
 - **Compare**, **Predictions** and **Meta** tabs, kept in the URL hash (`#compare`, `#predictions`, `#meta`) so a refresh stays on the tab
 
 #### Meta
-- One compact table of pro, ultra and pub meta heroes (the number of heroes is in the line above it), like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B, Pro Win, Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
+- One compact table of pro, ultra and pub meta heroes (the number of heroes is in the line above it), like OpenDota's hero tables: hero, meta tag (ultra meta heroes get a golden ★ Ultra tag and row), Pro P+B and Pro Win (each with its match count, as on OpenDota), Pub Picks (short, e.g. 164k, 1.2M) and Pub Win, each with a bar
 - Sorted by Pro P+B (highest first) by default; click a column header to sort (highest first, click again to reverse); hover a number for the picks, bans and wins behind it
 - Thresholds, Apply, Defaults and Refresh data sit below the table; thresholds are kept in the browser
 

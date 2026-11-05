@@ -228,8 +228,13 @@ def _window(games: list[dict[str, Any]], meta_ids: set[int]) -> dict[str, Any]:
         "meta2_games_pct": _percent(sum(1 for count in meta_counts if count >= 2), len(games)),
         "meta3_games_pct": _percent(sum(1 for count in meta_counts if count >= 3), len(games)),
         "meta_picks_pct": _percent(sum(1 for hero in picks if hero in meta_ids), len(picks)),
-        "heroes": len(set(picks)),  # Different heroes the team picked (hero pool size)
+        "heroes": _pool_size(games),
     }
+
+
+def _pool_size(games: list[dict[str, Any]]) -> int:
+    """Different heroes the team picked in `games` (hero pool size)."""
+    return len({hero for game in games for _, hero in game["picks"]})
 
 
 def _player_games(
@@ -366,7 +371,6 @@ def compute_team_meta(
     hero_stats: list[dict[str, Any]],
     meta_params: MetaParams,
     params: TeamMetaParams,
-    player_heroes_recent: Optional[dict[int, Optional[dict[int, int]]]] = None,
 ) -> dict[str, Any]:
     """Team meta state, picked meta heroes and per-player practice.
 
@@ -378,16 +382,14 @@ def compute_team_meta(
         hero_stats: Cached /heroStats (backend.meta.cached_hero_stats)
         meta_params: Meta tab thresholds
         params: Windows and thresholds
-        player_heroes_recent: The same as player_heroes over the recent window; None when not fetched
 
     Returns:
         state, pool_state (narrow/normal/wide or None), sample (the games the states come from: window, start of its
-        oldest game and the _window numbers), patch, recent/deep windows (_window numbers and start),
+        oldest game and the _window numbers), patch, recent/deep windows (games, heroes, start),
         pro_meta_picks_pct (share of all pro picks on meta heroes), meta_heroes_total (size of the meta list),
         heroes (meta heroes the team picked `meta_hero_min_games`+ times: hero_id, localized_name, icon, ultra, games,
-        recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known),
-        player_games (core players' games of any kind on meta heroes: recent, deep, and pub_deep without the team's
-        league games; see _player_games) and the params used
+        recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known)
+        and the params used
     """
     meta_list = [h for h in compute_meta(hero_stats, meta_params)["heroes"] if "pro" in h["meta"]]
     meta_by_id = {h["hero_id"]: h for h in meta_list}
@@ -397,8 +399,9 @@ def compute_team_meta(
 
     deep_games = team_games["games"]
     recent_games = [g for g in deep_games if g["start_time"] >= team_games["recent_start"]]
-    recent = {**_window(recent_games, meta_ids), "start": team_games["recent_start"]}
-    deep = {**_window(deep_games, meta_ids), "start": team_games["deep_start"]}
+    # Recent and deep windows: games and hero pool only (shown in the Hero Pool tooltip)
+    recent = {"games": len(recent_games), "heroes": _pool_size(recent_games), "start": team_games["recent_start"]}
+    deep = {"games": len(deep_games), "heroes": _pool_size(deep_games), "start": team_games["deep_start"]}
     sample_games, sample_window = _sample(team_games, params)
     sample = {
         **_window(sample_games, meta_ids),
@@ -427,10 +430,5 @@ def compute_team_meta(
         "meta_heroes_total": len(meta_ids),
         "heroes": heroes,
         "players": players,
-        "player_games": {
-            "recent": _player_games(core, player_heroes_recent or {}, meta_ids),
-            "deep": _player_games(core, player_heroes, meta_ids),
-            "pub_deep": _player_games(core, player_heroes, meta_ids, deep_games),
-        },
         "params": asdict(params),
     }

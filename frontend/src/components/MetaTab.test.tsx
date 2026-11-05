@@ -115,12 +115,15 @@ describe('MetaTab', () => {
       'Pub Picks',
       'Pub Win',
     ])
-    // Ultra replaces Pro for an ultra meta hero; pick and ban numbers are only in tooltips
+    // Ultra replaces Pro for an ultra meta hero
     expect(rows()).toEqual([
-      ['Delta', '★ UltraPub', '78.9%', '62.5%', '1.2M', '52.6%'],
-      ['Alpha', 'Pro', '39.5%', '-', '950', '42.1%'],
-      ['Beta', 'Pub', '2.6%', '50.0%', '164k', '57.9%'],
+      ['Delta', '★ UltraPub', '78.9%60', '62.5%40', '1.2M', '52.6%'],
+      ['Alpha', 'Pro', '39.5%30', '-', '950', '42.1%'],
+      ['Beta', 'Pub', '2.6%2', '50.0%2', '164k', '57.9%'],
     ])
+    // Pro cells show the matches behind the percent, as on OpenDota: picks + bans, then picks
+    const deltaRow = within(table()).getByRole('img', { name: 'Delta icon' }).closest('tr') as HTMLElement
+    expect([...deltaRow.querySelectorAll('.meta-matches')].map((m) => m.textContent)).toEqual(['60', '40'])
     // Pub data is blue (tag and column headers), pro stays neutral
     const headers = within(table()).getAllByRole('columnheader')
     expect(headers.filter((h) => h.classList.contains('meta-col-pub')).map((h) => h.textContent)).toEqual([

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { MatchesSummary, TeamData } from '../types'
+import type { MatchesSummary, TeamData, TeamMeta, TeamPoolState } from '../types'
 import ComparisonTable from './ComparisonTable'
 
 const team = (fields: Partial<TeamData>): TeamData => ({
@@ -224,5 +224,49 @@ describe('ComparisonTable', () => {
     expect(rowCells(/^Last Match$/).map((c) => c.className)).toEqual(['', ''])
     rerender(<ComparisonTable teams={[at(1), at(13)]} summaries={[null, null]} showSummaryRows={false} days={20} now={now} />)
     expect(rowCells(/^Last Match$/).map((c) => c.className)).toEqual(['', ''])
+  })
+
+  describe('hero pool', () => {
+    const pool = (heroes: number, pool_state: TeamPoolState | null, games = 15): TeamMeta => ({
+      state: 'tries',
+      pool_state,
+      sample: { start: 1, window: 'recent', games, heroes, meta2_games_pct: 60, meta3_games_pct: 40, meta_picks_pct: 40 },
+    })
+    const renderPools = (metas: (TeamMeta | null | undefined)[] | undefined) =>
+      render(<ComparisonTable teams={[team({}), team({})]} summaries={[null, null]} showSummaryRows={false} days={20} metas={metas} />)
+
+    it('shows the pool state with the number of heroes and colours the bigger pool', () => {
+      renderPools([pool(45, 'wide'), pool(32, 'normal')])
+
+      const cells = rowCells(/^Hero Pool$/)
+      expect(cells.map((c) => c.textContent)).toEqual(['Wide: 45', 'Normal: 32'])
+      expect(cells.map((c) => c.className)).toEqual(['cell-pos', 'cell-neg'])
+    })
+
+    it('does not colour pools that differ by 3 heroes or less, or without a full sample', () => {
+      const { unmount } = renderPools([pool(33, 'normal'), pool(30, 'normal')])
+      expect(rowCells(/^Hero Pool$/).map((c) => c.className)).toEqual(['', ''])
+      unmount()
+
+      renderPools([pool(45, 'wide'), pool(20, null, 9)])
+      const cells = rowCells(/^Hero Pool$/)
+      expect(cells.map((c) => c.textContent)).toEqual(['Wide: 45', '20 in 9 games'])
+      expect(cells.map((c) => c.className)).toEqual(['', ''])
+    })
+
+    it('lists each pool state in bold in the tooltip', () => {
+      renderPools([pool(45, 'wide'), null])
+
+      const row = screen.getByText(/^Hero Pool$/).closest('tr') as HTMLElement
+      const states = [...within(row).getByRole('tooltip').querySelectorAll('li')].map((li) => li.textContent)
+      expect(states).toEqual(['Wide: more than 40', 'Normal: 30 to 40', 'Narrow: fewer than 30'])
+      expect(within(row).getByText('Wide').tagName).toBe('B')
+    })
+
+    it('hides the row without team meta (saved snapshots)', () => {
+      renderPools(undefined)
+
+      expect(screen.queryByText(/^Hero Pool$/)).not.toBeInTheDocument()
+    })
   })
 })

@@ -32,8 +32,10 @@ function BarCell({
   max,
   title,
   win,
+  matches,
 }: {
   text: string
+  matches?: number // match count next to the percent, as on OpenDota
   value: number | null
   max: number
   title: string
@@ -43,6 +45,7 @@ function BarCell({
   return (
     <td className="meta-bar-cell" title={title}>
       <span>{text}</span>
+      {matches !== undefined && <span className="meta-matches">{count(matches)}</span>}
       <Bar value={value ?? 0} max={max} tone={tone} size="thin" />
     </td>
   )
@@ -99,6 +102,7 @@ const COLUMNS: Column[] = [
     cell: (h, data, max) => (
       <BarCell
         text={formatPercent(h.pro_pick_ban_rate)}
+        matches={h.pro_picks + h.pro_bans}
         value={h.pro_pick_ban_rate}
         max={max}
         title={`${count(h.pro_picks)} picks + ${count(h.pro_bans)} bans in ${count(data.pro_matches)} pro matches`}
@@ -115,6 +119,7 @@ const COLUMNS: Column[] = [
     cell: (h, _data, max) => (
       <BarCell
         text={formatPercent(h.pro_win_rate)}
+        matches={h.pro_win_rate == null ? undefined : h.pro_picks}
         value={h.pro_win_rate}
         max={max}
         title={`${count(h.pro_wins)} wins in ${count(h.pro_picks)} pro picks`}

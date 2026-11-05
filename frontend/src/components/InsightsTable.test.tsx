@@ -187,8 +187,15 @@ describe('InsightsTable', () => {
       )
 
       expect(rowCells('Meta')[0]).toHaveTextContent(/^No info$/)
-      expect(rowCells('Hero Pool')[0]).toHaveTextContent(/^15 heroes in 4 games$/)
       expect(rowCells('Meta Heroes')[0]).toHaveTextContent(/^0 of 14 meta heroes$/)
+    })
+
+    it('lists every meta state in bold in the Meta tooltip', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), null]} />)
+
+      const label = screen.getByText('Meta', { selector: '.row-label' })
+      const states = [...within(label).getByRole('tooltip').querySelectorAll('li b')].map((b) => b.textContent)
+      expect(states).toEqual(['Actively plays meta', 'Tries to play meta', 'Doesn’t play meta', 'Players know meta', 'No info'])
     })
 
     it('shows an unavailable meta with its error', () => {
@@ -222,51 +229,11 @@ describe('InsightsTable', () => {
       expect(cell.textContent?.replace(/Description: [^]*?days\)\./g, '')).not.toMatch(/ractised/)
     })
 
-    it('shows the shares of drafts with 2+ and 3+ meta heroes per window', () => {
-      const recent = { start: recentStart, games: 28, meta2_games_pct: 75, meta3_games_pct: 50.4, meta_picks_pct: 58.2 }
-      const deep = { start: deepStart, games: 45, meta2_games_pct: 60, meta3_games_pct: 33.3, meta_picks_pct: 52.4 }
-      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ recent, deep }), undefined]} />)
-
-      const [first, second] = rowCells('Meta Drafts')
-      expect(within(first).getByText('20d: 2+ 75% · 3+ 50%')).toHaveAttribute('title', `28 tournament games since ${formatDate(recentStart)}`)
-      expect(within(first).getByText('60d: 2+ 60% · 3+ 33%')).toBeInTheDocument()
-      expect(second).toHaveTextContent('-')
-    })
-
-    it('shows the hero pool state of the sample with the per-window counts in the tooltip', () => {
-      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), meta({ pool_state: 'wide' })]} />)
-
-      const [first, second] = rowCells('Hero Pool')
-      expect(first).toHaveTextContent(/^Normal pool · 32 heroes in 15 games$/)
-      expect(second).toHaveTextContent(/^Wide pool · 32 heroes in 15 games$/)
-      expect(first.querySelector('.team-meta')).toHaveAttribute(
-        'title',
-        `Different heroes in the 15 newest tournament games since ${formatDate(recentStart)} (all in the recent window). Narrow: under 30, wide: over 40; needs 15 games.\n` +
-          `Since ${formatDate(recentStart)}: 40 heroes in 28 games\n` +
-          `Since ${formatDate(deepStart)}: 56 heroes in 45 games`,
-      )
-    })
-
-    it('shows the core players’ meta hero games in pubs and in all games', () => {
-      const games = (meta_games: number, total: number, players = 5) => ({ games: total, meta_games, meta_games_pct: Math.round((1000 * meta_games) / total) / 10, players })
-      const player_games = { recent: games(50, 100), deep: games(120, 250), pub_deep: games(90, 210, 4) }
-      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ player_games }), meta()]} />)
-
-      const [first, second] = rowCells('Meta Players')
-      expect(within(first).getByText('Pubs 60d: 43%')).toHaveAttribute('title', '90 of 210 games on a meta hero (4 of 5 core players with data)')
-      expect(within(first).getByText('All 20d: 50%')).toBeInTheDocument()
-      expect(within(first).getByText('All 60d: 48%')).toBeInTheDocument()
-      expect(second).toHaveTextContent('-')
-    })
-
     it('hides the meta rows without team meta (saved snapshots)', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} />)
 
       expect(screen.queryByText('Meta')).not.toBeInTheDocument()
       expect(screen.queryByText('Meta Heroes')).not.toBeInTheDocument()
-      expect(screen.queryByText('Meta Drafts')).not.toBeInTheDocument()
-      expect(screen.queryByText('Meta Players')).not.toBeInTheDocument()
-      expect(screen.queryByText('Hero Pool')).not.toBeInTheDocument()
     })
   })
 })

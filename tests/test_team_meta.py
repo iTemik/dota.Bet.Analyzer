@@ -179,23 +179,11 @@ def test_shares_of_games_with_two_and_three_meta_heroes():
 
     meta = _meta(games)
 
-    assert (meta["recent"]["meta2_games_pct"], meta["recent"]["meta3_games_pct"]) == (75.0, 50.0)
+    # The newest 15 games: 10 with 3 meta heroes, 5 with 2
+    assert (meta["sample"]["meta2_games_pct"], meta["sample"]["meta3_games_pct"]) == (100.0, 66.7)
     # Hero pool: heroes 1, 2, 3, 6, 7, 8, 9 over the three drafts
     assert meta["recent"]["heroes"] == 7
-
-
-def test_player_games_on_meta_heroes_with_and_without_league_games():
-    # Player 101: 10 games (6 on meta hero 1, 4 on hero 6), 3 of them league games on hero 1; 105 has no data
-    games = _games(3, THREE_META)
-    heroes = {101: {1: 6, 6: 4}, 102: {}, 103: {}, 104: {}, 105: None}
-    meta = compute_team_meta(
-        _team_games(games), CORE, heroes, HERO_STATS, MetaParams(), TeamMetaParams(), {101: {1: 2}}
-    )
-
-    assert meta["player_games"]["deep"] == {"games": 10, "meta_games": 6, "meta_games_pct": 60.0, "players": 4}
-    # Without the 3 league games on hero 1: 3 of 7 pub games on a meta hero
-    assert meta["player_games"]["pub_deep"] == {"games": 7, "meta_games": 3, "meta_games_pct": 42.9, "players": 4}
-    assert meta["player_games"]["recent"] == {"games": 2, "meta_games": 2, "meta_games_pct": 100.0, "players": 1}
+    assert meta["recent"] == {"games": 20, "heroes": 7, "start": NOW - 20 * DAY}
 
 
 def test_players_know_meta_from_pub_games():
@@ -228,7 +216,7 @@ def test_no_info_without_games():
     meta = _meta([])
 
     assert meta["state"] == STATE_NO_INFO
-    assert meta["deep"]["meta2_games_pct"] is None
+    assert meta["sample"]["meta2_games_pct"] is None
     assert meta["pool_state"] is None
     assert meta["heroes"] == []
 
@@ -261,7 +249,7 @@ def test_heroes_picked_fewer_than_three_times_are_not_listed():
     practised = _meta(games, {101: {4: 5}, 102: {2: 9}, 103: {}, 104: {}, 105: {}})
     assert [(h["hero_id"], h["practice_players"]) for h in practised["heroes"]] == [(2, 1)]
     # The shares still count every pick
-    assert _meta(games)["recent"]["meta3_games_pct"] == 100.0
+    assert _meta(games)["sample"]["meta3_games_pct"] == 66.7
 
 
 def test_stand_in_picks_count_for_the_team():
@@ -401,7 +389,7 @@ def test_task_adds_meta_to_results_without_player_requests_for_an_active_team():
     assert results["meta"]["state"] == STATE_ACTIVELY
     # 20 team games are enough: no /players/{id}/heroes, practice only from the league picks
     assert heroes.call_count == 0
-    assert results["meta"]["player_games"]["deep"]["players"] == 0
+    assert all(p["pub_known"] is False for p in results["meta"]["players"])
     assert progress.call_args_list[-1].args[1] == 2 + 2 * 5  # The final message
 
 
@@ -411,15 +399,8 @@ def test_task_fetches_player_heroes_for_a_team_with_too_few_games():
     # Hero 1 from the player heroes (9 games); 102 and 103 also have 5 league games on heroes 2 and 3
     assert [p["meta_heroes"] for p in results["meta"]["players"]] == [[1], [1, 2], [1, 3], [1], [1]]
     assert results["meta"]["state"] == STATE_PLAYERS_KNOW
-    # Deeper and recent window per core player
-    assert len({c.args[1] for c in heroes.call_args_list}) == 2
-    assert heroes.call_count == 10
-    assert results["meta"]["player_games"]["recent"] == {
-        "games": 45,
-        "meta_games": 45,
-        "meta_games_pct": 100.0,
-        "players": 5,
-    }
+    # The deeper window per core player
+    assert heroes.call_count == 5
     assert progress.call_args_list[-1].args[1] == 2 + 2 * 5 + 5
 
 

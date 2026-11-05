@@ -6,11 +6,8 @@ import type {
   TeamData,
   TeamMeta,
   TeamMetaHero,
-  TeamMetaPlayerGames,
   TeamMetaSample,
   TeamMetaState,
-  TeamPoolState,
-  TeamMetaWindow,
 } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
@@ -152,78 +149,6 @@ const describeMetaHero = (hero: TeamMetaHero, deepDays: number): string =>
   `Practised by ${hero.practice_players} core player${hero.practice_players === 1 ? '' : 's'} ` +
   `(3+ league games, or 5+ league and pub games, in ${deepDays} days).`
 
-// Window length as "20d", counted from its start (shorter when the patch cut it)
-const windowDays = (start: number): string => `${Math.max(1, Math.round((Date.now() / 1000 - start) / 86400))}d`
-
-// One line per window: "20d: 2+ 75% · 3+ 50%"; game counts in the tooltip
-const renderMetaDrafts = (meta: TeamMeta | null | undefined) => {
-  if (!meta?.recent || !meta.deep) return '-'
-  const windows: [string, TeamMetaWindow][] = [
-    [windowDays(meta.recent.start), meta.recent],
-    [windowDays(meta.deep.start), meta.deep],
-  ]
-  return (
-    <div className="team-meta-numbers">
-      {windows.map(([label, w]) => (
-        <div key={label} title={`${w.games} tournament games since ${formatDate(w.start)}`}>
-          {label}: 2+ {formatPct(w.meta2_games_pct)} · 3+ {formatPct(w.meta3_games_pct)}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-const POOL_LABELS: Record<TeamPoolState, string> = { narrow: 'Narrow pool', normal: 'Normal pool', wide: 'Wide pool' }
-
-// "Wide pool · 46 heroes in 15 games"; the per-window counts in the tooltip
-const renderHeroPool = (meta: TeamMeta | null | undefined) => {
-  if (!meta?.sample || !meta.recent || !meta.deep) return '-'
-  const sample = meta.sample
-  const narrow = param(meta, 'pool_narrow_heroes', 30)
-  const wide = param(meta, 'pool_wide_heroes', 40)
-  const full = param(meta, 'sample_games', 15)
-  const tooltip = [
-    `Different heroes in the ${describeSample(sample)}. Narrow: under ${narrow}, wide: over ${wide}; needs ${full} games.`,
-    ...[meta.recent, meta.deep].map((w) => `Since ${formatDate(w.start)}: ${w.heroes ?? '-'} heroes in ${w.games} games`),
-  ].join('\n')
-  return (
-    <div className="team-meta" title={tooltip}>
-      {meta.pool_state && (
-        <>
-          <span className="team-meta-state">{POOL_LABELS[meta.pool_state]}</span>
-          {' · '}
-        </>
-      )}
-      {sample.heroes ?? '-'} heroes in {sample.games} games
-    </div>
-  )
-}
-
-const describePlayerGames = (games: TeamMetaPlayerGames): string =>
-  `${games.meta_games} of ${games.games} games on a meta hero (${games.players} of 5 core players with data)`
-
-// "Pubs 60d: 43%", then league + pubs per window; counts in the tooltips
-const renderMetaPlayers = (meta: TeamMeta | null | undefined) => {
-  const games = meta?.player_games
-  if (!games || !meta.recent || !meta.deep) return '-'
-  const recentDays = windowDays(meta.recent.start)
-  const deepDays = windowDays(meta.deep.start)
-  const lines: [string, TeamMetaPlayerGames][] = [
-    [`Pubs ${deepDays}`, games.pub_deep],
-    [`All ${recentDays}`, games.recent],
-    [`All ${deepDays}`, games.deep],
-  ]
-  return (
-    <div className="team-meta-numbers">
-      {lines.map(([label, g]) => (
-        <div key={label} title={describePlayerGames(g)}>
-          {label}: {formatPct(g.meta_games_pct)}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
   if (!meta?.heroes) return '-'
   const deepDays = Number(meta.params?.deep_days ?? 60)
@@ -327,8 +252,32 @@ const insightRows: InsightRow[] = [
     label: 'Meta',
     needsMeta: true,
     info: {
-      description:
-        'Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? Taken from the team’s 15 newest tournament games (recent window first, then the last 60 days, stand-ins included): the shares of drafts with 2+ and 3+ meta heroes. Actively plays: over 65% and over 50%; Doesn’t play meta: 50% or less, or 35% or less; Tries: in between. With fewer than 10 games: Players know meta when 3+ core players practise a meta hero (3+ league or 5+ league and pub games in 60 days), else No info. Green: above the actively threshold, red: at or below the doesn’t play one.',
+      description: (
+        <>
+          Does the team play the meta heroes of the Meta tab (pro and ultra, with your Meta tab thresholds)? From its 15
+          newest tournament games (recent window first, then the last 60 days, stand-ins included): the shares of drafts
+          with 2+ and 3+ meta heroes.
+          <ul className="row-info-list">
+            <li>
+              <b>Actively plays meta</b>: 2+ in over 65% and 3+ in over 50% of games
+            </li>
+            <li>
+              <b>Tries to play meta</b>: in between
+            </li>
+            <li>
+              <b>Doesn’t play meta</b>: 2+ in 50% or less, or 3+ in 35% or less
+            </li>
+            <li>
+              <b>Players know meta</b>: fewer than 10 games, but 3+ core players practise a meta hero (3+ league, or 5+
+              league and pub games in 60 days)
+            </li>
+            <li>
+              <b>No info</b>: fewer than 10 games and no practice
+            </li>
+          </ul>
+        </>
+      ),
+      colors: 'A share is green above the Actively threshold and red at or below the Doesn’t play one.',
       assumption: 'A team that plays the meta is better prepared. Thresholds to be tuned after testing.',
     },
     render: (_team, _ranks, meta) => renderMetaState(meta),
@@ -342,37 +291,6 @@ const insightRows: InsightRow[] = [
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),
-  },
-  {
-    label: 'Meta Drafts',
-    needsMeta: true,
-    info: {
-      description:
-        'Share of the team’s tournament games with 2+ and with 3+ meta heroes in its draft (stand-ins included), in the recent and the 60-day window (the labels show each window’s days). Windows start no earlier than the latest patch. Hover a line for the number of games.',
-      assumption: 'Numbers to choose the meta state rule from; the state may change after testing.',
-    },
-    render: (_team, _ranks, meta) => renderMetaDrafts(meta),
-  },
-  {
-    label: 'Hero Pool',
-    needsMeta: true,
-    info: {
-      description:
-        'Different heroes the team picked (any hero, stand-ins included) in its 15 newest tournament games: narrow under 30, wide over 40, else normal. With fewer games only the count is shown. Hover for the counts per window.',
-      assumption:
-        'A team with a big pool is harder to prepare for: it can counter-pick or surprise the opponent. A fixed number of games keeps teams comparable (75 picks of about 125 heroes).',
-    },
-    render: (_team, _ranks, meta) => renderHeroPool(meta),
-  },
-  {
-    label: 'Meta Players',
-    needsMeta: true,
-    info: {
-      description:
-        'Share of the core players’ games played on a meta hero, summed over the players. Pubs: the 60-day window without the team’s tournament games (pubs, plus league games with other teams). All: every game type in the recent and the 60-day window. Hover a line for the counts.',
-      assumption: 'Numbers to choose the meta state rule from; the state may change after testing.',
-    },
-    render: (_team, _ranks, meta) => renderMetaPlayers(meta),
   },
 ]
 

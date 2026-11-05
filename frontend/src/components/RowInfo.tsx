@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
+
 // "i" tooltip for a table row label; shared by the comparison and insights tables
 export interface RowInfo {
-  description: string // what the number is and how it's calculated
+  description: ReactNode // what the number is and how it's calculated; may hold a list of states
   colors?: string // colour highlighting rules: what's good and what's bad
   assumption?: string // why it matters when comparing teams; "TBD" while it is a placeholder
 }

@@ -343,7 +343,13 @@ function App() {
             <div className="results-columns">
               <div className="results-column">
                 <h2>Team Comparison</h2>
-                <ComparisonTable teams={teams} summaries={summaries} showSummaryRows={Boolean(summaryData)} days={STATS_DAYS} />
+                <ComparisonTable
+                  teams={teams}
+                  summaries={summaries}
+                  showSummaryRows={Boolean(summaryData)}
+                  days={STATS_DAYS}
+                  metas={results.map((r) => r?.meta)}
+                />
               </div>
 
               <div className="results-column">

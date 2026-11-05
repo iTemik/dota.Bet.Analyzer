@@ -208,6 +208,12 @@ input:focus {
   margin-top: 0.4em;
 }
 
+/* List of states inside a row tooltip */
+.row-info-list {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+
 .row-info:hover,
 .row-info:focus {
   opacity: 1;
@@ -950,6 +956,13 @@ pre {
 
 .meta-table th.meta-col-pub {
   color: var(--pub);
+}
+
+/* Match count next to a Meta tab percent, as on OpenDota */
+.meta-matches {
+  margin-left: 0.35em;
+  color: var(--text-faint);
+  font-size: 0.75rem;
 }
 
 /* Value with a thin bar under it */

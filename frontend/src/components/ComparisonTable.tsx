@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { CELL_NEGATIVE, CELL_POSITIVE, formatDate, formatFixed, formatPercent, teamName } from '../format'
 import { ROSTER_STATES, getStandins } from '../roster'
-import type { FarmStats, LeagueForm, MatchesSummary, TeamData } from '../types'
+import type { FarmStats, LeagueForm, MatchesSummary, TeamData, TeamMeta, TeamPoolState } from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 type Summary = MatchesSummary | null
+type Meta = TeamMeta | null | undefined
 
 interface ComparisonTableProps {
   teams: (TeamData | undefined)[] // team 1 and team 2
@@ -12,6 +13,7 @@ interface ComparisonTableProps {
   showSummaryRows: boolean // rows that need the summary are hidden until it has arrived
   days: number // window used for the label when the team has no league form
   now?: number // unix time the Last Match colours are judged at; a saved prediction passes its own time
+  metas?: Meta[] // team meta per team from the task results; without it the meta rows are hidden (snapshots)
 }
 
 // Team Comparison row: `compare` picks the number to colour by, `better` says which side wins
@@ -19,13 +21,14 @@ interface CompareRowConfig {
   label: ReactNode
   info?: RowInfo // texts for the row's "i" tooltip
   summary?: boolean // shown only once the match summary has arrived
+  needsMeta?: boolean // shown only with team meta (live statistics, not saved snapshots)
   emptyWhenZero?: boolean // 0 means no data: a row that is 0 (or empty) for both teams is hidden
-  compare?: (team: TeamData | undefined, summary: Summary) => number | null
+  compare?: (team: TeamData | undefined, summary: Summary, meta: Meta) => number | null
   better?: 'higher' | 'lower'
   threshold?: number // differences up to this are not coloured
   thresholdPercent?: number // differences up to this % of the smaller value are not coloured
   color?: (team: TeamData | undefined, index: number) => string // per-team cell class, for rows that don't compare
-  render: (team: TeamData | undefined, summary: Summary) => ReactNode
+  render: (team: TeamData | undefined, summary: Summary, meta: Meta) => ReactNode
 }
 
 // Cell classes for team 1 and team 2: the better value is positive, the other negative
@@ -48,13 +51,20 @@ const compareColors = (
 const isEmptyCell = (value: ReactNode): boolean => value == null || value === '-' || (typeof value === 'string' && value.startsWith('0-0'))
 const isZeroCell = (value: ReactNode): boolean => typeof value === 'string' && value !== '' && Number(value) === 0
 
-const CompareRow = ({ row, teams, summaries }: { row: CompareRowConfig; teams: (TeamData | undefined)[]; summaries: Summary[] }) => {
-  const cells = teams.map((team, i) => row.render(team, summaries[i]))
+interface CompareRowProps {
+  row: CompareRowConfig
+  teams: (TeamData | undefined)[]
+  summaries: Summary[]
+  metas: Meta[]
+}
+
+const CompareRow = ({ row, teams, summaries, metas }: CompareRowProps) => {
+  const cells = teams.map((team, i) => row.render(team, summaries[i], metas[i]))
   // Rows that are empty for both teams are hidden
   if (cells.every((cell) => isEmptyCell(cell) || (row.emptyWhenZero && isZeroCell(cell)))) return null
   let colors: string[] | null = null
   if (row.compare && row.better) {
-    const values = [row.compare(teams[0], summaries[0]), row.compare(teams[1], summaries[1])] as const
+    const values = [row.compare(teams[0], summaries[0], metas[0]), row.compare(teams[1], summaries[1], metas[1])] as const
     colors = compareColors(values[0], values[1], row.better, row.threshold, row.thresholdPercent)
   } else if (row.color) {
     colors = teams.map(row.color)
@@ -333,8 +343,48 @@ const compareRows = (teams: (TeamData | undefined)[], days: number, now: number)
   },
 ]
 
+const POOL_LABELS: Record<TeamPoolState, string> = { narrow: 'Narrow', normal: 'Normal', wide: 'Wide' }
+
+// "Wide: 45" with a full sample, else "32 in 12 games"
+const formatHeroPool = (meta: Meta): string => {
+  const sample = meta?.sample
+  if (!sample?.games || sample.heroes == null) return '-'
+  return meta?.pool_state ? `${POOL_LABELS[meta.pool_state]}: ${sample.heroes}` : `${sample.heroes} in ${sample.games} games`
+}
+
+const heroPoolRow: CompareRowConfig = {
+  label: 'Hero Pool',
+  needsMeta: true,
+  info: {
+    description: (
+      <>
+        Different heroes the team picked (any hero, stand-ins included) in its 15 newest tournament games:
+        <ul className="row-info-list">
+          <li>
+            <b>Wide</b>: more than 40
+          </li>
+          <li>
+            <b>Normal</b>: 30 to 40
+          </li>
+          <li>
+            <b>Narrow</b>: fewer than 30
+          </li>
+        </ul>
+        With fewer games only the count is shown, e.g. 32 in 12 games.
+      </>
+    ),
+    colors: 'The bigger pool is green when both teams have 15 games and differ by more than 3 heroes.',
+    assumption:
+      'A team with a big pool is harder to prepare for: it can counter-pick or surprise the opponent. A fixed number of games keeps teams comparable (75 picks of about 125 heroes).',
+  },
+  compare: (_t, _s, meta) => (meta?.pool_state ? (meta.sample?.heroes ?? null) : null),
+  better: 'higher',
+  threshold: 3,
+  render: (_t, _s, meta) => formatHeroPool(meta),
+}
+
 /** Team Comparison table for two teams; renders live statistics and saved snapshots alike. */
-const ComparisonTable = ({ teams, summaries, showSummaryRows, days, now }: ComparisonTableProps) => {
+const ComparisonTable = ({ teams, summaries, showSummaryRows, days, now, metas }: ComparisonTableProps) => {
   const [shownAt] = useState(() => Date.now() / 1000) // live statistics are judged at the time they were shown
   return (
     <table className="stats-table comparison-table">
@@ -352,10 +402,10 @@ const ComparisonTable = ({ teams, summaries, showSummaryRows, days, now }: Compa
         </tr>
       </thead>
       <tbody>
-        {compareRows(teams, days, now ?? shownAt)
-          .filter((row) => !row.summary || showSummaryRows)
+        {[...compareRows(teams, days, now ?? shownAt), heroPoolRow]
+          .filter((row) => (!row.summary || showSummaryRows) && (!row.needsMeta || metas))
           .map((row, i) => (
-            <CompareRow key={i} row={row} teams={teams} summaries={summaries} />
+            <CompareRow key={i} row={row} teams={teams} summaries={summaries} metas={metas ?? []} />
           ))}
       </tbody>
     </table>
