@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Meta, MetaHero } from '../types'
@@ -139,7 +139,8 @@ describe('MetaTab', () => {
     render(<MetaTab onPatch={onPatch} />)
     await screen.findByRole('table', { name: 'Meta heroes' })
 
-    expect(onPatch).toHaveBeenCalledWith('7.41')
+    // The effect can run after the table is on screen, so wait for it
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('7.41'))
   })
 
   it('highlights ultra meta heroes and explains each meta tag', async () => {
