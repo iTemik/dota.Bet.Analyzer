@@ -106,7 +106,17 @@ export interface TeamMetaWindow {
   games: number
   meta_games: number
   meta_games_pct: number | null
+  meta2_games_pct?: number | null // games with 2+ meta heroes, percent
+  meta3_games_pct?: number | null // games with 3+ meta heroes, percent
   meta_picks_pct: number | null
+}
+
+// meta.player_games: core players' games of any kind (league + pubs) on meta heroes, summed over the players
+export interface TeamMetaPlayerGames {
+  games: number
+  meta_games: number
+  meta_games_pct: number | null
+  players: number // core players whose heroes could be fetched
 }
 
 // meta.heroes[]: a meta hero the team picked (games) or a core player practises (practice_players)
@@ -129,6 +139,8 @@ export interface TeamMeta {
   meta_heroes_total?: number // size of the meta list the team was checked against
   heroes?: TeamMetaHero[]
   players?: { account_id: number; meta_heroes: number[]; pub_known: boolean }[]
+  // recent / deep: league + pubs; pub_deep: deeper window without the team's league games
+  player_games?: { recent: TeamMetaPlayerGames; deep: TeamMetaPlayerGames; pub_deep: TeamMetaPlayerGames }
   params?: Record<string, number | boolean>
   error?: string // set instead of the rest when the hero stats were unavailable
 }

@@ -1,7 +1,15 @@
 import type { ReactNode } from 'react'
 import { formatDate, teamName } from '../format'
 import { getCorePlayers, getStandins, hasCore, renderName } from '../roster'
-import type { Player, TeamData, TeamMeta, TeamMetaHero, TeamMetaState, TeamMetaWindow } from '../types'
+import type {
+  Player,
+  TeamData,
+  TeamMeta,
+  TeamMetaHero,
+  TeamMetaPlayerGames,
+  TeamMetaState,
+  TeamMetaWindow,
+} from '../types'
 import { RowInfoIcon, type RowInfo } from './RowInfo'
 
 // Leaderboard rank per account id (null: not on the leaderboard); only players whose rank was fetched are in it
@@ -132,6 +140,52 @@ const describeMetaHero = (hero: TeamMetaHero, deepDays: number): string =>
   `Practised by ${hero.practice_players} core player${hero.practice_players === 1 ? '' : 's'} ` +
   `(3+ league games, or 5+ league and pub games, in ${deepDays} days).`
 
+// Window length as "20d", counted from its start (shorter when the patch cut it)
+const windowDays = (start: number): string => `${Math.max(1, Math.round((Date.now() / 1000 - start) / 86400))}d`
+
+// One line per window: "20d: 2+ 75% · 3+ 50%"; game counts in the tooltip
+const renderMetaDrafts = (meta: TeamMeta | null | undefined) => {
+  if (!meta?.recent || !meta.deep) return '-'
+  const windows: [string, TeamMetaWindow][] = [
+    [windowDays(meta.recent.start), meta.recent],
+    [windowDays(meta.deep.start), meta.deep],
+  ]
+  return (
+    <div className="team-meta-numbers">
+      {windows.map(([label, w]) => (
+        <div key={label} title={`${w.games} tournament games since ${formatDate(w.start)}`}>
+          {label}: 2+ {formatPct(w.meta2_games_pct)} · 3+ {formatPct(w.meta3_games_pct)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const describePlayerGames = (games: TeamMetaPlayerGames): string =>
+  `${games.meta_games} of ${games.games} games on a meta hero (${games.players} of 5 core players with data)`
+
+// "Pubs 60d: 43%", then league + pubs per window; counts in the tooltips
+const renderMetaPlayers = (meta: TeamMeta | null | undefined) => {
+  const games = meta?.player_games
+  if (!games || !meta.recent || !meta.deep) return '-'
+  const recentDays = windowDays(meta.recent.start)
+  const deepDays = windowDays(meta.deep.start)
+  const lines: [string, TeamMetaPlayerGames][] = [
+    [`Pubs ${deepDays}`, games.pub_deep],
+    [`All ${recentDays}`, games.recent],
+    [`All ${deepDays}`, games.deep],
+  ]
+  return (
+    <div className="team-meta-numbers">
+      {lines.map(([label, g]) => (
+        <div key={label} title={describePlayerGames(g)}>
+          {label}: {formatPct(g.meta_games_pct)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const renderMetaHeroes = (meta: TeamMeta | null | undefined) => {
   if (!meta?.heroes) return '-'
   const deepDays = Number(meta.params?.deep_days ?? 60)
@@ -250,6 +304,26 @@ const insightRows: InsightRow[] = [
       assumption: 'TBD',
     },
     render: (_team, _ranks, meta) => renderMetaHeroes(meta),
+  },
+  {
+    label: 'Meta Drafts',
+    needsMeta: true,
+    info: {
+      description:
+        'Share of the team’s tournament games with 2+ and with 3+ meta heroes in its draft (stand-ins included), in the recent and the 60-day window (the labels show each window’s days). Windows start no earlier than the latest patch. Hover a line for the number of games.',
+      assumption: 'Numbers to choose the meta state rule from; the state may change after testing.',
+    },
+    render: (_team, _ranks, meta) => renderMetaDrafts(meta),
+  },
+  {
+    label: 'Meta Players',
+    needsMeta: true,
+    info: {
+      description:
+        'Share of the core players’ games played on a meta hero, summed over the players. Pubs: the 60-day window without the team’s tournament games (pubs, plus league games with other teams). All: every game type in the recent and the 60-day window. Hover a line for the counts.',
+      assumption: 'Numbers to choose the meta state rule from; the state may change after testing.',
+    },
+    render: (_team, _ranks, meta) => renderMetaPlayers(meta),
   },
 ]
 

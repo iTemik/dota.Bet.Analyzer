@@ -93,6 +93,8 @@ def test_actively_plays_meta_in_recent_window():
         "games": 20,
         "meta_games": 20,
         "meta_games_pct": 100.0,
+        "meta2_games_pct": 100.0,
+        "meta3_games_pct": 100.0,
         "meta_picks_pct": 60.0,
         "start": NOW - 20 * DAY,
     }
@@ -130,6 +132,28 @@ def test_two_meta_heroes_make_a_meta_game_by_default():
 
     assert _meta(games)["recent"]["meta_games"] == 20
     assert _meta(games, meta_min_heroes=3)["recent"]["meta_games"] == 0
+
+
+def test_shares_of_games_with_two_and_three_meta_heroes():
+    games = _games(10, THREE_META) + _games(5, TWO_META, start_days=6) + _games(5, ONE_META, start_days=9)
+
+    meta = _meta(games)
+
+    assert (meta["recent"]["meta2_games_pct"], meta["recent"]["meta3_games_pct"]) == (75.0, 50.0)
+
+
+def test_player_games_on_meta_heroes_with_and_without_league_games():
+    # Player 101: 10 games (6 on meta hero 1, 4 on hero 6), 3 of them league games on hero 1; 105 has no data
+    games = _games(3, THREE_META)
+    heroes = {101: {1: 6, 6: 4}, 102: {}, 103: {}, 104: {}, 105: None}
+    meta = compute_team_meta(
+        _team_games(games), CORE, heroes, HERO_STATS, MetaParams(), TeamMetaParams(), {101: {1: 2}}
+    )
+
+    assert meta["player_games"]["deep"] == {"games": 10, "meta_games": 6, "meta_games_pct": 60.0, "players": 4}
+    # Without the 3 league games on hero 1: 3 of 7 pub games on a meta hero
+    assert meta["player_games"]["pub_deep"] == {"games": 7, "meta_games": 3, "meta_games_pct": 42.9, "players": 4}
+    assert meta["player_games"]["recent"] == {"games": 2, "meta_games": 2, "meta_games_pct": 100.0, "players": 1}
 
 
 def test_players_know_meta_from_pub_games():
@@ -334,7 +358,15 @@ def test_task_adds_meta_to_results_with_a_step_per_core_player():
     assert results["meta"]["state"] == STATE_ACTIVELY
     # Hero 1 from the player heroes (9 games); 102 and 103 also have 20 league games on heroes 2 and 3
     assert [p["meta_heroes"] for p in results["meta"]["players"]] == [[1], [1, 2], [1, 3], [1], [1]]
-    assert heroes.call_count == 5
+    # Deeper (60 days) and recent (20 days) window per core player
+    assert len({c.args[1] for c in heroes.call_args_list}) == 2
+    assert heroes.call_count == 10
+    assert results["meta"]["player_games"]["recent"] == {
+        "games": 45,
+        "meta_games": 45,
+        "meta_games_pct": 100.0,
+        "players": 5,
+    }
     total_steps = 2 + 2 * 5 + 5
     assert progress.call_args_list[-1].args[1] == total_steps  # The final message
 

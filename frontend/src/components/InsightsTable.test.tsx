@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { formatDate } from '../format'
 import type { Player, TeamData, TeamMeta } from '../types'
 import InsightsTable from './InsightsTable'
 
@@ -220,11 +221,36 @@ describe('InsightsTable', () => {
       expect(cell.textContent?.replace(/Description: [^]*?days\)\./g, '')).not.toMatch(/ractised/)
     })
 
+    it('shows the shares of drafts with 2+ and 3+ meta heroes per window', () => {
+      const recent = { start: recentStart, games: 28, meta_games: 16, meta_games_pct: 57.1, meta2_games_pct: 75, meta3_games_pct: 50.4, meta_picks_pct: 58.2 }
+      const deep = { start: deepStart, games: 45, meta_games: 24, meta_games_pct: 53.3, meta2_games_pct: 60, meta3_games_pct: 33.3, meta_picks_pct: 52.4 }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ recent, deep }), undefined]} />)
+
+      const [first, second] = rowCells('Meta Drafts')
+      expect(within(first).getByText('20d: 2+ 75% · 3+ 50%')).toHaveAttribute('title', `28 tournament games since ${formatDate(recentStart)}`)
+      expect(within(first).getByText('60d: 2+ 60% · 3+ 33%')).toBeInTheDocument()
+      expect(second).toHaveTextContent('-')
+    })
+
+    it('shows the core players’ meta hero games in pubs and in all games', () => {
+      const games = (meta_games: number, total: number, players = 5) => ({ games: total, meta_games, meta_games_pct: Math.round((1000 * meta_games) / total) / 10, players })
+      const player_games = { recent: games(50, 100), deep: games(120, 250), pub_deep: games(90, 210, 4) }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ player_games }), meta()]} />)
+
+      const [first, second] = rowCells('Meta Players')
+      expect(within(first).getByText('Pubs 60d: 43%')).toHaveAttribute('title', '90 of 210 games on a meta hero (4 of 5 core players with data)')
+      expect(within(first).getByText('All 20d: 50%')).toBeInTheDocument()
+      expect(within(first).getByText('All 60d: 48%')).toBeInTheDocument()
+      expect(second).toHaveTextContent('-')
+    })
+
     it('hides the meta rows without team meta (saved snapshots)', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} />)
 
       expect(screen.queryByText('Meta')).not.toBeInTheDocument()
       expect(screen.queryByText('Meta Heroes')).not.toBeInTheDocument()
+      expect(screen.queryByText('Meta Drafts')).not.toBeInTheDocument()
+      expect(screen.queryByText('Meta Players')).not.toBeInTheDocument()
     })
   })
 })

@@ -482,8 +482,30 @@ class TeamMetaWindowSchema(Schema):
     games = fields.Int(required=True, metadata={"description": "League games with all five picks known"})
     meta_games = fields.Int(required=True, metadata={"description": "Games with `meta_min_heroes`+ meta heroes"})
     meta_games_pct = fields.Float(allow_none=True, metadata={"description": "meta_games / games, percent"})
+    meta2_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 2+ meta heroes, percent"})
+    meta3_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 3+ meta heroes, percent"})
     meta_picks_pct = fields.Float(
         allow_none=True, metadata={"description": "Team picks that are meta heroes, percent (stand-ins included)"}
+    )
+
+
+class TeamMetaPlayerGamesSchema(Schema):
+    """Core players' games of any kind (league + pubs) on meta heroes, summed over the players."""
+
+    games = fields.Int(required=True, metadata={"description": "Games of the core players with hero data"})
+    meta_games = fields.Int(required=True, metadata={"description": "Of them, games on a meta hero"})
+    meta_games_pct = fields.Float(allow_none=True, metadata={"description": "meta_games / games, percent"})
+    players = fields.Int(required=True, metadata={"description": "Core players whose heroes could be fetched"})
+
+
+class TeamMetaPlayerGamesWindowsSchema(Schema):
+    """Core players' meta hero games per window."""
+
+    recent = fields.Nested(TeamMetaPlayerGamesSchema, metadata={"description": "Recent window, league + pubs"})
+    deep = fields.Nested(TeamMetaPlayerGamesSchema, metadata={"description": "Deeper window, league + pubs"})
+    pub_deep = fields.Nested(
+        TeamMetaPlayerGamesSchema,
+        metadata={"description": "Deeper window without the team's league games (pubs, other league games)"},
     )
 
 
@@ -529,6 +551,7 @@ class TeamMetaSchema(Schema):
         metadata={"description": "Meta heroes picked `meta_hero_min_games`+ times, most team picks first"},
     )
     players = fields.List(fields.Nested(TeamMetaPlayerSchema))
+    player_games = fields.Nested(TeamMetaPlayerGamesWindowsSchema)
     params = fields.Dict(metadata={"description": "Team meta windows and thresholds used"})
     error = fields.Str(metadata={"description": "Set instead of the rest when the hero stats were unavailable"})
 

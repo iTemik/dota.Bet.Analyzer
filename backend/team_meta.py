@@ -206,15 +206,49 @@ def _percent(part: int, whole: int) -> Optional[float]:
 
 
 def _window(games: list[dict[str, Any]], meta_ids: set[int], min_heroes: int) -> dict[str, Any]:
-    """Games, meta games and meta pick share of a list of team games."""
+    """Games, meta games and meta pick share of a list of team games, plus the share of games with 2+ and 3+ meta
+    heroes (shown next to each other whatever `min_heroes` is)."""
     picks = [hero for game in games for _, hero in game["picks"]]
-    meta_games = sum(1 for g in games if sum(1 for _, hero in g["picks"] if hero in meta_ids) >= min_heroes)
+    meta_counts = [sum(1 for _, hero in g["picks"] if hero in meta_ids) for g in games]
+    meta_games = sum(1 for count in meta_counts if count >= min_heroes)
     return {
         "games": len(games),
         "meta_games": meta_games,
         "meta_games_pct": _percent(meta_games, len(games)),
+        "meta2_games_pct": _percent(sum(1 for count in meta_counts if count >= 2), len(games)),
+        "meta3_games_pct": _percent(sum(1 for count in meta_counts if count >= 3), len(games)),
         "meta_picks_pct": _percent(sum(1 for hero in picks if hero in meta_ids), len(picks)),
     }
+
+
+def _player_games(
+    core: list[int],
+    player_heroes: dict[int, Optional[dict[int, int]]],
+    meta_ids: set[int],
+    league_games: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Games of the core players (summed over players) and how many of them were on a meta hero.
+
+    Players without hero data are left out. With `league_games`, the core players' picks in those team games are
+    taken away, which leaves their pub games (and league games with other teams).
+
+    Returns:
+        {"games", "meta_games", "meta_games_pct", "players": players with hero data}
+    """
+    games = meta_games = players = 0
+    for account_id in core:
+        heroes = player_heroes.get(account_id)
+        if heroes is None:
+            continue
+        players += 1
+        counts = dict(heroes)
+        for game in league_games or []:
+            for player, hero in game["picks"]:
+                if player == account_id and counts.get(hero, 0) > 0:
+                    counts[hero] -= 1
+        games += sum(counts.values())
+        meta_games += sum(count for hero, count in counts.items() if hero in meta_ids)
+    return {"games": games, "meta_games": meta_games, "meta_games_pct": _percent(meta_games, games), "players": players}
 
 
 def _passes(window: dict[str, Any], params: TeamMetaParams) -> bool:
@@ -301,6 +335,7 @@ def compute_team_meta(
     hero_stats: list[dict[str, Any]],
     meta_params: MetaParams,
     params: TeamMetaParams,
+    player_heroes_recent: Optional[dict[int, Optional[dict[int, int]]]] = None,
 ) -> dict[str, Any]:
     """Team meta state, picked meta heroes and per-player practice.
 
@@ -311,13 +346,15 @@ def compute_team_meta(
         hero_stats: Cached /heroStats (backend.meta.cached_hero_stats)
         meta_params: Meta tab thresholds
         params: Windows and thresholds
+        player_heroes_recent: The same as player_heroes over the recent window; None when not fetched
 
     Returns:
         state, patch, recent/deep windows (games, meta_games, meta_games_pct, meta_picks_pct, start),
         pro_meta_picks_pct (share of all pro picks on meta heroes), meta_heroes_total (size of the meta list),
         heroes (meta heroes the team picked `meta_hero_min_games`+ times: hero_id, localized_name, icon, ultra, games,
-        recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known)
-        and the params used
+        recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known),
+        player_games (core players' games of any kind on meta heroes: recent, deep, and pub_deep without the team's
+        league games; see _player_games) and the params used
     """
     meta_list = [h for h in compute_meta(hero_stats, meta_params)["heroes"] if "pro" in h["meta"]]
     meta_by_id = {h["hero_id"]: h for h in meta_list}
@@ -349,5 +386,10 @@ def compute_team_meta(
         "meta_heroes_total": len(meta_ids),
         "heroes": heroes,
         "players": players,
+        "player_games": {
+            "recent": _player_games(core, player_heroes_recent or {}, meta_ids),
+            "deep": _player_games(core, player_heroes, meta_ids),
+            "pub_deep": _player_games(core, player_heroes, meta_ids, deep_games),
+        },
         "params": asdict(params),
     }
