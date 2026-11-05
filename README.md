@@ -582,14 +582,16 @@ The backend provides REST API endpoints for team statistics, match data, and pla
 - Lineups and team match lists are cached in d2ba.sqlite to keep OpenDota requests low
 
 #### Team Meta (Team Insights "Meta" and "Meta Heroes")
-- Does the team play the Meta tab's pro/ultra heroes: actively (recent window), tries (60 days), players know meta
-  (core players' league or pub practice), doesn't play meta, or no info; next to it the share of games with 2+
-  meta heroes from the window the state comes from (green at 65%+, red below); per-window counts in the tooltip
+- Does the team play the Meta tab's pro/ultra heroes, from its 15 newest tournament games (recent window first, then
+  60 days): actively (2+ meta heroes in over 65% of drafts and 3+ in over 50%), doesn't play (50% or less, or 35% or
+  less), tries (in between); with fewer than 10 games: players know meta (core players' league or pub practice) or
+  no info. Next to it the two shares, green/red by the thresholds
 - "X of Y meta heroes", then the picked meta heroes (3+ team games, by name) with games and ultra/60d tags; windows start at the latest patch,
   shown in the Meta tab name; thresholds are `/statistics` query parameters (the Meta tab's come from the browser)
+- "Hero Pool": narrow (under 30), normal or wide (over 40) different heroes in the same 15 games
 - "Meta Drafts": share of tournament games with 2+ and 3+ meta heroes in the recent and 60-day windows; "Meta Players":
-  share of the core players' games on meta heroes in pubs (60 days) and in all games (recent and 60 days)
-- "Hero Pool": different heroes the team picked and its games in the recent and 60-day windows, with heroes per game
+  share of the core players' games on meta heroes in pubs (60 days) and in all games (recent and 60 days), fetched
+  only for teams with too few games
 
 #### Player Statistics Task (`/statistics/players`)
 Async task for comprehensive player analysis:

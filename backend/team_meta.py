@@ -11,13 +11,17 @@ Two parts, so the per-player requests run in the Celery task and not in the /sta
 Rules (defaults in TeamMetaParams, every one a query parameter of GET /api/statistics):
 
 - Meta hero: in the pro (or ultra) meta of the Meta tab, with the thresholds of MetaParams.
-- Meta game: a team game with at least `meta_min_heroes` meta heroes picked by the team (stand-ins included).
-- States, first match wins: `actively` (the recent window, `days`, has `meta_min_games` games and at least
-  `meta_min_games_pct` percent are meta games), `tries` (the same on the deeper window, `deep_days`), `players_know`
-  (at least `players_know_min` core players practise a meta hero), `doesnt_play` (enough deeper games, but no rule
-  passed), `no_info` (not enough games and no player practice).
+- Sample: the team's newest `sample_games` league games, from the recent window (`days`) when it has that many,
+  else from the deeper window (`deep_days`).
+- States from the sample (stand-ins' picks included): `actively` (2+ meta heroes in more than `actively_meta2_pct`
+  percent of the games and 3+ in more than `actively_meta3_pct`), `doesnt_play` (2+ in `plays_meta2_pct` percent or
+  less, or 3+ in `plays_meta3_pct` or less), `tries` (in between). With fewer than `sample_min_games` games:
+  `players_know` (at least `players_know_min` core players practise a meta hero) or `no_info`.
+- Hero pool state from a full sample: `narrow` (fewer than `pool_narrow_heroes` different heroes), `wide` (more than
+  `pool_wide_heroes`), else `normal`.
 - Practice: a player has at least `practice_league_games` league games or `practice_total_games` games of any kind
-  (league + pubs, from /players/{id}/heroes) on the hero in the deeper window.
+  (league + pubs, from /players/{id}/heroes) on the hero in the deeper window. /players/{id}/heroes is asked only
+  for teams with too few games (needs_player_heroes), so active teams cost no extra requests.
 - Both windows start no earlier than the latest patch when `patch_cut` is on.
 """
 
@@ -40,11 +44,15 @@ from backend.rosters import (
 
 logger = setup_logging(__name__)
 
-STATE_ACTIVELY = "actively"  # Plays meta in the recent window
-STATE_TRIES = "tries"  # Plays meta only in the deeper window
-STATE_PLAYERS_KNOW = "players_know"  # The team does not, but enough core players practise meta heroes
-STATE_DOESNT_PLAY = "doesnt_play"  # Enough games, no rule passed
-STATE_NO_INFO = "no_info"  # Not enough games and no player practice
+STATE_ACTIVELY = "actively"  # Many meta heroes in the sample's drafts
+STATE_TRIES = "tries"  # Some meta heroes
+STATE_DOESNT_PLAY = "doesnt_play"  # Few meta heroes
+STATE_PLAYERS_KNOW = "players_know"  # Too few team games, but enough core players practise meta heroes
+STATE_NO_INFO = "no_info"  # Too few team games and no player practice
+
+POOL_NARROW = "narrow"
+POOL_NORMAL = "normal"
+POOL_WIDE = "wide"
 
 DEEP_MAX_GAMES = 100  # At most this many of the newest league games of the deeper window are looked up
 PATCHES_KEY = "opendota:patches"
@@ -60,9 +68,14 @@ class TeamMetaParams:
     """Windows and thresholds of the team meta state; every field is a query parameter of GET /api/statistics."""
 
     deep_days: int = 60  # Deeper window; the recent window is the statistics `days`
-    meta_min_games: int = 20  # Games a window needs before its result counts
-    meta_min_heroes: int = 2  # Meta heroes in one team draft for a meta game
-    meta_min_games_pct: float = 65.0  # Percent of meta games for "plays meta"
+    sample_games: int = 15  # Newest league games the states are computed from
+    sample_min_games: int = 10  # Fewer games: players_know or no_info, and the players' heroes are fetched
+    actively_meta2_pct: float = 65.0  # Actively: games with 2+ meta heroes above this percent...
+    actively_meta3_pct: float = 50.0  # ...and games with 3+ meta heroes above this percent
+    plays_meta2_pct: float = 50.0  # Doesn't play: games with 2+ meta heroes at or below this percent...
+    plays_meta3_pct: float = 35.0  # ...or games with 3+ meta heroes at or below this percent
+    pool_narrow_heroes: int = 30  # Narrow hero pool: fewer different heroes in a full sample
+    pool_wide_heroes: int = 40  # Wide hero pool: more different heroes in a full sample
     practice_league_games: int = 3  # League games on a hero that prove practice
     practice_total_games: int = 5  # League + pub games on a hero that prove practice
     players_know_min: int = 3  # Core players with a practised meta hero for "players know meta"
@@ -205,16 +218,13 @@ def _percent(part: int, whole: int) -> Optional[float]:
     return round(100 * part / whole, 1) if whole else None
 
 
-def _window(games: list[dict[str, Any]], meta_ids: set[int], min_heroes: int) -> dict[str, Any]:
-    """Games, meta games and meta pick share of a list of team games, the share of games with 2+ and 3+ meta heroes
-    (shown next to each other whatever `min_heroes` is) and the number of different heroes picked."""
+def _window(games: list[dict[str, Any]], meta_ids: set[int]) -> dict[str, Any]:
+    """Games, the share of games with 2+ and 3+ meta heroes, the meta pick share and the number of different heroes
+    picked of a list of team games."""
     picks = [hero for game in games for _, hero in game["picks"]]
     meta_counts = [sum(1 for _, hero in g["picks"] if hero in meta_ids) for g in games]
-    meta_games = sum(1 for count in meta_counts if count >= min_heroes)
     return {
         "games": len(games),
-        "meta_games": meta_games,
-        "meta_games_pct": _percent(meta_games, len(games)),
         "meta2_games_pct": _percent(sum(1 for count in meta_counts if count >= 2), len(games)),
         "meta3_games_pct": _percent(sum(1 for count in meta_counts if count >= 3), len(games)),
         "meta_picks_pct": _percent(sum(1 for hero in picks if hero in meta_ids), len(picks)),
@@ -252,8 +262,18 @@ def _player_games(
     return {"games": games, "meta_games": meta_games, "meta_games_pct": _percent(meta_games, games), "players": players}
 
 
-def _passes(window: dict[str, Any], params: TeamMetaParams) -> bool:
-    return window["games"] >= params.meta_min_games and (window["meta_games_pct"] or 0) >= params.meta_min_games_pct
+def needs_player_heroes(team_games: dict[str, Any], params: TeamMetaParams) -> bool:
+    """True when the team has too few league games for a state, so the players' practice decides it."""
+    return len(team_games["games"]) < params.sample_min_games
+
+
+def _sample(team_games: dict[str, Any], params: TeamMetaParams) -> tuple[list[dict[str, Any]], str]:
+    """The newest `sample_games` games, from the recent window when it has that many; and which window it is."""
+    games = sorted(team_games["games"], key=lambda g: g["start_time"], reverse=True)
+    recent = [g for g in games if g["start_time"] >= team_games["recent_start"]]
+    if len(recent) >= params.sample_games:
+        return recent[: params.sample_games], "recent"
+    return games[: params.sample_games], "deep"
 
 
 def _player_practice(
@@ -282,17 +302,27 @@ def _player_practice(
     return players
 
 
-def _state(recent: dict[str, Any], deep: dict[str, Any], knowers: int, params: TeamMetaParams) -> str:
-    """Team meta state from both windows and the number of core players practising a meta hero."""
-    if _passes(recent, params):
+def _state(sample: dict[str, Any], knowers: int, params: TeamMetaParams) -> str:
+    """Team meta state from the sample and the number of core players practising a meta hero."""
+    if sample["games"] < params.sample_min_games:
+        return STATE_PLAYERS_KNOW if knowers >= params.players_know_min else STATE_NO_INFO
+    meta2, meta3 = sample["meta2_games_pct"] or 0, sample["meta3_games_pct"] or 0
+    if meta2 > params.actively_meta2_pct and meta3 > params.actively_meta3_pct:
         return STATE_ACTIVELY
-    if _passes(deep, params):
-        return STATE_TRIES
-    if knowers >= params.players_know_min:
-        return STATE_PLAYERS_KNOW
-    if deep["games"] >= params.meta_min_games:
+    if meta2 <= params.plays_meta2_pct or meta3 <= params.plays_meta3_pct:
         return STATE_DOESNT_PLAY
-    return STATE_NO_INFO
+    return STATE_TRIES
+
+
+def _pool_state(sample: dict[str, Any], params: TeamMetaParams) -> Optional[str]:
+    """Hero pool state of a full sample, None with fewer games (the count alone is not comparable)."""
+    if sample["games"] < params.sample_games:
+        return None
+    if sample["heroes"] < params.pool_narrow_heroes:
+        return POOL_NARROW
+    if sample["heroes"] > params.pool_wide_heroes:
+        return POOL_WIDE
+    return POOL_NORMAL
 
 
 def _picked_heroes(
@@ -343,14 +373,16 @@ def compute_team_meta(
     Args:
         team_games: load_team_games output
         core: Core player accounts (the main roster when there is no clear core)
-        player_heroes: Games per hero of each core player (league + pubs, deeper window); None when unavailable
+        player_heroes: Games per hero of each core player (league + pubs, deeper window); None when unavailable,
+            missing when not fetched (needs_player_heroes)
         hero_stats: Cached /heroStats (backend.meta.cached_hero_stats)
         meta_params: Meta tab thresholds
         params: Windows and thresholds
         player_heroes_recent: The same as player_heroes over the recent window; None when not fetched
 
     Returns:
-        state, patch, recent/deep windows (games, meta_games, meta_games_pct, meta_picks_pct, start),
+        state, pool_state (narrow/normal/wide or None), sample (the games the states come from: window, start of its
+        oldest game and the _window numbers), patch, recent/deep windows (_window numbers and start),
         pro_meta_picks_pct (share of all pro picks on meta heroes), meta_heroes_total (size of the meta list),
         heroes (meta heroes the team picked `meta_hero_min_games`+ times: hero_id, localized_name, icon, ultra, games,
         recent_games, practice_players; most games first), players (account_id, meta_heroes practised, pub_known),
@@ -365,11 +397,17 @@ def compute_team_meta(
 
     deep_games = team_games["games"]
     recent_games = [g for g in deep_games if g["start_time"] >= team_games["recent_start"]]
-    recent = {**_window(recent_games, meta_ids, params.meta_min_heroes), "start": team_games["recent_start"]}
-    deep = {**_window(deep_games, meta_ids, params.meta_min_heroes), "start": team_games["deep_start"]}
+    recent = {**_window(recent_games, meta_ids), "start": team_games["recent_start"]}
+    deep = {**_window(deep_games, meta_ids), "start": team_games["deep_start"]}
+    sample_games, sample_window = _sample(team_games, params)
+    sample = {
+        **_window(sample_games, meta_ids),
+        "window": sample_window,
+        "start": min((g["start_time"] for g in sample_games), default=None),
+    }
 
     players = _player_practice(deep_games, core, player_heroes, meta_ids, params)
-    state = _state(recent, deep, sum(1 for p in players if p["meta_heroes"]), params)
+    state = _state(sample, sum(1 for p in players if p["meta_heroes"]), params)
     practice_players: dict[int, int] = {}
     for player in players:
         for hero in player["meta_heroes"]:
@@ -380,6 +418,8 @@ def compute_team_meta(
 
     return {
         "state": state,
+        "pool_state": _pool_state(sample, params),
+        "sample": sample,
         "patch": team_games.get("patch"),
         "recent": recent,
         "deep": deep,

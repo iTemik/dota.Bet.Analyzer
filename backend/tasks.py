@@ -21,16 +21,21 @@ from backend.team_meta import (
     TeamMetaParams,
     compute_team_meta,
     get_player_heroes_cached,
+    needs_player_heroes,
     player_heroes_days,
 )
 
 logger = setup_logging(__name__)
 
 
+def _meta_needs_players(team_meta: dict[str, Any]) -> bool:
+    return needs_player_heroes(team_meta["games"], TeamMetaParams(**team_meta["params"]))
+
+
 def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> dict[str, Any]:
     """Fetch each core player's heroes (league + pubs, deeper and recent window) and compute the team meta state.
 
-    One progress step per core player.
+    One progress step per core player, only when the team has too few games for a state (needs_player_heroes).
 
     Args:
         progress: The task's progress reporter
@@ -45,7 +50,8 @@ def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> di
     recent_days = player_heroes_days(games["recent_start"])
     player_heroes: dict[int, Optional[dict[int, int]]] = {}
     player_heroes_recent: dict[int, Optional[dict[int, int]]] = {}
-    for account_id in team_meta["core"]:
+    core = team_meta["core"] if _meta_needs_players(team_meta) else []
+    for account_id in core:
         progress.next()
 
         def report_wait(delay: int, account_id: int = account_id) -> None:
@@ -111,7 +117,7 @@ def players_statistics_task(
         team_meta: Input of the team meta state from compute_statistics (see _team_meta_step); None skips it
     """
     rank_accounts = rank_accounts or []
-    meta_steps = len(team_meta["core"]) if team_meta else 0
+    meta_steps = len(team_meta["core"]) if team_meta and _meta_needs_players(team_meta) else 0
     # Initial + per-account + heroes per core player + final
     progress = ProgressReporter(task_id, 2 + 2 * len(accounts) + len(rank_accounts) + meta_steps)
     try:

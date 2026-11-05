@@ -122,8 +122,10 @@ describe('InsightsTable', () => {
     const meta = (fields: Partial<TeamMeta> = {}): TeamMeta => ({
       state: 'actively',
       patch: '7.39',
-      recent: { start: recentStart, games: 28, meta_games: 16, meta_games_pct: 57.1, meta_picks_pct: 58.2 },
-      deep: { start: deepStart, games: 45, meta_games: 24, meta_games_pct: 53.3, meta_picks_pct: 52.4 },
+      pool_state: 'normal',
+      sample: { start: recentStart, window: 'recent', games: 15, meta2_games_pct: 80, meta3_games_pct: 40, meta_picks_pct: 58.2, heroes: 32 },
+      recent: { start: recentStart, games: 28, meta_picks_pct: 58.2, heroes: 40 },
+      deep: { start: deepStart, games: 45, meta_picks_pct: 52.4, heroes: 56 },
       pro_meta_picks_pct: 49.8,
       meta_heroes_total: 14,
       heroes: [
@@ -132,35 +134,35 @@ describe('InsightsTable', () => {
         { hero_id: 3, localized_name: 'Bane', icon: 'bane.png', ultra: false, games: 4, recent_games: 1, practice_players: 2 },
       ],
       players: [],
-      params: { meta_min_heroes: 3, deep_days: 60 },
+      params: { deep_days: 60 },
       ...fields,
     })
-    const since = (start: number) => `Since ${new Date(start * 1000).toLocaleDateString()}`
 
-    it('shows the state with one coloured share of meta games, details in the tooltip', () => {
+    it('shows the state with the sample’s 2+ and 3+ shares, coloured by the thresholds', () => {
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), undefined]} />)
 
       const [first, second] = rowCells('Meta')
-      // Actively plays meta comes from the recent window: 57% of its games, under 65% so red
-      expect(first).toHaveTextContent(/^Actively plays meta · 57%$/)
-      expect(within(first).getByText('57%')).toHaveClass('team-meta-neg')
+      expect(first).toHaveTextContent(/^Actively plays meta · 2\+ 80% · 3\+ 40%$/)
+      // 80% is above the actively threshold (65%): green; 40% is between 35% and 50%: plain
+      expect(within(first).getByText('80%')).toHaveClass('team-meta-pos')
+      expect(within(first).getByText('40%')).not.toHaveClass('team-meta-pos', 'team-meta-neg')
       expect(first.querySelector('.team-meta')).toHaveAttribute(
         'title',
-        'Share of the team\'s games with 3+ meta heroes in the draft (plays meta: 65%+ of at least 20 games).\n' +
-          `${since(recentStart)}: 3+ meta heroes in 16 of 28 games (57%)\n` +
-          `${since(deepStart)}: 3+ meta heroes in 24 of 45 games (53%)\n` +
-          'Meta heroes are 52% of all the team\'s picks (all pro games: 50%).',
+        "Actively: 2+ meta heroes in over 65% of games and 3+ in over 50%. Doesn't play: 2+ in 50% or less, or 3+ in 35% or less. Tries: in between.\n" +
+          `From the 15 newest tournament games since ${formatDate(recentStart)} (all in the recent window); fewer than 10 games: decided by the players' practice.\n` +
+          'Meta heroes are 58% of these picks (all pro games: 50%).',
       )
       expect(second).toHaveTextContent('-')
     })
 
-    it('takes the share from the deeper window for other states and colours it green at the threshold', () => {
-      const deep = { start: deepStart, games: 45, meta_games: 30, meta_games_pct: 66.7, meta_picks_pct: 60 }
-      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ state: 'tries', deep }), null]} />)
+    it('colours a share at or below the doesn’t play threshold red', () => {
+      const sample = { start: deepStart, window: 'deep' as const, games: 15, meta2_games_pct: 60, meta3_games_pct: 27, meta_picks_pct: 30, heroes: 46 }
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ state: 'doesnt_play', sample }), null]} />)
 
       const [cell] = rowCells('Meta')
-      expect(cell).toHaveTextContent(/^Tries to play meta · 67%$/)
-      expect(within(cell).getByText('67%')).toHaveClass('team-meta-pos')
+      expect(cell).toHaveTextContent(/^Doesn't play meta · 2\+ 60% · 3\+ 27%$/)
+      expect(within(cell).getByText('27%')).toHaveClass('team-meta-neg')
+      expect(cell.querySelector('.team-meta')?.getAttribute('title')).toContain('(reaching into the 60-day window)')
     })
 
     it.each([
@@ -174,19 +176,18 @@ describe('InsightsTable', () => {
       expect(rowCells('Meta')[0]).toHaveTextContent(label)
     })
 
-    it('shows only the state without games, and one window when the patch cut both to the same start', () => {
-      const window = { start: now - 7 * DAY, games: 0, meta_games: 0, meta_games_pct: null, meta_picks_pct: null }
+    it('shows only the state with too few games', () => {
+      const sample = { start: null, window: 'deep' as const, games: 4, meta2_games_pct: 50, meta3_games_pct: 25, meta_picks_pct: 30, heroes: 15 }
       render(
         <InsightsTable
           teams={[team({}), team({})]}
           ranks={[new Map(), new Map()]}
-          metas={[meta({ state: 'no_info', recent: window, deep: window, heroes: [] }), null]}
+          metas={[meta({ state: 'no_info', pool_state: null, sample, heroes: [] }), null]}
         />,
       )
 
-      const [cell] = rowCells('Meta')
-      expect(cell).toHaveTextContent(/^No info$/)
-      expect(cell.querySelector('.team-meta')?.getAttribute('title')?.split('\n')).toHaveLength(3)
+      expect(rowCells('Meta')[0]).toHaveTextContent(/^No info$/)
+      expect(rowCells('Hero Pool')[0]).toHaveTextContent(/^15 heroes in 4 games$/)
       expect(rowCells('Meta Heroes')[0]).toHaveTextContent(/^0 of 14 meta heroes$/)
     })
 
@@ -222,8 +223,8 @@ describe('InsightsTable', () => {
     })
 
     it('shows the shares of drafts with 2+ and 3+ meta heroes per window', () => {
-      const recent = { start: recentStart, games: 28, meta_games: 16, meta_games_pct: 57.1, meta2_games_pct: 75, meta3_games_pct: 50.4, meta_picks_pct: 58.2 }
-      const deep = { start: deepStart, games: 45, meta_games: 24, meta_games_pct: 53.3, meta2_games_pct: 60, meta3_games_pct: 33.3, meta_picks_pct: 52.4 }
+      const recent = { start: recentStart, games: 28, meta2_games_pct: 75, meta3_games_pct: 50.4, meta_picks_pct: 58.2 }
+      const deep = { start: deepStart, games: 45, meta2_games_pct: 60, meta3_games_pct: 33.3, meta_picks_pct: 52.4 }
       render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ recent, deep }), undefined]} />)
 
       const [first, second] = rowCells('Meta Drafts')
@@ -232,15 +233,18 @@ describe('InsightsTable', () => {
       expect(second).toHaveTextContent('-')
     })
 
-    it('shows the hero pool: different heroes and games per window', () => {
-      const recent = { start: recentStart, games: 25, meta_games: 10, meta_games_pct: 40, meta_picks_pct: 30, heroes: 34 }
-      const deep = { start: deepStart, games: 45, meta_games: 20, meta_games_pct: 44, meta_picks_pct: 31, heroes: 56 }
-      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta({ recent, deep }), undefined]} />)
+    it('shows the hero pool state of the sample with the per-window counts in the tooltip', () => {
+      render(<InsightsTable teams={[team({}), team({})]} ranks={[new Map(), new Map()]} metas={[meta(), meta({ pool_state: 'wide' })]} />)
 
       const [first, second] = rowCells('Hero Pool')
-      expect(within(first).getByText('20d: 34 heroes in 25 games (1.4 per game)')).toBeInTheDocument()
-      expect(within(first).getByText('60d: 56 heroes in 45 games (1.2 per game)')).toBeInTheDocument()
-      expect(second).toHaveTextContent('-')
+      expect(first).toHaveTextContent(/^Normal pool · 32 heroes in 15 games$/)
+      expect(second).toHaveTextContent(/^Wide pool · 32 heroes in 15 games$/)
+      expect(first.querySelector('.team-meta')).toHaveAttribute(
+        'title',
+        `Different heroes in the 15 newest tournament games since ${formatDate(recentStart)} (all in the recent window). Narrow: under 30, wide: over 40; needs 15 games.\n` +
+          `Since ${formatDate(recentStart)}: 40 heroes in 28 games\n` +
+          `Since ${formatDate(deepStart)}: 56 heroes in 45 games`,
+      )
     })
 
     it('shows the core players’ meta hero games in pubs and in all games', () => {

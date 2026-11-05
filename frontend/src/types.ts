@@ -104,13 +104,19 @@ export type TeamMetaState = 'actively' | 'tries' | 'players_know' | 'doesnt_play
 export interface TeamMetaWindow {
   start: number
   games: number
-  meta_games: number
-  meta_games_pct: number | null
   meta2_games_pct?: number | null // games with 2+ meta heroes, percent
   meta3_games_pct?: number | null // games with 3+ meta heroes, percent
   heroes?: number // different heroes the team picked (hero pool size)
   meta_picks_pct: number | null
 }
+
+// meta.sample: the newest sample_games league games the states come from
+export interface TeamMetaSample extends Omit<TeamMetaWindow, 'start'> {
+  start: number | null // start time of the oldest game in the sample
+  window: 'recent' | 'deep' // recent when the recent window had enough games
+}
+
+export type TeamPoolState = 'narrow' | 'normal' | 'wide'
 
 // meta.player_games: core players' games of any kind (league + pubs) on meta heroes, summed over the players
 export interface TeamMetaPlayerGames {
@@ -133,6 +139,8 @@ export interface TeamMetaHero {
 
 export interface TeamMeta {
   state?: TeamMetaState
+  pool_state?: TeamPoolState | null // null without a full sample
+  sample?: TeamMetaSample
   patch?: string | null // the windows start no earlier than this patch
   recent?: TeamMetaWindow
   deep?: TeamMetaWindow

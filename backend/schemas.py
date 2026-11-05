@@ -266,20 +266,45 @@ class TeamMetaQuerySchema(MetaThresholdsSchema):
         validate=validate.Range(min=1, max=365),
         metadata={"description": "Team meta: deeper window in days (the recent window is `days`)"},
     )
-    meta_min_games = fields.Int(
-        load_default=TeamMetaParams.meta_min_games,
-        validate=validate.Range(min=1),
-        metadata={"description": "Team meta: games a window needs before its result counts"},
+    sample_games = fields.Int(
+        load_default=TeamMetaParams.sample_games,
+        validate=validate.Range(min=1, max=100),
+        metadata={"description": "Team meta: newest league games the states are computed from"},
     )
-    meta_min_heroes = fields.Int(
-        load_default=TeamMetaParams.meta_min_heroes,
-        validate=validate.Range(min=1, max=5),
-        metadata={"description": "Team meta: meta heroes in one team draft for a meta game"},
+    sample_min_games = fields.Int(
+        load_default=TeamMetaParams.sample_min_games,
+        validate=validate.Range(min=1, max=100),
+        metadata={"description": "Team meta: fewer games give players_know or no_info (players' heroes fetched)"},
     )
-    meta_min_games_pct = fields.Float(
-        load_default=TeamMetaParams.meta_min_games_pct,
+    actively_meta2_pct = fields.Float(
+        load_default=TeamMetaParams.actively_meta2_pct,
         validate=validate.Range(min=0, max=100),
-        metadata={"description": "Team meta: percent of meta games for plays meta"},
+        metadata={"description": "Team meta: actively needs more games with 2+ meta heroes than this percent"},
+    )
+    actively_meta3_pct = fields.Float(
+        load_default=TeamMetaParams.actively_meta3_pct,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Team meta: actively also needs more games with 3+ meta heroes than this percent"},
+    )
+    plays_meta2_pct = fields.Float(
+        load_default=TeamMetaParams.plays_meta2_pct,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Team meta: doesn't play at or below this percent of games with 2+ meta heroes"},
+    )
+    plays_meta3_pct = fields.Float(
+        load_default=TeamMetaParams.plays_meta3_pct,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Team meta: doesn't play at or below this percent of games with 3+ meta heroes"},
+    )
+    pool_narrow_heroes = fields.Int(
+        load_default=TeamMetaParams.pool_narrow_heroes,
+        validate=validate.Range(min=1),
+        metadata={"description": "Hero pool: narrow with fewer different heroes in a full sample"},
+    )
+    pool_wide_heroes = fields.Int(
+        load_default=TeamMetaParams.pool_wide_heroes,
+        validate=validate.Range(min=1),
+        metadata={"description": "Hero pool: wide with more different heroes in a full sample"},
     )
     practice_league_games = fields.Int(
         load_default=TeamMetaParams.practice_league_games,
@@ -480,14 +505,19 @@ class TeamMetaWindowSchema(Schema):
 
     start = fields.Int(required=True, metadata={"description": "Window start (unix seconds), cut at the patch"})
     games = fields.Int(required=True, metadata={"description": "League games with all five picks known"})
-    meta_games = fields.Int(required=True, metadata={"description": "Games with `meta_min_heroes`+ meta heroes"})
-    meta_games_pct = fields.Float(allow_none=True, metadata={"description": "meta_games / games, percent"})
     meta2_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 2+ meta heroes, percent"})
     meta3_games_pct = fields.Float(allow_none=True, metadata={"description": "Games with 3+ meta heroes, percent"})
     heroes = fields.Int(metadata={"description": "Different heroes the team picked (hero pool size, any hero)"})
     meta_picks_pct = fields.Float(
         allow_none=True, metadata={"description": "Team picks that are meta heroes, percent (stand-ins included)"}
     )
+
+
+class TeamMetaSampleSchema(TeamMetaWindowSchema):
+    """The newest `sample_games` league games the states come from."""
+
+    start = fields.Int(allow_none=True, metadata={"description": "Start time of the oldest game in the sample"})
+    window = fields.Str(metadata={"description": "recent when the recent window had enough games, else deep"})
 
 
 class TeamMetaPlayerGamesSchema(Schema):
@@ -540,6 +570,10 @@ class TeamMetaSchema(Schema):
     state = fields.Str(
         metadata={"description": "actively, tries, players_know, doesnt_play or no_info"}, required=False
     )
+    pool_state = fields.Str(
+        allow_none=True, metadata={"description": "Hero pool: narrow, normal or wide; null without a full sample"}
+    )
+    sample = fields.Nested(TeamMetaSampleSchema)
     patch = fields.Str(allow_none=True, metadata={"description": "Latest patch the windows are cut at"})
     recent = fields.Nested(TeamMetaWindowSchema)
     deep = fields.Nested(TeamMetaWindowSchema)
