@@ -93,7 +93,7 @@ def test_get_statistics_numbered_params(monkeypatch):
 
 def test_get_trims_and_filters_teams(monkeypatch):
     # Whitespace should be trimmed
-    def fake_compute(teams=None, team_ids=None, days=20):
+    def fake_compute(teams=None, team_ids=None, days=20, **_kwargs):
         from backend.models import Player, StatsResponse, TeamStats
 
         items = team_ids if team_ids else (teams or [])
@@ -216,7 +216,7 @@ def test_response_shape_contains_expected_fields(monkeypatch):
 def test_compute_statistics_exception_returns_500(monkeypatch):
     """Test that unexpected exceptions in compute_statistics return 500 with proper error structure."""
 
-    def fake_compute_raises(teams=None, team_ids=None, days=20):
+    def fake_compute_raises(teams=None, team_ids=None, days=20, **_kwargs):
         raise RuntimeError("Database connection failed")
 
     monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_raises)
@@ -241,7 +241,7 @@ def test_compute_statistics_exception_returns_500(monkeypatch):
 def test_compute_statistics_value_error_returns_400(monkeypatch):
     """Test that ValueError in compute_statistics returns 400."""
 
-    def fake_compute_raises(teams=None, team_ids=None, days=20):
+    def fake_compute_raises(teams=None, team_ids=None, days=20, **_kwargs):
         raise ValueError("Invalid parameter")
 
     monkeypatch.setattr("backend.routes.statistics.compute_statistics", fake_compute_raises)
@@ -267,7 +267,7 @@ def test_days_defaults_to_20_and_is_forwarded(monkeypatch):
 
     seen = []
 
-    def fake_compute(teams=None, team_ids=None, days=20):
+    def fake_compute(teams=None, team_ids=None, days=20, **_kwargs):
         seen.append(days)
         return StatsResponse(teams=[])
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from backend.meta import MetaParams
 from backend.models import Player, StatsResponse, TeamStats
 from backend.stats import ApiError
+from backend.team_meta import TeamMetaParams
 
 # Cache for generated schemas to avoid duplicates
 _schema_cache: dict[type[BaseModel], type[Schema]] = {}
@@ -227,8 +228,82 @@ class VersionSchema(Schema):
     build = fields.Str(required=True, metadata={"description": "Build number", "example": "DEV"})
 
 
-class TeamStatisticsQuerySchema(Schema):
-    """Query parameters for team statistics endpoint."""
+class MetaThresholdsSchema(Schema):
+    """Meta tab thresholds as query parameters (defaults in backend.meta.MetaParams)."""
+
+    pro_min_pick_ban = fields.Float(
+        load_default=MetaParams.pro_min_pick_ban,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Pro meta: minimum pick + ban rate in pro matches, percent"},
+    )
+    ultra_min_win = fields.Float(
+        load_default=MetaParams.ultra_min_win,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Ultra meta: minimum pro win rate, percent"},
+    )
+    ultra_min_picks = fields.Int(
+        load_default=MetaParams.ultra_min_picks,
+        validate=validate.Range(min=1),
+        metadata={"description": "Ultra meta: minimum pro picks"},
+    )
+    pub_top = fields.Int(
+        load_default=MetaParams.pub_top,
+        validate=validate.Range(min=1, max=200),
+        metadata={"description": "Pub meta: number of most picked Immortal + Divine + Ancient heroes"},
+    )
+    pub_min_win = fields.Float(
+        load_default=MetaParams.pub_min_win,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Pub meta: minimum win rate of those heroes, percent"},
+    )
+
+
+class TeamMetaQuerySchema(MetaThresholdsSchema):
+    """Team meta state windows and thresholds as query parameters (defaults in backend.team_meta.TeamMetaParams)."""
+
+    deep_days = fields.Int(
+        load_default=TeamMetaParams.deep_days,
+        validate=validate.Range(min=1, max=365),
+        metadata={"description": "Team meta: deeper window in days (the recent window is `days`)"},
+    )
+    meta_min_games = fields.Int(
+        load_default=TeamMetaParams.meta_min_games,
+        validate=validate.Range(min=1),
+        metadata={"description": "Team meta: games a window needs before its result counts"},
+    )
+    meta_min_heroes = fields.Int(
+        load_default=TeamMetaParams.meta_min_heroes,
+        validate=validate.Range(min=1, max=5),
+        metadata={"description": "Team meta: meta heroes in one team draft for a meta game"},
+    )
+    meta_min_games_pct = fields.Float(
+        load_default=TeamMetaParams.meta_min_games_pct,
+        validate=validate.Range(min=0, max=100),
+        metadata={"description": "Team meta: percent of meta games for plays meta"},
+    )
+    practice_league_games = fields.Int(
+        load_default=TeamMetaParams.practice_league_games,
+        validate=validate.Range(min=1),
+        metadata={"description": "Team meta: league games on a hero that prove a player's practice"},
+    )
+    practice_total_games = fields.Int(
+        load_default=TeamMetaParams.practice_total_games,
+        validate=validate.Range(min=1),
+        metadata={"description": "Team meta: league + pub games on a hero that prove a player's practice"},
+    )
+    players_know_min = fields.Int(
+        load_default=TeamMetaParams.players_know_min,
+        validate=validate.Range(min=1, max=5),
+        metadata={"description": "Team meta: core players practising a meta hero for players know meta"},
+    )
+    patch_cut = fields.Bool(
+        load_default=TeamMetaParams.patch_cut,
+        metadata={"description": "Team meta: windows start no earlier than the latest patch"},
+    )
+
+
+class TeamStatisticsQuerySchema(TeamMetaQuerySchema):
+    """Query parameters for team statistics endpoint (team meta thresholds included)."""
 
     days = fields.Int(
         load_default=20,
@@ -395,6 +470,60 @@ class MatchesSummarySchema(Schema):
     bad_rank_players = fields.Int(allow_none=True, metadata={"description": "Number of players with rank > 1000"})
 
 
+class TeamMetaWindowSchema(Schema):
+    """Meta picks of the team in one window (recent = `days`, deep = `deep_days`)."""
+
+    start = fields.Int(required=True, metadata={"description": "Window start (unix seconds), cut at the patch"})
+    games = fields.Int(required=True, metadata={"description": "League games with all five picks known"})
+    meta_games = fields.Int(required=True, metadata={"description": "Games with `meta_min_heroes`+ meta heroes"})
+    meta_games_pct = fields.Float(allow_none=True, metadata={"description": "meta_games / games, percent"})
+    meta_picks_pct = fields.Float(
+        allow_none=True, metadata={"description": "Team picks that are meta heroes, percent (stand-ins included)"}
+    )
+
+
+class TeamMetaHeroSchema(Schema):
+    """A meta hero the team picked or a core player practises."""
+
+    hero_id = fields.Int(required=True, metadata={"description": "OpenDota hero id"})
+    localized_name = fields.Str(required=True, metadata={"description": "Display name"})
+    icon = fields.Str(required=True, metadata={"description": "Full URL of the hero icon"})
+    ultra = fields.Bool(required=True, metadata={"description": "Ultra meta hero"})
+    games = fields.Int(required=True, metadata={"description": "Team picks in the deep window (recent included)"})
+    recent_games = fields.Int(required=True, metadata={"description": "Team picks in the recent window"})
+    practice_players = fields.Int(
+        required=True, metadata={"description": "Core players who practise the hero (league or league + pub games)"}
+    )
+
+
+class TeamMetaPlayerSchema(Schema):
+    """A core player's practised meta heroes."""
+
+    account_id = fields.Int(required=True, metadata={"description": "Player account ID"})
+    meta_heroes = fields.List(fields.Int(), required=True, metadata={"description": "Practised meta hero ids"})
+    pub_known = fields.Bool(
+        required=True, metadata={"description": "False when the player's league + pub heroes could not be fetched"}
+    )
+
+
+class TeamMetaSchema(Schema):
+    """Does the team play the meta heroes (backend.team_meta.compute_team_meta)."""
+
+    state = fields.Str(
+        metadata={"description": "actively, tries, players_know, doesnt_play or no_info"}, required=False
+    )
+    patch = fields.Str(allow_none=True, metadata={"description": "Latest patch the windows are cut at"})
+    recent = fields.Nested(TeamMetaWindowSchema)
+    deep = fields.Nested(TeamMetaWindowSchema)
+    pro_meta_picks_pct = fields.Float(
+        allow_none=True, metadata={"description": "Share of all pro picks on meta heroes, percent (pro avg)"}
+    )
+    heroes = fields.List(fields.Nested(TeamMetaHeroSchema), metadata={"description": "Most team picks first"})
+    players = fields.List(fields.Nested(TeamMetaPlayerSchema))
+    params = fields.Dict(metadata={"description": "Team meta windows and thresholds used"})
+    error = fields.Str(metadata={"description": "Set instead of the rest when the hero stats were unavailable"})
+
+
 class StatisticsResultSchema(Schema):
     """Complete statistics computation result schema.
 
@@ -412,6 +541,9 @@ class StatisticsResultSchema(Schema):
     total = fields.Int(required=True, metadata={"description": "Total number of players requested"})
     summary = fields.Nested(
         MatchesSummarySchema, required=True, metadata={"description": "Aggregated match statistics across all players"}
+    )
+    meta = fields.Nested(
+        TeamMetaSchema, allow_none=True, metadata={"description": "Team meta state; null for a task without a team"}
     )
 
 
@@ -727,34 +859,9 @@ TeamStatsSchema = pydantic_to_marshmallow(TeamStats)
 StatsResponseSchema = pydantic_to_marshmallow(StatsResponse)
 
 
-class MetaQuerySchema(Schema):
+class MetaQuerySchema(MetaThresholdsSchema):
     """Query parameters of GET /api/heroes/meta (thresholds; defaults in backend.meta.MetaParams)."""
 
-    pro_min_pick_ban = fields.Float(
-        load_default=MetaParams.pro_min_pick_ban,
-        validate=validate.Range(min=0, max=100),
-        metadata={"description": "Pro meta: minimum pick + ban rate in pro matches, percent"},
-    )
-    ultra_min_win = fields.Float(
-        load_default=MetaParams.ultra_min_win,
-        validate=validate.Range(min=0, max=100),
-        metadata={"description": "Ultra meta: minimum pro win rate, percent"},
-    )
-    ultra_min_picks = fields.Int(
-        load_default=MetaParams.ultra_min_picks,
-        validate=validate.Range(min=1),
-        metadata={"description": "Ultra meta: minimum pro picks"},
-    )
-    pub_top = fields.Int(
-        load_default=MetaParams.pub_top,
-        validate=validate.Range(min=1, max=200),
-        metadata={"description": "Pub meta: number of most picked Immortal + Divine + Ancient heroes"},
-    )
-    pub_min_win = fields.Float(
-        load_default=MetaParams.pub_min_win,
-        validate=validate.Range(min=0, max=100),
-        metadata={"description": "Pub meta: minimum win rate of those heroes, percent"},
-    )
     refresh = fields.Bool(
         load_default=False,
         metadata={

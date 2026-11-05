@@ -4,9 +4,11 @@ Cache jobs of the background queue live in backend.jobs.
 """
 
 import time
+from typing import Any, Optional
 
 from backend.celery_app import celery
 from backend.logging_config import setup_logging
+from backend.meta import MetaParams, cached_hero_stats
 from backend.opendota import OpenDotaError
 from backend.stats import BAD_RANK_THRESHOLD, RankTally, get_team_matches_summary
 from backend.task_store import (
@@ -15,12 +17,69 @@ from backend.task_store import (
     get_rank_cached,
     store_results,
 )
+from backend.team_meta import (
+    TeamMetaParams,
+    compute_team_meta,
+    get_player_heroes_cached,
+    player_heroes_days,
+)
 
 logger = setup_logging(__name__)
 
 
+def _team_meta_step(progress: ProgressReporter, team_meta: dict[str, Any]) -> dict[str, Any]:
+    """Fetch each core player's heroes (league + pubs) and compute the team meta state; one progress step per player.
+
+    Args:
+        progress: The task's progress reporter
+        team_meta: {"games": load_team_games output, "core": accounts, "meta_params", "params"} from
+            compute_statistics
+
+    Returns:
+        compute_team_meta output, or {"error": message} when the hero stats are unavailable
+    """
+    games = team_meta["games"]
+    days = player_heroes_days(games["deep_start"])
+    player_heroes: dict[int, Optional[dict[int, int]]] = {}
+    for account_id in team_meta["core"]:
+        progress.next()
+
+        def report_wait(delay: int, account_id: int = account_id) -> None:
+            progress.waiting(delay, account_id)
+
+        try:
+            player_heroes[account_id] = get_player_heroes_cached(account_id, days, on_wait=report_wait)
+            progress.report(f"Got heroes of account {account_id}", {"account_id": account_id})
+        except Exception as e:
+            # Unknown practice: the player's league picks from the team games still count
+            player_heroes[account_id] = None
+            progress.report(
+                f"Error fetching heroes for account {account_id}: {e!s}", {"account_id": account_id, "error": str(e)}
+            )
+    try:
+        hero_stats, _ = cached_hero_stats()
+    except ConnectionError as e:
+        logger.warning(f"Team meta skipped, hero stats unavailable: {e}")
+        return {"error": str(e)}
+    return compute_team_meta(
+        games,
+        team_meta["core"],
+        player_heroes,
+        hero_stats,
+        MetaParams(**team_meta["meta_params"]),
+        TeamMetaParams(**team_meta["params"]),
+    )
+
+
 @celery.task(bind=True)
-def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, rank_accounts: list[int] | None = None):
+def players_statistics_task(
+    self,
+    task_id,
+    accounts: list[int],
+    days: int = 20,
+    rank_accounts: list[int] | None = None,
+    team_meta: dict[str, Any] | None = None,
+):
     """Celery task to fetch match statistics for multiple players.
 
     Saves one payload under `results:{task_id}` (read by GET /api/results/{task_id}, StatisticsResultSchema):
@@ -30,15 +89,20 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, 
       (raw matches are not stored; the Team Insights table shows each player's rank from here).
       Accounts in `rank_accounts` get only `rank` (or `error`): they are not in `summary` or `successful`
     - `successful` / `total`: how many accounts were fetched; also sent in the final progress message
+    - `meta`: the team meta state (backend.team_meta.compute_team_meta), null without `team_meta`;
+      {"error": message} when the hero stats were unavailable
 
     Args:
         task_id: Unique task identifier for progress tracking
         accounts: List of account IDs to fetch statistics for
         days: Number of days of match history to fetch
         rank_accounts: Account IDs to fetch only the leaderboard rank for (stand-ins, no matches)
+        team_meta: Input of the team meta state from compute_statistics (see _team_meta_step); None skips it
     """
     rank_accounts = rank_accounts or []
-    progress = ProgressReporter(task_id, 2 + 2 * len(accounts) + len(rank_accounts))  # Initial + per-account + final
+    meta_steps = len(team_meta["core"]) if team_meta else 0
+    # Initial + per-account + heroes per core player + final
+    progress = ProgressReporter(task_id, 2 + 2 * len(accounts) + len(rank_accounts) + meta_steps)
     try:
         logger.info(f"Starting players_statistics_task: task_id={task_id}, accounts={accounts}, days={days}")
         progress.start(f"Initializing match history fetch for {len(accounts)} players")
@@ -119,6 +183,8 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, 
 
             time.sleep(0.01)
 
+        meta = _team_meta_step(progress, team_meta) if team_meta else None
+
         # Store heavy results separately (not in progress stream)
         store_results(
             task_id,
@@ -127,6 +193,7 @@ def players_statistics_task(self, task_id, accounts: list[int], days: int = 20, 
                 "successful": successful,
                 "total": len(accounts),
                 "summary": summary.model_dump(),
+                "meta": meta,
             },
         )
 
