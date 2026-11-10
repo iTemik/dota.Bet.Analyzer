@@ -92,6 +92,16 @@ describe('InsightsTable', () => {
     expect(cells[0].style.backgroundColor).toBe('')
   })
 
+  it('explains how to read the Radiant record in its tooltip', () => {
+    render(<InsightsTable teams={[team(), team()]} ranks={[]} />)
+    expect(within(screen.getByText('Radiant Win %')).getByRole('tooltip')).toHaveTextContent(
+      'Assumption: The map favours Radiant (objectives are easier to defend, about 10-15% more win chance), so teams ' +
+        'often take Radiant instead of first pick. Low Radiant win %: a bad sign, the team loses even with the side ' +
+        'advantage. Few Radiant games out of all games: the team prefers first pick; with a low win % it drafts poorly. ' +
+        'Many Radiant games with a high win %: the team uses the side advantage, or simply drafts better.',
+    )
+  })
+
   it('shows the median match duration as minutes and seconds', () => {
     const form = (duration_median: number) => ({ days: 20, matches: 3, wins: 2, losses: 1, win_percentage: 66.7, last_match_time: null, duration_median })
     render(<InsightsTable teams={[team({ league_form: form(2052.5) }), team({ league_form: form(1805) })]} ranks={[]} />)

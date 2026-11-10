@@ -236,7 +236,11 @@ const insightRows: InsightRow[] = [
     label: 'Radiant Win %',
     info: {
       description: 'Team wins-losses (win %) in tournament games of the window played on the Radiant side.',
-      assumption: 'TBD',
+      assumption:
+        'The map favours Radiant (objectives are easier to defend, about 10-15% more win chance), so teams often take ' +
+        'Radiant instead of first pick. Low Radiant win %: a bad sign, the team loses even with the side advantage. ' +
+        'Few Radiant games out of all games: the team prefers first pick; with a low win % it drafts poorly. ' +
+        'Many Radiant games with a high win %: the team uses the side advantage, or simply drafts better.',
     },
     render: formatRadiantRecord,
   },
